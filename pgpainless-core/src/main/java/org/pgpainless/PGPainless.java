@@ -27,6 +27,7 @@ import org.pgpainless.decryption_verification.DecryptionBuilder;
 import org.pgpainless.decryption_verification.DecryptionStream;
 import org.pgpainless.encryption_signing.EncryptionBuilder;
 import org.pgpainless.encryption_signing.EncryptionStream;
+import org.pgpainless.key.generation.gen2.GenerateV2;
 import org.pgpainless.key.generation.KeyRingBuilder;
 import org.pgpainless.key.info.KeyRingInfo;
 import org.pgpainless.key.modification.secretkeyring.SecretKeyRingEditor;
@@ -43,6 +44,10 @@ public class PGPainless {
      */
     public static KeyRingBuilder generateKeyRing() {
         return new KeyRingBuilder();
+    }
+
+    public static GenerateV2 generateKey() {
+        return new GenerateV2();
     }
 
     /**

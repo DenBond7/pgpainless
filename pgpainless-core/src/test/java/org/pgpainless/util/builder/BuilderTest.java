@@ -70,7 +70,7 @@ public class BuilderTest {
         }
 
         @Override
-        public P getParent() {
+        public P getNext() {
             return parent;
         }
 

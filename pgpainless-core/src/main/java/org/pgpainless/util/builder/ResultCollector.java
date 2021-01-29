@@ -23,5 +23,5 @@ package org.pgpainless.util.builder;
  */
 @FunctionalInterface
 public interface ResultCollector<B> {
-    void apply(B builder);
+    void apply(B builder) throws Exception;
 }

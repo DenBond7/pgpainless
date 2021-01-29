@@ -28,9 +28,9 @@ public class KeySpec {
     private final PGPSignatureSubpacketGenerator subpacketGenerator;
     private final boolean inheritedSubPackets;
 
-    KeySpec(@Nonnull KeyType type,
-            @Nullable PGPSignatureSubpacketGenerator subpacketGenerator,
-            boolean inheritedSubPackets) {
+    public KeySpec(@Nonnull KeyType type,
+                   @Nullable PGPSignatureSubpacketGenerator subpacketGenerator,
+                   boolean inheritedSubPackets) {
         this.keyType = type;
         this.subpacketGenerator = subpacketGenerator;
         this.inheritedSubPackets = inheritedSubPackets;

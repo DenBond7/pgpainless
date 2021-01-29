@@ -20,18 +20,19 @@ package org.pgpainless.util.builder;
  * Builders that implement this interface will be able to be "embedded" in parent builders.
  *
  * An example can be found in the BuilderTest in the test package.
- * @param <P>
+ * @param <P> Parent class
+ * @param <N> Next builder
  */
-public interface ChildBuilder<P> {
+public interface ChildBuilder<N, P> {
 
-    P getParent();
+    N getNext();
 
-    ResultCollector<ChildBuilder<P>> getResultCollector();
+    ResultCollector<ChildBuilder<N, P>> getResultCollector();
 
-    default P done() {
+    default N done() throws Exception {
         if (getResultCollector() != null) {
             getResultCollector().apply(this);
         }
-        return getParent();
+        return getNext();
     }
 }
