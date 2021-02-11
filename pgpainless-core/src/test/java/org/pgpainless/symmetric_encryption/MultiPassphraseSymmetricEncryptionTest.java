@@ -35,7 +35,8 @@ public class MultiPassphraseSymmetricEncryptionTest {
     public void test() throws IOException, PGPException {
         String message = "Here we test if during decryption of a message that was encrypted with two passphrases, " +
                 "the decryptor finds the session key encrypted for the right passphrase.";
-        ByteArrayInputStream plaintextIn = new ByteArrayInputStream(message.getBytes(StandardCharsets.UTF_8));
+        byte[] bytes = message.getBytes(StandardCharsets.UTF_8);
+        ByteArrayInputStream plaintextIn = new ByteArrayInputStream(bytes);
         ByteArrayOutputStream ciphertextOut = new ByteArrayOutputStream();
         EncryptionStream encryptor = PGPainless.encryptAndOrSign()
                 .onOutputStream(ciphertextOut)
@@ -48,10 +49,16 @@ public class MultiPassphraseSymmetricEncryptionTest {
         encryptor.close();
 
         byte[] ciphertext = ciphertextOut.toByteArray();
+        ByteArrayInputStream cipherIn = new ByteArrayInputStream(ciphertext);
 
         // decrypting the p1 package with p2 first will not work. Test if it is handled correctly.
-        for (Passphrase passphrase : new Passphrase[] {Passphrase.fromPassword("p2"), Passphrase.fromPassword("p1")}) {
-            DecryptionStream decryptor = PGPainless.decryptAndOrVerify().onInputStream(new ByteArrayInputStream(ciphertext))
+        Passphrase[] passphrases = new Passphrase[] {
+                Passphrase.fromPassword("p2"),
+                Passphrase.fromPassword("p1")
+        };
+        for (Passphrase passphrase : passphrases) {
+            DecryptionStream decryptor = PGPainless.decryptAndOrVerify()
+                    .onInputStream(cipherIn)
                     .decryptWith(passphrase)
                     .doNotVerify()
                     .build();

@@ -211,17 +211,18 @@ public final class EncryptionStream extends OutputStream {
         compressedDataGenerator = new PGPCompressedDataGenerator(
                 compressionAlgorithm.getAlgorithmId());
         basicCompressionStream = new BCPGOutputStream(compressedDataGenerator.open(outermostStream));
+        outermostStream = basicCompressionStream;
     }
 
     private void prepareOnePassSignatures() throws IOException, PGPException {
         for (PGPSignatureGenerator signatureGenerator : signatureGenerators.values()) {
-            signatureGenerator.generateOnePassVersion(false).encode(basicCompressionStream);
+            signatureGenerator.generateOnePassVersion(false).encode(outermostStream);
         }
     }
 
     private void prepareLiteralDataProcessing() throws IOException {
         literalDataGenerator = new PGPLiteralDataGenerator();
-        literalDataStream = literalDataGenerator.open(basicCompressionStream,
+        literalDataStream = literalDataGenerator.open(outermostStream,
                 PGPLiteralData.BINARY, PGPLiteralData.CONSOLE, new Date(), new byte[BUFFER_SIZE]);
     }
 
@@ -245,7 +246,10 @@ public final class EncryptionStream extends OutputStream {
 
     @Override
     public void write(byte[] buffer) throws IOException {
-        write(buffer, 0, buffer.length);
+        literalDataStream.write(buffer);
+        for (PGPSignatureGenerator signatureGenerator : signatureGenerators.values()) {
+            signatureGenerator.update(buffer);
+        }
     }
 
 
@@ -271,12 +275,12 @@ public final class EncryptionStream extends OutputStream {
         // Literal Data
         literalDataStream.flush();
         literalDataStream.close();
-        literalDataGenerator.close();
 
         writeSignatures();
 
         // Compressed Data
-        compressedDataGenerator.close();
+        basicCompressionStream.flush();
+        basicCompressionStream.close();
 
         // Public Key Encryption
         if (publicKeyEncryptedStream != null) {
