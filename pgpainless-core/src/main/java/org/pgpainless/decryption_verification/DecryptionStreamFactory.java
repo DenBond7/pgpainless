@@ -30,6 +30,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.bouncycastle.openpgp.PGPCompressedData;
+import org.bouncycastle.openpgp.PGPDataValidationException;
 import org.bouncycastle.openpgp.PGPEncryptedData;
 import org.bouncycastle.openpgp.PGPEncryptedDataList;
 import org.bouncycastle.openpgp.PGPException;
@@ -202,6 +203,8 @@ public final class DecryptionStreamFactory {
 
                     try {
                         return pbeEncryptedData.getDataStream(passphraseDecryptor);
+                    } catch (PGPDataValidationException e) {
+                        throw new PGPException("This must not happen, but does :(", e);
                     } catch (PGPException e) {
                         LOGGER.log(LEVEL, "Probable passphrase mismatch, skip PBE encrypted data block", e);
                     }

@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.util.io.Streams;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
 import org.pgpainless.decryption_verification.DecryptionStream;
@@ -30,7 +31,7 @@ import org.pgpainless.util.Passphrase;
 
 public class MultiPassphraseSymmetricEncryptionTest {
 
-    @Test
+    @RepeatedTest(100)
     public void test() throws IOException, PGPException {
         String message = "Here we test if during decryption of a message that was encrypted with two passphrases, " +
                 "the decryptor finds the session key encrypted for the right passphrase.";
