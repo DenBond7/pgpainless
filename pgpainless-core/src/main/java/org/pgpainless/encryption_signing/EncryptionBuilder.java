@@ -15,17 +15,6 @@
  */
 package org.pgpainless.encryption_signing;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import javax.annotation.Nonnull;
-
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPrivateKey;
 import org.bouncycastle.openpgp.PGPPublicKey;
@@ -37,22 +26,28 @@ import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
 import org.bouncycastle.openpgp.operator.PBESecretKeyDecryptor;
 import org.pgpainless.algorithm.CompressionAlgorithm;
 import org.pgpainless.algorithm.HashAlgorithm;
-import org.pgpainless.algorithm.KeyFlag;
 import org.pgpainless.algorithm.SignatureType;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.exception.SecretKeyNotFoundException;
 import org.pgpainless.key.OpenPgpV4Fingerprint;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
-import org.pgpainless.util.selection.key.PublicKeySelectionStrategy;
-import org.pgpainless.util.selection.key.SecretKeySelectionStrategy;
-import org.pgpainless.util.selection.key.impl.EncryptionKeySelectionStrategy;
-import org.pgpainless.util.selection.key.impl.NoRevocation;
-import org.pgpainless.util.selection.key.impl.SignatureKeySelectionStrategy;
-import org.pgpainless.util.selection.key.impl.And;
-import org.pgpainless.util.selection.keyring.PublicKeyRingSelectionStrategy;
-import org.pgpainless.util.selection.keyring.SecretKeyRingSelectionStrategy;
 import org.pgpainless.util.MultiMap;
 import org.pgpainless.util.Passphrase;
+import org.pgpainless.util.selection.key.SelectPublicKey;
+import org.pgpainless.util.selection.key.SelectSecretKey;
+import org.pgpainless.util.selection.keyring.PublicKeyRingSelectionStrategy;
+import org.pgpainless.util.selection.keyring.SecretKeyRingSelectionStrategy;
+
+import javax.annotation.Nonnull;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class EncryptionBuilder implements EncryptionBuilderInterface {
 
@@ -434,34 +429,31 @@ public class EncryptionBuilder implements EncryptionBuilderInterface {
         }
     }
 
-    PublicKeySelectionStrategy encryptionKeySelector() {
-        KeyFlag[] flags = mapPurposeToKeyFlags(purpose);
-        return new And.PubKeySelectionStrategy(
-                new NoRevocation.PubKeySelectionStrategy(),
-                new EncryptionKeySelectionStrategy(flags));
+    SelectPublicKey encryptionKeySelector() {
+        SelectPublicKey canEncrypt = selectorFromPurpose(purpose);
+        return SelectPublicKey.and(
+                SelectPublicKey.isNotRevoked(),
+                canEncrypt);
     }
 
-    SecretKeySelectionStrategy signingKeySelector() {
-        return new And.SecKeySelectionStrategy(
-                new NoRevocation.SecKeySelectionStrategy(),
-                new SignatureKeySelectionStrategy());
+    SelectSecretKey signingKeySelector() {
+        return SelectSecretKey.and(
+                SelectSecretKey.wherePublicKey(SelectPublicKey.isNotRevoked()),
+                SelectSecretKey.isSigningKey());
     }
 
-    private static KeyFlag[] mapPurposeToKeyFlags(EncryptionStream.Purpose purpose) {
-        KeyFlag[] flags;
+    private static SelectPublicKey selectorFromPurpose(EncryptionStream.Purpose purpose) {
         switch (purpose) {
             case COMMUNICATIONS:
-                flags = new KeyFlag[] {KeyFlag.ENCRYPT_COMMS};
-                break;
+                return SelectPublicKey.canEncryptCommunications();
             case STORAGE:
-                flags = new KeyFlag[] {KeyFlag.ENCRYPT_STORAGE};
-                break;
-            case STORAGE_AND_COMMUNICATIONS:
-                flags = new KeyFlag[] {KeyFlag.ENCRYPT_COMMS, KeyFlag.ENCRYPT_STORAGE};
-                break;
+                return SelectPublicKey.canEncryptStorage();
+            case STORAGE_OR_COMMUNICATIONS:
+                return SelectPublicKey.or(
+                        SelectPublicKey.canEncryptCommunications(),
+                        SelectPublicKey.canEncryptStorage());
             default:
                 throw new AssertionError("Illegal purpose enum value encountered.");
         }
-        return flags;
     }
 }

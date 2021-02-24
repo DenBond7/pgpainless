@@ -73,7 +73,7 @@ public final class EncryptionStream extends OutputStream {
         /**
          * The stream will use keys with either flags to encrypt the data.
          */
-        STORAGE_AND_COMMUNICATIONS
+        STORAGE_OR_COMMUNICATIONS
     }
 
     private static final Logger LOGGER = Logger.getLogger(EncryptionStream.class.getName());
