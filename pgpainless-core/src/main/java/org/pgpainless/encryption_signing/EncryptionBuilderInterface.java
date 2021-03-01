@@ -52,14 +52,6 @@ public interface EncryptionBuilderInterface {
     interface ToRecipients {
 
         /**
-         * Pass in a list of trusted public keys of the recipients.
-         *
-         * @param keys recipient keys for which the message will be encrypted.
-         * @return api handle
-         */
-        WithAlgorithms toRecipients(@Nonnull PGPPublicKey... keys);
-
-        /**
          * Pass in a list of trusted public key rings of the recipients.
          *
          * @param keys recipient keys for which the message will be encrypted.

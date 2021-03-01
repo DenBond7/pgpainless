@@ -1,0 +1,193 @@
+package org.pgpainless.util.selection.key;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+import org.bouncycastle.openpgp.PGPKeyRing;
+import org.bouncycastle.openpgp.PGPPublicKey;
+import org.bouncycastle.openpgp.PGPSignature;
+import org.pgpainless.algorithm.CompressionAlgorithm;
+import org.pgpainless.algorithm.HashAlgorithm;
+import org.pgpainless.algorithm.KeyFlag;
+import org.pgpainless.algorithm.SignatureType;
+import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
+import org.pgpainless.util.CollectionUtils;
+import org.pgpainless.util.selection.key.signature.SelectSignature;
+
+public abstract class SelectPublicKey {
+
+    public abstract boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing);
+
+    public List<PGPPublicKey> selectPublicKeys(PGPKeyRing keyRing) {
+        List<PGPPublicKey> selected = new ArrayList<>();
+        List<PGPPublicKey> publicKeys = CollectionUtils.iteratorToList(keyRing.getPublicKeys());
+        for (PGPPublicKey publicKey : publicKeys) {
+            if (accept(publicKey, keyRing)) {
+                selected.add(publicKey);
+            }
+        }
+        return selected;
+    }
+
+    public PGPPublicKey firstMatch(PGPKeyRing keyRing) {
+        List<PGPPublicKey> selected = selectPublicKeys(keyRing);
+        if (selected.isEmpty()) {
+            return null;
+        }
+        return selected.get(0);
+    }
+
+    public static SelectPublicKey isPrimaryKey() {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                return publicKey.isMasterKey() && keyRing.getPublicKey().getKeyID() == publicKey.getKeyID();
+            }
+        };
+    }
+
+    public static SelectPublicKey isSubKey() {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                if (publicKey.isMasterKey()) {
+                    return false;
+                }
+                PGPPublicKey primaryKey = keyRing.getPublicKey();
+                PGPSignature primaryKeyBindingSig = (PGPSignature) publicKey.getSignaturesOfType(SignatureType.SUBKEY_BINDING.getCode()).next();
+                return false;
+            }
+        };
+    }
+
+    public static SelectPublicKey isRevoked() {
+        return or(
+                and(
+                        SelectPublicKey.isPrimaryKey(),
+                        SelectPublicKey.hasKeyRevocationSignature()
+                ),
+                and(
+                        isSubKey(),
+                        or(
+                                SelectPublicKey.hasSubkeyRevocationSignature(),
+                                SelectPublicKey.isSubkeyOfRevokedPrimaryKey()
+                        )
+                )
+        );
+    }
+
+    private static SelectPublicKey hasKeyRevocationSignature() {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                Iterator<PGPSignature> it = publicKey.getSignatures();
+                while (it.hasNext()) {
+                    PGPSignature signature = it.next();
+                    if (SelectSignature.isValidKeyRevocationSignature(publicKey).accept(signature, keyRing)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        };
+    }
+
+    private static SelectPublicKey hasSubkeyRevocationSignature() {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                Iterator<PGPSignature> it = publicKey.getKeySignatures();
+                while (it.hasNext()) {
+                    PGPSignature signature = it.next();
+                    if (SelectSignature.isValidSubkeyRevocationSignature(publicKey, keyRing.getPublicKey()).accept(signature, keyRing)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        };
+    }
+
+    private static SelectPublicKey isSubkeyOfRevokedPrimaryKey() {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                return isSubKey().accept(publicKey, keyRing)
+                        && SelectPublicKey.hasKeyRevocationSignature().accept(keyRing.getPublicKey(), keyRing);
+            }
+        };
+    }
+
+    public static SelectPublicKey hasKeyFlag(KeyFlag keyFlag) {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                return false;
+            }
+        };
+    }
+
+    public static SelectPublicKey supportsAlgorithm(SymmetricKeyAlgorithm symmetricKeyAlgorithm) {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                return false;
+            }
+        };
+    }
+
+    public static SelectPublicKey supportsAlgorithm(HashAlgorithm hashAlgorithm) {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                return false;
+            }
+        };
+    }
+
+    public static SelectPublicKey supportsAlgorithm(CompressionAlgorithm compressionAlgorithm) {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                return false;
+            }
+        };
+    }
+
+    public static SelectPublicKey and(SelectPublicKey... selectors) {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                for (SelectPublicKey selector : selectors) {
+                    if (!selector.accept(publicKey, keyRing)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        };
+    }
+
+    public static SelectPublicKey or(SelectPublicKey... selectors) {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                boolean accept = false;
+                for (SelectPublicKey selector : selectors) {
+                    accept |= selector.accept(publicKey, keyRing);
+                }
+                return accept;
+            }
+        };
+    }
+
+    public static SelectPublicKey not(SelectPublicKey selector) {
+        return new SelectPublicKey() {
+            @Override
+            public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
+                return !selector.accept(publicKey, keyRing);
+            }
+        };
+    }
+}

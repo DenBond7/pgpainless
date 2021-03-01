@@ -86,27 +86,6 @@ public class EncryptionBuilder implements EncryptionBuilderInterface {
     class ToRecipientsImpl implements ToRecipients {
 
         @Override
-        public WithAlgorithms toRecipients(@Nonnull PGPPublicKey... keys) {
-            if (keys.length != 0) {
-                List<PGPPublicKey> encryptionKeys = new ArrayList<>();
-                for (PGPPublicKey k : keys) {
-                    if (encryptionKeySelector().accept(k)) {
-                        encryptionKeys.add(k);
-                    } else {
-                        throw new IllegalArgumentException("Key " + k.getKeyID() + " is not a valid encryption key.");
-                    }
-                }
-
-                if (encryptionKeys.isEmpty()) {
-                    throw new IllegalArgumentException("No valid encryption keys found!");
-                }
-                EncryptionBuilder.this.encryptionKeys.addAll(encryptionKeys);
-            }
-
-            return new WithAlgorithmsImpl();
-        }
-
-        @Override
         public WithAlgorithms toRecipients(@Nonnull PGPPublicKeyRing... keys) {
             if (keys.length != 0) {
                 List<PGPPublicKey> encryptionKeys = new ArrayList<>();
