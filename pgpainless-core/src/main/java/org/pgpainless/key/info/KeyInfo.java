@@ -29,8 +29,7 @@ import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSignature;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
-import org.pgpainless.util.selection.key.SelectPublicKey;
-import org.pgpainless.util.selection.key.signature.SelectSignature;
+import org.pgpainless.util.selection.key.signature.SelectSignatureFromKey;
 
 public class KeyInfo {
 
@@ -53,7 +52,7 @@ public class KeyInfo {
             Iterator<PGPSignature> signatures = key.getSignaturesForID(userId);
             while (signatures.hasNext()) {
                 PGPSignature signature = signatures.next();
-                if (SelectSignature.isCertification().accept(signature, keyRing)) {
+                if (SelectSignatureFromKey.isCertification().accept(signature, keyRing)) {
                     certifications.add(signature);
                 }
             }

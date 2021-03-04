@@ -1,6 +1,22 @@
+/*
+ * Copyright 2021 Paul Schaub.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.pgpainless.util.selection.key;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 
@@ -13,7 +29,7 @@ import org.pgpainless.algorithm.KeyFlag;
 import org.pgpainless.algorithm.SignatureType;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.util.CollectionUtils;
-import org.pgpainless.util.selection.key.signature.SelectSignature;
+import org.pgpainless.util.selection.key.signature.SelectSignatureFromKey;
 
 public abstract class SelectPublicKey {
 
@@ -51,7 +67,7 @@ public abstract class SelectPublicKey {
         return new SelectPublicKey() {
             @Override
             public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
-                if (publicKey.isMasterKey()) {
+                if (isPrimaryKey().accept(publicKey, keyRing)) {
                     return false;
                 }
                 PGPPublicKey primaryKey = keyRing.getPublicKey();
@@ -59,6 +75,15 @@ public abstract class SelectPublicKey {
                 return false;
             }
         };
+    }
+
+    public static SelectPublicKey validEncryptionKeys(String userId) {
+        return validEncryptionKeys(userId, new Date());
+    }
+
+    public static SelectPublicKey validEncryptionKeys(String userId, Date validationDate) {
+        return new SelectPublicKey() {
+        }
     }
 
     public static SelectPublicKey isRevoked() {
@@ -84,7 +109,7 @@ public abstract class SelectPublicKey {
                 Iterator<PGPSignature> it = publicKey.getSignatures();
                 while (it.hasNext()) {
                     PGPSignature signature = it.next();
-                    if (SelectSignature.isValidKeyRevocationSignature(publicKey).accept(signature, keyRing)) {
+                    if (SelectSignatureFromKey.isValidKeyRevocationSignature(publicKey).accept(signature, keyRing)) {
                         return true;
                     }
                 }
@@ -100,7 +125,7 @@ public abstract class SelectPublicKey {
                 Iterator<PGPSignature> it = publicKey.getKeySignatures();
                 while (it.hasNext()) {
                     PGPSignature signature = it.next();
-                    if (SelectSignature.isValidSubkeyRevocationSignature(publicKey, keyRing.getPublicKey()).accept(signature, keyRing)) {
+                    if (SelectSignatureFromKey.isValidSubkeyRevocationSignature(publicKey, keyRing.getPublicKey()).accept(signature, keyRing)) {
                         return true;
                     }
                 }

@@ -151,13 +151,17 @@ public class SignatureUtils {
     }
 
     public static boolean isSignatureExpired(PGPSignature signature) {
-        long expiration = signature.getHashedSubPackets().getSignatureExpirationTime();
-        if (expiration == 0) {
+        return isSignatureExpired(signature, new Date());
+    }
+
+    public static boolean isSignatureExpired(PGPSignature signature, Date comparisonDate) {
+        long expirationTime = signature.getHashedSubPackets().getSignatureExpirationTime();
+        if (expirationTime == 0) {
             return false;
         }
-        Date now = new Date();
         Date creation = signature.getCreationTime();
-        return now.after(new Date(creation.getTime() + 1000 * expiration));
+        Date expiration = new Date(creation.getTime() + 1000 * expirationTime);
+        return comparisonDate.after(expiration);
     }
 
     public static void sortByCreationTimeAscending(List<PGPSignature> signatures) {
