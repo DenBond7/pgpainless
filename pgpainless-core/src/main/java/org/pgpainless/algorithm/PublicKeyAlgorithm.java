@@ -25,47 +25,47 @@ public enum PublicKeyAlgorithm {
     /**
      * RSA capable of encryption and signatures.
      */
-    RSA_GENERAL     (PublicKeyAlgorithmTags.RSA_GENERAL),
+    RSA_GENERAL     (PublicKeyAlgorithmTags.RSA_GENERAL, true, true),
 
     /**
      * RSA with usage encryption.
      *
      * @deprecated see https://tools.ietf.org/html/rfc4880#section-13.5
      */
-    RSA_ENCRYPT     (PublicKeyAlgorithmTags.RSA_ENCRYPT),
+    RSA_ENCRYPT     (PublicKeyAlgorithmTags.RSA_ENCRYPT, false, true),
 
     /**
      * RSA with usage of creating signatures.
      *
      * @deprecated see https://tools.ietf.org/html/rfc4880#section-13.5
      */
-    RSA_SIGN        (PublicKeyAlgorithmTags.RSA_SIGN),
+    RSA_SIGN        (PublicKeyAlgorithmTags.RSA_SIGN, true, false),
 
     /**
      * ElGamal with usage encryption.
      */
-    ELGAMAL_ENCRYPT (PublicKeyAlgorithmTags.ELGAMAL_ENCRYPT),
+    ELGAMAL_ENCRYPT (PublicKeyAlgorithmTags.ELGAMAL_ENCRYPT, false, true),
 
     /**
      * Digital Signature Algorithm.
      */
-    DSA             (PublicKeyAlgorithmTags.DSA),
+    DSA             (PublicKeyAlgorithmTags.DSA, true, false),
 
     /**
      * EC is deprecated.
      * @deprecated use {@link #ECDH} instead.
      */
-    EC              (PublicKeyAlgorithmTags.EC),
+    EC              (PublicKeyAlgorithmTags.EC, false, true),
 
     /**
      * Elliptic Curve Diffie-Hellman.
      */
-    ECDH            (PublicKeyAlgorithmTags.ECDH),
+    ECDH            (PublicKeyAlgorithmTags.ECDH, false, true),
 
     /**
      * Elliptic Curve Digital Signature Algorithm.
      */
-    ECDSA           (PublicKeyAlgorithmTags.ECDSA),
+    ECDSA           (PublicKeyAlgorithmTags.ECDSA, true, false),
 
     /**
      * ElGamal General.
@@ -73,17 +73,17 @@ public enum PublicKeyAlgorithm {
      * @deprecated see https://tools.ietf.org/html/rfc4880#section-13.8
      */
     @Deprecated
-    ELGAMAL_GENERAL (PublicKeyAlgorithmTags.ELGAMAL_GENERAL),
+    ELGAMAL_GENERAL (PublicKeyAlgorithmTags.ELGAMAL_GENERAL, true, true),
 
     /**
      * Diffie-Hellman key exchange algorithm.
      */
-    DIFFIE_HELLMAN  (PublicKeyAlgorithmTags.DIFFIE_HELLMAN),
+    DIFFIE_HELLMAN  (PublicKeyAlgorithmTags.DIFFIE_HELLMAN, false, true),
 
     /**
      * Digital Signature Algorithm based on twisted Edwards Curves.
      */
-    EDDSA           (PublicKeyAlgorithmTags.EDDSA),
+    EDDSA           (PublicKeyAlgorithmTags.EDDSA, true, false),
     ;
 
     private static final Map<Integer, PublicKeyAlgorithm> MAP = new ConcurrentHashMap<>();
@@ -99,12 +99,24 @@ public enum PublicKeyAlgorithm {
     }
 
     private final int algorithmId;
+    private final boolean signingCapable;
+    private final boolean encryptionCapable;
 
-    PublicKeyAlgorithm(int algorithmId) {
+    PublicKeyAlgorithm(int algorithmId, boolean signingCapable, boolean encryptionCapable) {
         this.algorithmId = algorithmId;
+        this.signingCapable = signingCapable;
+        this.encryptionCapable = encryptionCapable;
     }
 
     public int getAlgorithmId() {
         return algorithmId;
+    }
+
+    public boolean isSigningCapable() {
+        return signingCapable;
+    }
+
+    public boolean isEncryptionCapable() {
+        return encryptionCapable;
     }
 }
