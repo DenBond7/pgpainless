@@ -52,7 +52,7 @@ public class KeyInfo {
             Iterator<PGPSignature> signatures = key.getSignaturesForID(userId);
             while (signatures.hasNext()) {
                 PGPSignature signature = signatures.next();
-                if (SelectSignatureFromKey.isCertification().accept(signature, keyRing)) {
+                if (SelectSignatureFromKey.isCertification().accept(signature, key, keyRing)) {
                     certifications.add(signature);
                 }
             }

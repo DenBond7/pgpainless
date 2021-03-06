@@ -49,7 +49,7 @@ public class KeyValidator {
             SignatureType signatureType = SignatureType.valueOf(signature.getSignatureType());
             switch (signatureType) {
                 case KEY_REVOCATION:
-                    if (SelectSignatureFromKey.isValidKeyRevocationSignature(publicKey).accept(signature, keyRing)) {
+                    if (SelectSignatureFromKey.isValidKeyRevocationSignature(publicKey).accept(signature, publicKey, keyRing)) {
                         return false;
                     }
             }

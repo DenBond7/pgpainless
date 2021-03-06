@@ -95,7 +95,7 @@ public class SelectSignatureFromKeyTest {
             Iterator<PGPSignature> signatures = publicKey.getSignatures();
             while (signatures.hasNext()) {
                 PGPSignature signature = signatures.next();
-                if (SelectSignatureFromKey.isValidSubkeyBindingSignature(primaryKey, publicKey).accept(signature, publicKeys)) {
+                if (SelectSignatureFromKey.isValidSubkeyBindingSignature(primaryKey, publicKey).accept(signature, publicKey, publicKeys)) {
                     System.out.println("Valid subkey binding signature");
                 }
             }
@@ -165,7 +165,7 @@ public class SelectSignatureFromKeyTest {
                 while (signatures.hasNext()) {
                     PGPSignature signature = signatures.next();
 
-                    if (SelectSignatureFromKey.isValidSubkeyBindingSignature(primaryKey, publicKey).accept(signature, publicKeys)) {
+                    if (SelectSignatureFromKey.isValidSubkeyBindingSignature(primaryKey, publicKey).accept(signature, publicKey, publicKeys)) {
                         System.out.println("Valid subkey binding signature");
                     }
                 }

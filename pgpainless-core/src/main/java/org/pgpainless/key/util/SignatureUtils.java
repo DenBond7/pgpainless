@@ -225,10 +225,22 @@ public class SignatureUtils {
     }
 
     public static boolean isUserIdValid(PGPPublicKey publicKey, String userId) throws PGPException {
+        return isUserIdValid(publicKey, userId, new Date());
+    }
+
+    public static boolean isUserIdValid(PGPPublicKey publicKey, String userId, Date validationDate) throws PGPException {
         PGPSignature latestSelfSig = getLatestSelfSignatureForUserId(publicKey, userId);
         if (latestSelfSig == null) {
             return false;
         }
+        if (latestSelfSig.getCreationTime().after(validationDate)) {
+            // Signature creation date lays in the future.
+            return false;
+        }
+        if (isSignatureExpired(latestSelfSig, validationDate)) {
+            return false;
+        }
+
         return latestSelfSig.getSignatureType() != SignatureType.CERTIFICATION_REVOCATION.getCode();
     }
 }

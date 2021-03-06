@@ -15,7 +15,9 @@
  */
 package org.pgpainless.util.selection.key.signature;
 
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -55,11 +57,22 @@ public abstract class SelectSignatureFromKey {
                                 isValidSubkeyRevocationSignature()
                         ),
                         and(
-                                isOfType(SignatureType.CERTIFICATION_REVOCATION),
-                                isValidCertificationRevocationSignature())
+                                isOfType(SignatureType.CERTIFICATION_REVOCATION)
+                                // isValidCertificationRevocationSignature()
+                        )
                 ).accept(signature, key, keyRing);
             }
         };
+    }
+
+    public List<PGPSignature> select(List<PGPSignature> signatures, PGPPublicKey key, PGPKeyRing keyRing) {
+        List<PGPSignature> selected = new ArrayList<>();
+        for (PGPSignature signature : signatures) {
+            if (accept(signature, key, keyRing)) {
+                selected.add(signature);
+            }
+        }
+        return selected;
     }
 
     public static SelectSignatureFromKey isValidSubkeyBindingSignature(PGPPublicKey primaryKey, PGPPublicKey subkey) {
