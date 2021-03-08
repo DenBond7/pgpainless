@@ -150,18 +150,25 @@ public class SignatureUtils {
         return signature.verifyCertification(userId, publicKey);
     }
 
+    public static Date getSignatureExpirationDate(PGPSignature signature) {
+        Date creationDate = signature.getCreationTime();
+        long expiresInSecs = signature.getHashedSubPackets().getSignatureExpirationTime();
+        if (expiresInSecs == 0) {
+            return null;
+        }
+        return new Date(creationDate.getTime() + 1000 * expiresInSecs);
+    }
+
     public static boolean isSignatureExpired(PGPSignature signature) {
         return isSignatureExpired(signature, new Date());
     }
 
     public static boolean isSignatureExpired(PGPSignature signature, Date comparisonDate) {
-        long expirationTime = signature.getHashedSubPackets().getSignatureExpirationTime();
-        if (expirationTime == 0) {
+        Date expirationDate = getSignatureExpirationDate(signature);
+        if (expirationDate == null) {
             return false;
         }
-        Date creation = signature.getCreationTime();
-        Date expiration = new Date(creation.getTime() + 1000 * expirationTime);
-        return comparisonDate.after(expiration);
+        return comparisonDate.after(expirationDate);
     }
 
     public static void sortByCreationTimeAscending(List<PGPSignature> signatures) {

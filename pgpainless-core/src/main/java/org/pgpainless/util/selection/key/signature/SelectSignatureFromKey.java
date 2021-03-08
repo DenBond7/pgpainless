@@ -34,10 +34,21 @@ import org.pgpainless.algorithm.SignatureType;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.util.SignatureUtils;
 import org.pgpainless.policy.Policy;
+import org.pgpainless.util.selection.signature.SignatureFilter;
 
 public abstract class SelectSignatureFromKey {
 
     private static final Logger LOGGER = Logger.getLogger(SelectSignatureFromKey.class.getName());
+
+    public static SelectSignatureFromKey isValidAt(Date validationDate) {
+        return new SelectSignatureFromKey() {
+            @Override
+            public boolean accept(PGPSignature signature, PGPPublicKey key, PGPKeyRing keyRing) {
+                Date expirationDate = SignatureUtils.getSignatureExpirationDate(signature);
+                return signature.getCreationTime().before(validationDate) && (expirationDate == null || expirationDate.after(validationDate));
+            }
+        };
+    }
 
     public abstract boolean accept(PGPSignature signature, PGPPublicKey key, PGPKeyRing keyRing);
 
@@ -88,6 +99,11 @@ public abstract class SelectSignatureFromKey {
                     return false;
                 }
 
+                if (!isSigNotExpired().accept(signature, key, keyRing)) {
+                    LOGGER.log(Level.INFO, "Subkey binding signature expired");
+                    return false;
+                }
+
                 boolean subkeyBindingSigValid;
                 try {
                     signature.init(ImplementationFactory.getInstance().getPGPContentVerifierBuilderProvider(), primaryKey);
@@ -101,10 +117,10 @@ public abstract class SelectSignatureFromKey {
                     return false;
                 }
 
-                boolean isSigningKey = PublicKeyAlgorithm.fromId(signature.getKeyAlgorithm()).isSigningCapable();
+                boolean isSigningKey = PublicKeyAlgorithm.fromId(subkey.getAlgorithm()).isSigningCapable();
                 if (isSigningKey && !hasValidPrimaryKeyBindingSignatureSubpacket(subkey, primaryKey)
                         .accept(signature, subkey, keyRing)) {
-                    LOGGER.log(Level.INFO, "Subkey binding signature on signing key does not carry primary key binding signature.");
+                    LOGGER.log(Level.INFO, "Subkey binding signature on signing key does not carry valid primary key binding signature.");
                     return false;
                 }
                 return true;
@@ -122,6 +138,11 @@ public abstract class SelectSignatureFromKey {
                 }
 
                 if (signature.getKeyID() != subkey.getKeyID()) {
+                    return false;
+                }
+
+                if (!isSigNotExpired().accept(signature, primaryKey, keyRing)) {
+                    LOGGER.log(Level.INFO, "Primary key binding signature expired.");
                     return false;
                 }
 
@@ -368,21 +389,11 @@ public abstract class SelectSignatureFromKey {
     }
 
     public static SelectSignatureFromKey isVersion(int version) {
-        return new SelectSignatureFromKey() {
-            @Override
-            public boolean accept(PGPSignature signature, PGPPublicKey key, PGPKeyRing keyRing) {
-                return signature.getVersion() == version;
-            }
-        };
+        return adapter(SignatureFilter.isOfVersion(version));
     }
 
     public static SelectSignatureFromKey isOfType(SignatureType signatureType) {
-        return new SelectSignatureFromKey() {
-            @Override
-            public boolean accept(PGPSignature signature, PGPPublicKey key, PGPKeyRing keyRing) {
-                return signature.getSignatureType() == signatureType.getCode();
-            }
-        };
+        return adapter(SignatureFilter.isOfType(signatureType));
     }
 
     public static SelectSignatureFromKey signatureUsesAnyAlgorithm(HashAlgorithm... hashAlgorithms) {
@@ -523,6 +534,19 @@ public abstract class SelectSignatureFromKey {
             @Override
             public boolean accept(PGPSignature signature, PGPPublicKey key, PGPKeyRing keyRing) {
                 return !selector.accept(signature, key, keyRing);
+            }
+        };
+    }
+
+    public static SelectSignatureFromKey adapter(SignatureFilter signatureFilter) {
+        return adapter(signatureFilter, new Date());
+    }
+
+    public static SelectSignatureFromKey adapter(SignatureFilter signatureFilter, Date validationDate) {
+        return new SelectSignatureFromKey() {
+            @Override
+            public boolean accept(PGPSignature signature, PGPPublicKey key, PGPKeyRing keyRing) {
+                return signatureFilter.accept(signature, validationDate);
             }
         };
     }

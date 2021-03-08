@@ -34,6 +34,7 @@ import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
 import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
+import org.bouncycastle.openpgp.PGPSignature;
 import org.bouncycastle.openpgp.operator.PBESecretKeyDecryptor;
 import org.pgpainless.algorithm.CompressionAlgorithm;
 import org.pgpainless.algorithm.HashAlgorithm;
@@ -45,10 +46,11 @@ import org.pgpainless.key.OpenPgpV4Fingerprint;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.util.selection.key.PublicKeySelectionStrategy;
 import org.pgpainless.util.selection.key.SecretKeySelectionStrategy;
+import org.pgpainless.util.selection.key.SelectPublicKey;
 import org.pgpainless.util.selection.key.impl.EncryptionKeySelectionStrategy;
 import org.pgpainless.util.selection.key.impl.NoRevocation;
 import org.pgpainless.util.selection.key.impl.SignatureKeySelectionStrategy;
-import org.pgpainless.util.selection.key.impl.And;
+import org.pgpainless.util.selection.key.signature.SelectSignatureFromKey;
 import org.pgpainless.util.selection.keyring.PublicKeyRingSelectionStrategy;
 import org.pgpainless.util.selection.keyring.SecretKeyRingSelectionStrategy;
 import org.pgpainless.util.MultiMap;
@@ -84,6 +86,40 @@ public class EncryptionBuilder implements EncryptionBuilderInterface {
     }
 
     class ToRecipientsImpl implements ToRecipients {
+
+        @Override
+        public AndToRecipient toKey(PGPPublicKeyRing publicKey) {
+            PGPSignature signature = SelectSignatureFromKey.lastValidKeySignature()
+
+            return null;
+        }
+
+        @Override
+        public AndToRecipient toRecipient(String userId, PGPPublicKeyRing publicKey) {
+            List<PGPPublicKey> encryptionKeys = new ArrayList<>();
+            for (PGPPublicKey k : publicKey) {
+                if (SelectPublicKey.and(
+                        SelectPublicKey.validForUserId(userId),
+                        SelectPublicKey.or(
+                                SelectPublicKey.hasKeyFlag(userId, KeyFlag.ENCRYPT_COMMS),
+                                SelectPublicKey.hasKeyFlag(userId, KeyFlag.ENCRYPT_STORAGE)
+                        )
+                ).accept(k, publicKey)) {
+                    encryptionKeys.add(k);
+                }
+            }
+            if (encryptionKeys.isEmpty()) {
+                throw new IllegalArgumentException("No suitable encryption keys found.");
+            }
+            EncryptionBuilder.this.encryptionKeys.addAll(encryptionKeys);
+
+            return new WithAlgorithmsImpl();
+        }
+
+        @Override
+        public AndToRecipient toPassphrase(Passphrase passphrase) {
+            return null;
+        }
 
         @Override
         public WithAlgorithms toRecipients(@Nonnull PGPPublicKeyRing... keys) {
@@ -293,8 +329,8 @@ public class EncryptionBuilder implements EncryptionBuilderInterface {
 
         @Override
         public <O> DocumentType signWith(@Nonnull SecretKeyRingSelectionStrategy<O> selectionStrategy,
-                                  @Nonnull SecretKeyRingProtector decryptor,
-                                  @Nonnull MultiMap<O, PGPSecretKeyRingCollection> keys)
+                                         @Nonnull SecretKeyRingProtector decryptor,
+                                         @Nonnull MultiMap<O, PGPSecretKeyRingCollection> keys)
                 throws SecretKeyNotFoundException {
             return new SignWithImpl().signWith(selectionStrategy, decryptor, keys);
         }
@@ -304,7 +340,7 @@ public class EncryptionBuilder implements EncryptionBuilderInterface {
 
         @Override
         public DocumentType signWith(@Nonnull SecretKeyRingProtector decryptor,
-                                  @Nonnull PGPSecretKey... keys) {
+                                     @Nonnull PGPSecretKey... keys) {
             if (keys.length == 0) {
                 throw new IllegalArgumentException("Recipient list MUST NOT be empty.");
             }
@@ -321,7 +357,7 @@ public class EncryptionBuilder implements EncryptionBuilderInterface {
 
         @Override
         public DocumentType signWith(@Nonnull SecretKeyRingProtector decryptor,
-                                  @Nonnull PGPSecretKeyRing... keys) {
+                                     @Nonnull PGPSecretKeyRing... keys) {
             if (keys.length == 0) {
                 throw new IllegalArgumentException("Recipient list MUST NOT be empty.");
             }
@@ -339,8 +375,8 @@ public class EncryptionBuilder implements EncryptionBuilderInterface {
 
         @Override
         public <O> DocumentType signWith(@Nonnull SecretKeyRingSelectionStrategy<O> ringSelectionStrategy,
-                                  @Nonnull SecretKeyRingProtector decryptor,
-                                  @Nonnull MultiMap<O, PGPSecretKeyRingCollection> keys) {
+                                         @Nonnull SecretKeyRingProtector decryptor,
+                                         @Nonnull MultiMap<O, PGPSecretKeyRingCollection> keys) {
             if (keys.isEmpty()) {
                 throw new IllegalArgumentException("Recipient list MUST NOT be empty.");
             }
@@ -415,13 +451,13 @@ public class EncryptionBuilder implements EncryptionBuilderInterface {
 
     PublicKeySelectionStrategy encryptionKeySelector() {
         KeyFlag[] flags = mapPurposeToKeyFlags(purpose);
-        return new And.PubKeySelectionStrategy(
+        return new AndToRecipient.PubKeySelectionStrategy(
                 new NoRevocation.PubKeySelectionStrategy(),
                 new EncryptionKeySelectionStrategy(flags));
     }
 
     SecretKeySelectionStrategy signingKeySelector() {
-        return new And.SecKeySelectionStrategy(
+        return new AndToRecipient.SecKeySelectionStrategy(
                 new NoRevocation.SecKeySelectionStrategy(),
                 new SignatureKeySelectionStrategy());
     }

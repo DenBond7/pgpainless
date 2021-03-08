@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
 import org.bouncycastle.openpgp.PGPSecretKey;
@@ -28,12 +27,12 @@ import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
 import org.pgpainless.algorithm.CompressionAlgorithm;
 import org.pgpainless.algorithm.HashAlgorithm;
+import org.pgpainless.algorithm.SignatureType;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.decryption_verification.OpenPgpMetadata;
 import org.pgpainless.exception.SecretKeyNotFoundException;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnprotectedKeysProtector;
-import org.pgpainless.util.selection.keyring.PublicKeyRingSelectionStrategy;
 import org.pgpainless.util.selection.keyring.SecretKeyRingSelectionStrategy;
 import org.pgpainless.util.MultiMap;
 import org.pgpainless.util.Passphrase;
@@ -49,43 +48,7 @@ public interface EncryptionBuilderInterface {
      */
     ToRecipients onOutputStream(@Nonnull OutputStream outputStream);
 
-    interface ToRecipients {
-
-        /**
-         * Pass in a list of trusted public key rings of the recipients.
-         *
-         * @param keys recipient keys for which the message will be encrypted.
-         * @return api handle
-         */
-        WithAlgorithms toRecipients(@Nonnull PGPPublicKeyRing... keys);
-
-        /**
-         * Pass in a list of trusted public key ring collections of the recipients.
-         *
-         * @param keys recipient keys for which the message will be encrypted.
-         * @return api handle
-         */
-        WithAlgorithms toRecipients(@Nonnull PGPPublicKeyRingCollection... keys);
-
-        /**
-         * Pass in a map of recipient key ring collections along with a strategy for key selection.
-         *
-         * @param selectionStrategy selection strategy that is used to select suitable encryption keys.
-         * @param keys public keys
-         * @param <O> selection criteria type (eg. email address) on which the selection strategy is based
-         * @return api handle
-         */
-        <O> WithAlgorithms toRecipients(@Nonnull PublicKeyRingSelectionStrategy<O> selectionStrategy,
-                                       @Nonnull MultiMap<O, PGPPublicKeyRingCollection> keys);
-
-        /**
-         * Encrypt to one or more symmetric passphrases.
-         * Note that the passphrases MUST NOT be empty.
-         *
-         * @param passphrases passphrase
-         * @return api handle
-         */
-        WithAlgorithms forPassphrases(Passphrase... passphrases);
+    interface ToRecipients extends AdditionalRecipient {
 
         /**
          * Instruct the {@link EncryptionStream} to not encrypt any data.
@@ -93,70 +56,34 @@ public interface EncryptionBuilderInterface {
          * @return api handle
          */
         DetachedSign doNotEncrypt();
-
     }
 
-    interface WithAlgorithms {
+    interface AdditionalRecipient {
+
+        AndToRecipient toKey(PGPPublicKeyRing publicKey);
+
+        AndToRecipient toRecipient(String userId, PGPPublicKeyRing publicKey);
+
+        AndToRecipient toRecipient(String userId, PGPPublicKeyRingCollection publicKeyRingCollection);
 
         /**
-         * Add our own public key to the list of recipient keys.
+         * Encrypt to a symmetric passphrase.
          *
-         * @param keys own public keys
+         * @param passphrase passphrase
          * @return api handle
          */
-        WithAlgorithms andToSelf(@Nonnull PGPPublicKey... keys);
+        AndToRecipient toPassphrase(Passphrase passphrase);
+    }
 
-        /**
-         * Add our own public key to the list of recipient keys.
-         *
-         * @param keys own public keys
-         * @return api handle
-         */
-        WithAlgorithms andToSelf(@Nonnull PGPPublicKeyRing... keys);
+    interface AndToRecipient {
+        AdditionalRecipient and();
 
-        /**
-         * Add our own public keys to the list of recipient keys.
-         *
-         * @param keys own public keys
-         * @return api handle
-         */
-        WithAlgorithms andToSelf(@Nonnull PGPPublicKeyRingCollection keys);
-
-        /**
-         * Add our own public keys to the list of recipient keys.
-         *
-         * @param selectionStrategy key selection strategy used to determine suitable keys for encryption.
-         * @param keys public keys
-         * @param <O> selection criteria type (eg. email address) used by the selection strategy.
-         * @return api handle
-         */
-        <O> WithAlgorithms andToSelf(@Nonnull PublicKeyRingSelectionStrategy<O> selectionStrategy,
-                                    @Nonnull MultiMap<O, PGPPublicKeyRingCollection> keys);
-
-        /**
-         * Specify which algorithms should be used for the encryption.
-         *
-         * @param symmetricKeyAlgorithm symmetric algorithm for the session key
-         * @param hashAlgorithm hash algorithm
-         * @param compressionAlgorithm compression algorithm
-         * @return api handle
-         */
-        DetachedSign usingAlgorithms(@Nonnull SymmetricKeyAlgorithm symmetricKeyAlgorithm,
-                                 @Nonnull HashAlgorithm hashAlgorithm,
-                                 @Nonnull CompressionAlgorithm compressionAlgorithm);
-
-        /**
-         * Use a suite of algorithms that are considered secure.
-         *
-         * @return api handle
-         */
-        DetachedSign usingSecureAlgorithms();
-
-        ToRecipients and();
-
+        DetachedSign finishRecipients();
     }
 
     interface DetachedSign extends SignWith {
+
+        SignWith createInlineSignature();
 
         /**
          * Instruct the {@link EncryptionStream} to generate detached signatures instead of One-Pass-Signatures.
@@ -177,63 +104,25 @@ public interface EncryptionBuilderInterface {
 
     interface SignWith {
 
-        /**
-         * Pass in a list of secret keys used for signing.
-         * Those keys are considered unlocked (ie. not password protected).
-         * If you need to use password protected keys instead, use {@link #signWith(SecretKeyRingProtector, PGPSecretKey...)}.
-         *
-         * @param keys secret keys
-         * @return api handle
-         */
-        default DocumentType signWith(@Nonnull PGPSecretKey... keys) {
-            return signWith(new UnprotectedKeysProtector(), keys);
-        }
 
         /**
          * Pass in a list of secret keys used for signing, along with a {@link SecretKeyRingProtector} used to unlock
          * the secret keys.
          *
+         * @param userId userId of the signer
          * @param decryptor {@link SecretKeyRingProtector} used to unlock the secret keys
-         * @param keys secret keys used for signing
+         * @param secretKey secret key ring
          * @return api handle
          */
-        DocumentType signWith(@Nonnull SecretKeyRingProtector decryptor, @Nonnull PGPSecretKey... keys);
-
-        /**
-         * Pass in a list of secret keys used for signing, along with a {@link SecretKeyRingProtector} used to unlock
-         * the secret keys.
-         *
-         * @param decryptor {@link SecretKeyRingProtector} used to unlock the secret keys
-         * @param keyRings secret keys used for signing
-         * @return api handle
-         */
-        DocumentType signWith(@Nonnull SecretKeyRingProtector decryptor, @Nonnull PGPSecretKeyRing... keyRings);
-
-        /**
-         * Pass in a map of secret keys for signing, as well as a {@link org.pgpainless.util.selection.key.SecretKeySelectionStrategy}
-         * that is used to determine suitable secret keys.
-         * If the keys are locked by a password, the provided {@link SecretKeyRingProtector} will be used to unlock the keys.
-         *
-         * @param selectionStrategy key selection strategy
-         * @param decryptor decryptor for unlocking secret keys
-         * @param keys secret keys
-         * @param <O> selection criteria type (eg. email address)
-         * @return api handle
-         *
-         * @throws SecretKeyNotFoundException in case no suitable secret key can be found
-         */
-        <O> DocumentType signWith(@Nonnull SecretKeyRingSelectionStrategy<O> selectionStrategy,
-                          @Nonnull SecretKeyRingProtector decryptor,
-                          @Nonnull MultiMap<O, PGPSecretKeyRingCollection> keys)
-                throws SecretKeyNotFoundException;
-
-    }
-
-    interface DocumentType {
+        AndSignWith signWith(@Nonnull String userId, @Nonnull PGPSecretKeyRing secretKey, SecretKeyRingProtector decryptor);
 
         Armor signBinaryDocument();
 
         Armor signCanonicalText();
+    }
+
+    interface AndSignWith {
+        SignWith and();
     }
 
     interface Armor {
@@ -257,6 +146,12 @@ public interface EncryptionBuilderInterface {
          */
         EncryptionStream noArmor() throws IOException, PGPException;
 
+    }
+
+    class Options {
+        HashAlgorithm hashAlgorithm;
+        SymmetricKeyAlgorithm sessionKeyAlgorithm;
+        CompressionAlgorithm compressionAlgorithm;
     }
 
 }

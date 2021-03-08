@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Iterator;
-import java.util.List;
 
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPublicKey;
@@ -15,7 +14,6 @@ import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
 import org.pgpainless.key.util.KeyRingUtils;
-import org.pgpainless.util.selection.key.SelectPublicKey;
 
 public class PGPPublicKeyRingTest {
 
@@ -43,8 +41,5 @@ public class PGPPublicKeyRingTest {
                 assertFalse(userIds.hasNext());
             }
         }
-
-        List<PGPPublicKey> valid = SelectPublicKey.validForUserId("primary@user.id").selectPublicKeys(publicKeys);
-        assertFalse(valid.isEmpty());
     }
 }

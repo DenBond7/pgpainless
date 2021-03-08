@@ -239,7 +239,7 @@ public abstract class SelectPublicKey {
         };
     }
 
-    public static SelectPublicKey hasKeyFlag(KeyFlag keyFlag) {
+    public static SelectPublicKey hasKeyFlag(String userId, KeyFlag keyFlag) {
         return new SelectPublicKey() {
             @Override
             public boolean accept(PGPPublicKey publicKey, PGPKeyRing keyRing) {
