@@ -26,6 +26,7 @@ import org.bouncycastle.bcpg.ArmoredOutputStream;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.pgpainless.PGPainless;
@@ -33,17 +34,20 @@ import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.OpenPgpV4Fingerprint;
 import org.pgpainless.key.util.KeyRingUtils;
 import org.pgpainless.util.ArmoredOutputStreamFactory;
+import org.pgpainless.util.Passphrase;
 
 public class GenerateKeyTest {
 
     private static final Logger LOGGER = Logger.getLogger(GenerateKeyTest.class.getName());
 
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestUtil#provideImplementationFactories")
-    public void generateKey(ImplementationFactory implementationFactory) throws InvalidAlgorithmParameterException, NoSuchAlgorithmException, PGPException, IOException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
+    @Test
+    public void generateKey() throws InvalidAlgorithmParameterException, NoSuchAlgorithmException, PGPException, IOException {
+        String user = "default@denbond7.com";
+        String oldPass = "android";
+        String newPass = "My super strong password 2018";
+        String newPassSecond = "My super strong passphrase 2019";
 
-        PGPSecretKeyRing secretKeys = PGPainless.generateKeyRing().simpleEcKeyRing("fresh@encrypted.key", "password123");
+        PGPSecretKeyRing secretKeys = PGPainless.generateKeyRing().simpleEcKeyRing(user, oldPass);
         PGPPublicKeyRing publicKeys = KeyRingUtils.publicKeyRingFrom(secretKeys);
 
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -67,5 +71,29 @@ public class GenerateKeyTest {
                 new OpenPgpV4Fingerprint(publicKeys),
                 publicKeys.getPublicKey().getKeyID(),
                 publicKey, privateKey));
+
+        PGPSecretKeyRing secretKeysMod = PGPainless.modifyKeyRing(secretKeys)
+                .changePassphraseFromOldPassphrase(Passphrase.fromPassword(oldPass))
+                .withSecureDefaultSettings()
+                .toNewPassphrase(Passphrase.fromPassword(newPass))
+                .done();
+
+        bytes = new ByteArrayOutputStream();
+        armor = ArmoredOutputStreamFactory.get(bytes);
+        secretKeysMod.encode(armor);
+        armor.close();
+        System.out.println(bytes.toString());
+
+        PGPSecretKeyRing secretKeysModSecond = PGPainless.modifyKeyRing(secretKeys)
+                .changePassphraseFromOldPassphrase(Passphrase.fromPassword(oldPass))
+                .withSecureDefaultSettings()
+                .toNewPassphrase(Passphrase.fromPassword(newPassSecond))
+                .done();
+
+        bytes = new ByteArrayOutputStream();
+        armor = ArmoredOutputStreamFactory.get(bytes);
+        secretKeysModSecond.encode(armor);
+        armor.close();
+        System.out.println(bytes.toString());
     }
 }
