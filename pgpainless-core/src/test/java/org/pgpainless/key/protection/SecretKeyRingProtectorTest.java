@@ -1,18 +1,7 @@
-/*
- * Copyright 2021 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2021 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.protection;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,7 +35,7 @@ import org.pgpainless.util.Passphrase;
 public class SecretKeyRingProtectorTest {
 
     @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestUtil#provideImplementationFactories")
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
     public void testUnlockAllKeysWithSamePassword(ImplementationFactory implementationFactory) throws IOException, PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
         ImplementationFactory.setFactoryImplementation(implementationFactory);
 
@@ -78,7 +67,7 @@ public class SecretKeyRingProtectorTest {
     }
 
     @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestUtil#provideImplementationFactories")
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
     public void testUnlockSingleKeyWithPassphrase(ImplementationFactory implementationFactory) throws IOException, PGPException {
         ImplementationFactory.setFactoryImplementation(implementationFactory);
 
@@ -98,7 +87,7 @@ public class SecretKeyRingProtectorTest {
     public void testFromPassphraseMap() {
         Map<Long, Passphrase> passphraseMap = new ConcurrentHashMap<>();
         passphraseMap.put(1L, Passphrase.emptyPassphrase());
-        PassphraseMapKeyRingProtector protector = (PassphraseMapKeyRingProtector) SecretKeyRingProtector.fromPassphraseMap(passphraseMap);
+        CachingSecretKeyRingProtector protector = (CachingSecretKeyRingProtector) SecretKeyRingProtector.fromPassphraseMap(passphraseMap);
 
         assertNotNull(protector.getPassphraseFor(1L));
         assertNull(protector.getPassphraseFor(5L));
@@ -114,34 +103,21 @@ public class SecretKeyRingProtectorTest {
     public void testMissingPassphraseCallback() {
         Map<Long, Passphrase> passphraseMap = new ConcurrentHashMap<>();
         passphraseMap.put(1L, Passphrase.emptyPassphrase());
-        PassphraseMapKeyRingProtector protector = new PassphraseMapKeyRingProtector(passphraseMap,
+        CachingSecretKeyRingProtector protector = new CachingSecretKeyRingProtector(passphraseMap,
                 KeyRingProtectionSettings.secureDefaultSettings(), new SecretKeyPassphraseProvider() {
             @Nullable
             @Override
             public Passphrase getPassphraseFor(Long keyId) {
                 return Passphrase.fromPassword("missingP455w0rd");
             }
+
+            @Override
+            public boolean hasPassphrase(Long keyId) {
+                return true;
+            }
         });
 
         assertEquals(Passphrase.emptyPassphrase(), protector.getPassphraseFor(1L));
         assertEquals(Passphrase.fromPassword("missingP455w0rd"), protector.getPassphraseFor(3L));
-    }
-
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestUtil#provideImplementationFactories")
-    public void testCallbackBasedKeyRingProtector(ImplementationFactory implementationFactory) throws IOException, PGPException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
-        SecretKeyRingProtector2 protector = new CallbackBasedKeyringProtector(new CallbackBasedKeyringProtector.Callback() {
-            @Override
-            public Passphrase getPassphraseFor(PGPSecretKey secretKey) {
-                return TestKeys.CRYPTIE_PASSPHRASE;
-            }
-        });
-
-        PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        for (PGPSecretKey secretKey : secretKeys) {
-            secretKey.extractPrivateKey(protector.getDecryptor(secretKey));
-            assertNotNull(protector.getEncryptor(secretKey));
-        }
     }
 }

@@ -1,18 +1,7 @@
-/*
- * Copyright 2018 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2018 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.generation.type;
 
 import java.security.spec.AlgorithmParameterSpec;
@@ -26,7 +15,7 @@ import org.pgpainless.key.generation.type.eddsa.EdDSACurve;
 import org.pgpainless.key.generation.type.rsa.RsaLength;
 import org.pgpainless.key.generation.type.rsa.RSA;
 import org.pgpainless.key.generation.type.xdh.XDH;
-import org.pgpainless.key.generation.type.xdh.XDHCurve;
+import org.pgpainless.key.generation.type.xdh.XDHSpec;
 
 public interface KeyType {
 
@@ -57,7 +46,9 @@ public interface KeyType {
      *
      * @return true if the key can sign.
      */
-    boolean canSign();
+    default boolean canSign() {
+        return getAlgorithm().isSigningCapable();
+    }
 
     /**
      * Return true if the key that is generated from this type is able to carry the CERTIFY_OTHER key flag.
@@ -85,7 +76,9 @@ public interface KeyType {
      *
      * @return true if the key can encrypt communication
      */
-    boolean canEncryptCommunication();
+    default boolean canEncryptCommunication() {
+        return getAlgorithm().isEncryptionCapable();
+    }
 
     /**
      * Return true if the key that is generated from this type is able to carry the ENCRYPT_STORAGE key flag.
@@ -94,7 +87,7 @@ public interface KeyType {
      * @return true if the key can encrypt for storage
      */
     default boolean canEncryptStorage() {
-        return canEncryptCommunication();
+        return getAlgorithm().isEncryptionCapable();
     }
 
     static KeyType RSA(RsaLength length) {
@@ -113,7 +106,7 @@ public interface KeyType {
         return EdDSA.fromCurve(curve);
     }
 
-    static KeyType XDH(XDHCurve curve) {
-        return XDH.fromCurve(curve);
+    static KeyType XDH(XDHSpec curve) {
+        return XDH.fromSpec(curve);
     }
 }

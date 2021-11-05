@@ -1,20 +1,10 @@
-/*
- * Copyright 2020 Paul Schaub. Copyright 2021 Flowcrypt a.s.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2020 Paul Schaub <vanitasvitae@fsfe.org>, 2021 Flowcrypt a.s.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 package org.pgpainless.key.util;
+
+import javax.annotation.Nonnull;
 
 public final class UserId implements CharSequence {
     public static final class Builder {
@@ -127,7 +117,7 @@ public final class UserId implements CharSequence {
     }
 
     @Override
-    public String toString() {
+    public @Nonnull String toString() {
         return asString(false);
     }
 
@@ -169,12 +159,12 @@ public final class UserId implements CharSequence {
         if (hash != Long.MAX_VALUE) {
             return (int) hash;
         } else {
-            int hash = 7;
-            hash = 31 * hash + (name == null ? 0 : name.hashCode());
-            hash = 31 * hash + (comment == null ? 0 : comment.hashCode());
-            hash = 31 * hash + (email == null ? 0 : email.toLowerCase().hashCode());
-            this.hash = hash;
-            return hash;
+            int hashCode = 7;
+            hashCode = 31 * hashCode + (name == null ? 0 : name.hashCode());
+            hashCode = 31 * hashCode + (comment == null ? 0 : comment.hashCode());
+            hashCode = 31 * hashCode + (email == null ? 0 : email.toLowerCase().hashCode());
+            this.hash = hashCode;
+            return hashCode;
         }
     }
 

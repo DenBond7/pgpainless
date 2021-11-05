@@ -1,24 +1,13 @@
-/*
- * Copyright 2018 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2018 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.util;
 
 import javax.annotation.Nonnull;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -33,7 +22,7 @@ public class MultiMap<K, V> {
     public MultiMap(@Nonnull MultiMap<K, V> other) {
         this.map = new HashMap<>();
         for (K k : other.map.keySet()) {
-            map.put(k, new HashSet<>(other.map.get(k)));
+            map.put(k, new LinkedHashSet<>(other.map.get(k)));
         }
     }
 
@@ -67,7 +56,7 @@ public class MultiMap<K, V> {
     public void put(K k, V v) {
         Set<V> values = map.get(k);
         if (values == null) {
-            values = new HashSet<>();
+            values = new LinkedHashSet<>();
             map.put(k, values);
         }
         values.add(v);

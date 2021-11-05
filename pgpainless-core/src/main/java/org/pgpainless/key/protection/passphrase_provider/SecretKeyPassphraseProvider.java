@@ -1,18 +1,7 @@
-/*
- * Copyright 2018 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2018 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.protection.passphrase_provider;
 
 import javax.annotation.Nullable;
@@ -25,6 +14,15 @@ import org.pgpainless.util.Passphrase;
  */
 public interface SecretKeyPassphraseProvider {
 
+    /**
+     * Return a passphrase for the given secret key.
+     * If no record is found, return null.
+     * Note: In case of an unprotected secret key, this method must may not return null, but a {@link Passphrase} with
+     * a content of null.
+     *
+     * @param secretKey secret key
+     * @return passphrase or null, if no passphrase record is found.
+     */
     @Nullable default Passphrase getPassphraseFor(PGPSecretKey secretKey) {
         return getPassphraseFor(secretKey.getKeyID());
     }
@@ -37,4 +35,6 @@ public interface SecretKeyPassphraseProvider {
      * @return passphrase or null, if no passphrase record has been found.
      */
     @Nullable Passphrase getPassphraseFor(Long keyId);
+
+    boolean hasPassphrase(Long keyId);
 }

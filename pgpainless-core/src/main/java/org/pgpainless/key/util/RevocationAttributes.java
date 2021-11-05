@@ -1,19 +1,11 @@
-/*
- * Copyright 2020 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2020 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.util;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class RevocationAttributes {
 
@@ -25,6 +17,26 @@ public final class RevocationAttributes {
         USER_ID_NO_LONGER_VALID((byte) 32),
         ;
 
+        private static final Map<Byte, Reason> MAP = new ConcurrentHashMap<>();
+        static {
+            for (Reason r : Reason.values()) {
+                MAP.put(r.reasonCode, r);
+            }
+        }
+
+        public static Reason fromCode(byte code) {
+            Reason reason = MAP.get(code);
+            if (reason == null) {
+                throw new IllegalArgumentException("Invalid revocation reason: " + code);
+            }
+            return reason;
+        }
+
+        public static boolean isHardRevocation(byte code) {
+            Reason reason = MAP.get(code);
+            return reason != KEY_SUPERSEDED && reason != KEY_RETIRED && reason != USER_ID_NO_LONGER_VALID;
+        }
+
         private final byte reasonCode;
 
         Reason(byte reasonCode) {
@@ -34,7 +46,6 @@ public final class RevocationAttributes {
         public byte code() {
             return reasonCode;
         }
-
 
         @Override
         public String toString() {

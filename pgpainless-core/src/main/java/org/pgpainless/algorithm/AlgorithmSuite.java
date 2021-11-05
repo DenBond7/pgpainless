@@ -1,25 +1,19 @@
-/*
- * Copyright 2018 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2018 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.algorithm;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
+/**
+ * The {@link AlgorithmSuite} class is consulted when new OpenPGP keys are being generated to set
+ * preferred algorithms on the key.
+ */
 public class AlgorithmSuite {
 
     private static AlgorithmSuite defaultAlgorithmSuite = new AlgorithmSuite(
@@ -39,64 +33,28 @@ public class AlgorithmSuite {
                     CompressionAlgorithm.UNCOMPRESSED)
     );
 
-    private List<SymmetricKeyAlgorithm> symmetricKeyAlgorithms;
-    private List<HashAlgorithm> hashAlgorithms;
-    private List<CompressionAlgorithm> compressionAlgorithms;
+    private final Set<SymmetricKeyAlgorithm> symmetricKeyAlgorithms;
+    private final Set<HashAlgorithm> hashAlgorithms;
+    private final Set<CompressionAlgorithm> compressionAlgorithms;
 
     public AlgorithmSuite(List<SymmetricKeyAlgorithm> symmetricKeyAlgorithms,
                           List<HashAlgorithm> hashAlgorithms,
                           List<CompressionAlgorithm> compressionAlgorithms) {
-        this.symmetricKeyAlgorithms = Collections.unmodifiableList(symmetricKeyAlgorithms);
-        this.hashAlgorithms = Collections.unmodifiableList(hashAlgorithms);
-        this.compressionAlgorithms = Collections.unmodifiableList(compressionAlgorithms);
+        this.symmetricKeyAlgorithms = Collections.unmodifiableSet(new LinkedHashSet<>(symmetricKeyAlgorithms));
+        this.hashAlgorithms = Collections.unmodifiableSet(new LinkedHashSet<>(hashAlgorithms));
+        this.compressionAlgorithms = Collections.unmodifiableSet(new LinkedHashSet<>(compressionAlgorithms));
     }
 
-    public void setSymmetricKeyAlgorithms(List<SymmetricKeyAlgorithm> symmetricKeyAlgorithms) {
-        this.symmetricKeyAlgorithms = symmetricKeyAlgorithms;
+    public Set<SymmetricKeyAlgorithm> getSymmetricKeyAlgorithms() {
+        return new LinkedHashSet<>(symmetricKeyAlgorithms);
     }
 
-    public List<SymmetricKeyAlgorithm> getSymmetricKeyAlgorithms() {
-        return new ArrayList<>(symmetricKeyAlgorithms);
+    public Set<HashAlgorithm> getHashAlgorithms() {
+        return new LinkedHashSet<>(hashAlgorithms);
     }
 
-    public int[] getSymmetricKeyAlgorithmIds() {
-        int[] array = new int[symmetricKeyAlgorithms.size()];
-        for (int i = 0; i < array.length; i++) {
-            array[i] = symmetricKeyAlgorithms.get(i).getAlgorithmId();
-        }
-        return array;
-    }
-
-    public void setHashAlgorithms(List<HashAlgorithm> hashAlgorithms) {
-        this.hashAlgorithms = hashAlgorithms;
-    }
-
-    public List<HashAlgorithm> getHashAlgorithms() {
-        return hashAlgorithms;
-    }
-
-    public int[] getHashAlgorithmIds() {
-        int[] array = new int[hashAlgorithms.size()];
-        for (int i = 0; i < array.length; i++) {
-            array[i] = hashAlgorithms.get(i).getAlgorithmId();
-        }
-        return array;
-    }
-
-    public void setCompressionAlgorithms(List<CompressionAlgorithm> compressionAlgorithms) {
-        this.compressionAlgorithms = compressionAlgorithms;
-    }
-
-    public List<CompressionAlgorithm> getCompressionAlgorithms() {
-        return compressionAlgorithms;
-    }
-
-    public int[] getCompressionAlgorithmIds() {
-        int[] array = new int[compressionAlgorithms.size()];
-        for (int i = 0; i < array.length; i++) {
-            array[i] = compressionAlgorithms.get(i).getAlgorithmId();
-        }
-        return array;
+    public Set<CompressionAlgorithm> getCompressionAlgorithms() {
+        return new LinkedHashSet<>(compressionAlgorithms);
     }
 
     public static AlgorithmSuite getDefaultAlgorithmSuite() {

@@ -1,26 +1,17 @@
-/*
- * Copyright 2020 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2020 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.modification;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import java.io.IOException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -38,13 +29,16 @@ import org.pgpainless.key.TestKeys;
 import org.pgpainless.key.generation.KeySpec;
 import org.pgpainless.key.generation.type.ecc.EllipticCurve;
 import org.pgpainless.key.generation.type.ecc.ecdsa.ECDSA;
+import org.pgpainless.key.info.KeyRingInfo;
 import org.pgpainless.key.protection.PasswordBasedSecretKeyRingProtector;
+import org.pgpainless.key.protection.SecretKeyRingProtector;
+import org.pgpainless.key.protection.UnlockSecretKey;
 import org.pgpainless.util.Passphrase;
 
 public class AddSubKeyTest {
 
     @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestUtil#provideImplementationFactories")
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
     public void testAddSubKey(ImplementationFactory implementationFactory) throws IOException, PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
         ImplementationFactory.setFactoryImplementation(implementationFactory);
         PGPSecretKeyRing secretKeys = TestKeys.getCryptieSecretKeyRing();
@@ -56,9 +50,7 @@ public class AddSubKeyTest {
 
         secretKeys = PGPainless.modifyKeyRing(secretKeys)
                 .addSubKey(
-                        KeySpec.getBuilder(ECDSA.fromCurve(EllipticCurve._P256))
-                                .withKeyFlags(KeyFlag.SIGN_DATA)
-                                .withDefaultAlgorithms(),
+                        KeySpec.getBuilder(ECDSA.fromCurve(EllipticCurve._P256), KeyFlag.SIGN_DATA).build(),
                         Passphrase.fromPassword("subKeyPassphrase"),
                         PasswordBasedSecretKeyRingProtector.forKey(secretKeys, Passphrase.fromPassword("password123")))
                 .done();
@@ -73,9 +65,11 @@ public class AddSubKeyTest {
         long subKeyId = keyIdsAfter.get(0);
 
         PGPSecretKey subKey = secretKeys.getSecretKey(subKeyId);
-        PGPPrivateKey privateKey = subKey.extractPrivateKey(
-                PasswordBasedSecretKeyRingProtector
-                        .forKey(subKey, Passphrase.fromPassword("subKeyPassphrase"))
-                        .getDecryptor(subKeyId));
+        SecretKeyRingProtector protector = SecretKeyRingProtector.unlockAllKeysWith(
+                Passphrase.fromPassword("subKeyPassphrase"), secretKeys);
+        PGPPrivateKey privateKey = UnlockSecretKey.unlockSecretKey(subKey, protector);
+
+        KeyRingInfo info = new KeyRingInfo(secretKeys);
+        assertEquals(Collections.singletonList(KeyFlag.SIGN_DATA), info.getKeyFlagsOf(subKeyId));
     }
 }

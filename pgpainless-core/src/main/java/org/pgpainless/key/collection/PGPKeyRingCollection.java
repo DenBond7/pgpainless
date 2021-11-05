@@ -1,48 +1,39 @@
-/*
- * Copyright 2021 Flowcrypt a.s. Copyright 2021 Paul Schaub
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2021 Paul Schaub <vanitasvitae@fsfe.org>, 2021 Flowcrypt a.s.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.collection;
 
-import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPKeyRing;
-import org.bouncycastle.openpgp.PGPObjectFactory;
-import org.bouncycastle.openpgp.PGPPublicKeyRing;
-import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
-import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
-import org.bouncycastle.openpgp.operator.KeyFingerPrintCalculator;
-
-import javax.annotation.Nonnull;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import javax.annotation.Nonnull;
+
+import org.bouncycastle.openpgp.PGPException;
+import org.bouncycastle.openpgp.PGPKeyRing;
+import org.bouncycastle.openpgp.PGPMarker;
+import org.bouncycastle.openpgp.PGPObjectFactory;
+import org.bouncycastle.openpgp.PGPPublicKeyRing;
+import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
+import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
+import org.pgpainless.implementation.ImplementationFactory;
+import org.pgpainless.util.ArmorUtils;
 
 /**
  * This class describes a logic of handling a collection of different {@link PGPKeyRing}. The logic was inspired by
  * {@link PGPSecretKeyRingCollection} and {@link PGPPublicKeyRingCollection}.
  */
 public class PGPKeyRingCollection {
-    private PGPSecretKeyRingCollection pgpSecretKeyRingCollection;
-    private PGPPublicKeyRingCollection pgpPublicKeyRingCollection;
 
-    public PGPKeyRingCollection(@Nonnull byte[] encoding, @Nonnull KeyFingerPrintCalculator fingerPrintCalculator,
-                                boolean isSilent) throws IOException, PGPException {
-        this(new ByteArrayInputStream(encoding), fingerPrintCalculator, isSilent);
+    private final PGPSecretKeyRingCollection pgpSecretKeyRingCollection;
+    private final PGPPublicKeyRingCollection pgpPublicKeyRingCollection;
+
+    public PGPKeyRingCollection(@Nonnull byte[] encoding, boolean isSilent) throws IOException, PGPException {
+        this(new ByteArrayInputStream(encoding), isSilent);
     }
 
     /**
@@ -53,15 +44,20 @@ public class PGPKeyRingCollection {
      * @throws IOException  if a problem parsing the base stream occurs
      * @throws PGPException if an object is encountered which isn't a {@link PGPSecretKeyRing} or {@link PGPPublicKeyRing}
      */
-    public PGPKeyRingCollection(@Nonnull InputStream in, @Nonnull KeyFingerPrintCalculator fingerPrintCalculator,
-                                boolean isSilent) throws IOException, PGPException {
-        PGPObjectFactory pgpFact = new PGPObjectFactory(in, fingerPrintCalculator);
+    public PGPKeyRingCollection(@Nonnull InputStream in, boolean isSilent) throws IOException, PGPException {
+        // Double getDecoderStream because of #96
+        InputStream decoderStream = ArmorUtils.getDecoderStream(in);
+        PGPObjectFactory pgpFact = new PGPObjectFactory(decoderStream, ImplementationFactory.getInstance().getKeyFingerprintCalculator());
         Object obj;
 
         List<PGPSecretKeyRing> secretKeyRings = new ArrayList<>();
         List<PGPPublicKeyRing> publicKeyRings = new ArrayList<>();
 
         while ((obj = pgpFact.nextObject()) != null) {
+            if (obj instanceof PGPMarker) {
+                // Skip marker packets
+                continue;
+            }
             if (obj instanceof PGPSecretKeyRing) {
                 secretKeyRings.add((PGPSecretKeyRing) obj);
             } else if (obj instanceof PGPPublicKeyRing) {
@@ -77,7 +73,8 @@ public class PGPKeyRingCollection {
         pgpPublicKeyRingCollection = new PGPPublicKeyRingCollection(publicKeyRings);
     }
 
-    public PGPKeyRingCollection(Collection<PGPKeyRing> collection, boolean isSilent) throws IOException, PGPException {
+    public PGPKeyRingCollection(@Nonnull Collection<PGPKeyRing> collection, boolean isSilent)
+            throws IOException, PGPException {
         List<PGPSecretKeyRing> secretKeyRings = new ArrayList<>();
         List<PGPPublicKeyRing> publicKeyRings = new ArrayList<>();
 
@@ -97,11 +94,11 @@ public class PGPKeyRingCollection {
         pgpPublicKeyRingCollection = new PGPPublicKeyRingCollection(publicKeyRings);
     }
 
-    public PGPSecretKeyRingCollection getPGPSecretKeyRingCollection() {
+    public @Nonnull PGPSecretKeyRingCollection getPGPSecretKeyRingCollection() {
         return pgpSecretKeyRingCollection;
     }
 
-    public PGPPublicKeyRingCollection getPgpPublicKeyRingCollection() {
+    public @Nonnull PGPPublicKeyRingCollection getPgpPublicKeyRingCollection() {
         return pgpPublicKeyRingCollection;
     }
 

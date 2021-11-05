@@ -1,18 +1,7 @@
-/*
- * Copyright 2018-2020 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2018 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.generation;
 
 import java.security.InvalidAlgorithmParameterException;
@@ -25,62 +14,32 @@ import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.pgpainless.key.util.UserId;
 import org.pgpainless.util.Passphrase;
 
-public interface KeyRingBuilderInterface {
+public interface KeyRingBuilderInterface<B extends KeyRingBuilderInterface<B>> {
 
-    KeyRingBuilderInterface withSubKey(@Nonnull KeySpec keySpec);
+    B setPrimaryKey(@Nonnull KeySpec keySpec);
 
-    /**
-     * Define the primary key spec.
-     *
-     * @deprecated use {@link #withPrimaryKey(KeySpec)} instead.
-     * @param keySpec key spec
-     * @return builder step
-     */
-    @Deprecated
-    default WithPrimaryUserId withMasterKey(@Nonnull KeySpec keySpec) {
-        return withPrimaryKey(keySpec);
+    default B setPrimaryKey(@Nonnull KeySpecBuilder builder) {
+        return setPrimaryKey(builder.build());
     }
 
-    WithPrimaryUserId withPrimaryKey(@Nonnull KeySpec keySpec);
+    B addSubkey(@Nonnull KeySpec keySpec);
 
-    interface WithPrimaryUserId {
-
-        default WithAdditionalUserIdOrPassphrase withPrimaryUserId(@Nonnull UserId userId) {
-            return withPrimaryUserId(userId.toString());
-        }
-
-        WithAdditionalUserIdOrPassphrase withPrimaryUserId(@Nonnull String userId);
-
-        WithAdditionalUserIdOrPassphrase withPrimaryUserId(@Nonnull byte[] userId);
-
+    default B addSubkey(@Nonnull KeySpecBuilder builder) {
+        return addSubkey(builder.build());
     }
 
-    interface WithAdditionalUserIdOrPassphrase {
-
-        default WithAdditionalUserIdOrPassphrase withAdditionalUserId(@Nonnull UserId userId) {
-            return withAdditionalUserId(userId.toString());
-        }
-
-        /**
-         * Set an expiration date for the key.
-         *
-         * @param expirationDate date on which the key will expire.
-         * @return builder
-         */
-        WithAdditionalUserIdOrPassphrase setExpirationDate(@Nonnull Date expirationDate);
-
-        WithAdditionalUserIdOrPassphrase withAdditionalUserId(@Nonnull String userId);
-
-        WithAdditionalUserIdOrPassphrase withAdditionalUserId(@Nonnull byte[] userId);
-
-        Build withPassphrase(@Nonnull Passphrase passphrase);
-
-        Build withoutPassphrase();
+    default B addUserId(UserId userId) {
+        return addUserId(userId.toString());
     }
 
-    interface Build {
+    B addUserId(@Nonnull String userId);
 
-        PGPSecretKeyRing build() throws NoSuchAlgorithmException, PGPException,
+    B addUserId(@Nonnull byte[] userId);
+
+    B setExpirationDate(@Nonnull Date expirationDate);
+
+    B setPassphrase(@Nonnull Passphrase passphrase);
+
+    PGPSecretKeyRing build() throws NoSuchAlgorithmException, PGPException,
                 InvalidAlgorithmParameterException;
-    }
 }

@@ -1,26 +1,17 @@
-/*
- * Copyright 2020 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2020 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.symmetric_encryption;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Random;
 
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
@@ -29,8 +20,13 @@ import org.bouncycastle.util.io.Streams;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.pgpainless.PGPainless;
+import org.pgpainless.decryption_verification.ConsumerOptions;
 import org.pgpainless.decryption_verification.DecryptionStream;
+import org.pgpainless.decryption_verification.MissingKeyPassphraseStrategy;
+import org.pgpainless.encryption_signing.EncryptionOptions;
 import org.pgpainless.encryption_signing.EncryptionStream;
+import org.pgpainless.encryption_signing.ProducerOptions;
+import org.pgpainless.exception.MissingDecryptionMethodException;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.TestKeys;
 import org.pgpainless.key.protection.KeyRingProtectionSettings;
@@ -45,8 +41,8 @@ import org.pgpainless.util.Passphrase;
 public class SymmetricEncryptionTest {
 
     @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestUtil#provideImplementationFactories")
-    public void test(ImplementationFactory implementationFactory) throws IOException, PGPException {
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
+    public void encryptWithKeyAndPassphrase_DecryptWithKey(ImplementationFactory implementationFactory) throws IOException, PGPException {
         ImplementationFactory.setFactoryImplementation(implementationFactory);
         byte[] plaintext = "This is a secret message".getBytes(StandardCharsets.UTF_8);
         ByteArrayInputStream plaintextIn = new ByteArrayInputStream(plaintext);
@@ -54,13 +50,13 @@ public class SymmetricEncryptionTest {
         Passphrase encryptionPassphrase = Passphrase.fromPassword("greenBeans");
 
         ByteArrayOutputStream ciphertextOut = new ByteArrayOutputStream();
-        EncryptionStream encryptor = PGPainless.encryptAndOrSign().onOutputStream(ciphertextOut)
-                .forPassphrases(encryptionPassphrase)
-                .and()
-                .toRecipients(encryptionKey)
-                .usingSecureAlgorithms()
-                .doNotSign()
-                .noArmor();
+        EncryptionStream encryptor = PGPainless.encryptAndOrSign()
+                .onOutputStream(ciphertextOut)
+                .withOptions(ProducerOptions.encrypt(
+                        EncryptionOptions.encryptCommunications()
+                                .addPassphrase(encryptionPassphrase)
+                                .addRecipient(encryptionKey)
+                ));
 
         Streams.pipeAll(plaintextIn, encryptor);
         encryptor.close();
@@ -70,9 +66,8 @@ public class SymmetricEncryptionTest {
         // Test symmetric decryption
         DecryptionStream decryptor = PGPainless.decryptAndOrVerify()
                 .onInputStream(new ByteArrayInputStream(ciphertext))
-                .decryptWith(encryptionPassphrase)
-                .doNotVerify()
-                .build();
+                .withOptions(new ConsumerOptions()
+                        .addDecryptionPassphrase(encryptionPassphrase));
 
         ByteArrayOutputStream decrypted = new ByteArrayOutputStream();
 
@@ -88,9 +83,8 @@ public class SymmetricEncryptionTest {
                 new SolitaryPassphraseProvider(Passphrase.fromPassword(TestKeys.CRYPTIE_PASSWORD)));
         decryptor = PGPainless.decryptAndOrVerify()
                 .onInputStream(new ByteArrayInputStream(ciphertext))
-                .decryptWith(protector, decryptionKeys)
-                .doNotVerify()
-                .build();
+                .withOptions(new ConsumerOptions()
+                        .addDecryptionKeys(decryptionKeys, protector));
 
         decrypted = new ByteArrayOutputStream();
 
@@ -98,5 +92,29 @@ public class SymmetricEncryptionTest {
         decryptor.close();
 
         assertArrayEquals(plaintext, decrypted.toByteArray());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
+    public void testMismatchPassphraseFails(ImplementationFactory implementationFactory) throws IOException, PGPException {
+        ImplementationFactory.setFactoryImplementation(implementationFactory);
+
+        byte[] bytes = new byte[5000];
+        new Random().nextBytes(bytes);
+
+        ByteArrayOutputStream ciphertextOut = new ByteArrayOutputStream();
+        EncryptionStream encryptor = PGPainless.encryptAndOrSign().onOutputStream(ciphertextOut)
+                .withOptions(ProducerOptions.encrypt(
+                        EncryptionOptions.encryptCommunications()
+                                .addPassphrase(Passphrase.fromPassword("mellon"))));
+
+        Streams.pipeAll(new ByteArrayInputStream(bytes), encryptor);
+        encryptor.close();
+
+        assertThrows(MissingDecryptionMethodException.class, () -> PGPainless.decryptAndOrVerify()
+                .onInputStream(new ByteArrayInputStream(ciphertextOut.toByteArray()))
+                .withOptions(new ConsumerOptions()
+                        .setMissingKeyPassphraseStrategy(MissingKeyPassphraseStrategy.THROW_EXCEPTION)
+                        .addDecryptionPassphrase(Passphrase.fromPassword("meldir"))));
     }
 }

@@ -1,27 +1,16 @@
-/*
- * Copyright 2018-2020 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2018 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key;
 
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import javax.annotation.Nonnull;
 
+import org.bouncycastle.openpgp.PGPKeyRing;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKey;
@@ -29,14 +18,11 @@ import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.util.encoders.Hex;
 
 /**
- * This class represents an hex encoded, uppercase OpenPGP v4 fingerprint.
+ * This class represents a hex encoded, uppercase OpenPGP v4 fingerprint.
  */
-public class OpenPgpV4Fingerprint implements CharSequence, Comparable<OpenPgpV4Fingerprint> {
+public class OpenPgpV4Fingerprint extends OpenPgpFingerprint {
 
     public static final String SCHEME = "openpgp4fpr";
-
-    private static final Charset utf8 = Charset.forName("UTF-8");
-    private final String fingerprint;
 
     /**
      * Create an {@link OpenPgpV4Fingerprint}.
@@ -45,53 +31,20 @@ public class OpenPgpV4Fingerprint implements CharSequence, Comparable<OpenPgpV4F
      * @param fingerprint hexadecimal representation of the fingerprint.
      */
     public OpenPgpV4Fingerprint(@Nonnull String fingerprint) {
-        String fp = fingerprint.trim().toUpperCase();
-        if (!isValid(fp)) {
-            throw new IllegalArgumentException("Fingerprint " + fingerprint +
-                    " does not appear to be a valid OpenPGP v4 fingerprint.");
-        }
-        this.fingerprint = fp;
+        super(fingerprint);
     }
 
-    public OpenPgpV4Fingerprint(@Nonnull byte[] bytes) {
-        this(new String(bytes, utf8));
+    @Override
+    public int getVersion() {
+        return 4;
     }
 
-    public OpenPgpV4Fingerprint(@Nonnull PGPPublicKey key) {
-        this(Hex.encode(key.getFingerprint()));
-        if (key.getVersion() != 4) {
-            throw new IllegalArgumentException("Key is not a v4 OpenPgp key.");
-        }
-    }
-
-    public OpenPgpV4Fingerprint(@Nonnull PGPSecretKey key) {
-        this(key.getPublicKey());
-    }
-
-    public OpenPgpV4Fingerprint(@Nonnull PGPPublicKeyRing ring) {
-        this(ring.getPublicKey());
-    }
-
-    public OpenPgpV4Fingerprint(@Nonnull PGPSecretKeyRing ring) {
-        this(ring.getPublicKey());
-    }
-
-    /**
-     * Check, whether the fingerprint consists of 40 valid hexadecimal characters.
-     * @param fp fingerprint to check.
-     * @return true if fingerprint is valid.
-     */
-    private static boolean isValid(@Nonnull String fp) {
+    @Override
+    protected boolean isValid(@Nonnull String fp) {
         return fp.matches("[0-9A-F]{40}");
     }
 
-    /**
-     * Return the key id of the OpenPGP public key this {@link OpenPgpV4Fingerprint} belongs to.
-     *
-     * @see <a href="https://tools.ietf.org/html/rfc4880#section-12.2">
-     *     RFC-4880 §12.2: Key IDs and Fingerprints</a>
-     * @return key id
-     */
+    @Override
     public long getKeyId() {
         byte[] bytes = Hex.decode(toString().getBytes(utf8));
         ByteBuffer buf = ByteBuffer.wrap(bytes);
@@ -101,6 +54,45 @@ public class OpenPgpV4Fingerprint implements CharSequence, Comparable<OpenPgpV4F
         ((Buffer) buf).position(12);
 
         return buf.getLong();
+    }
+
+    @Override
+    public String prettyPrint() {
+        String fp = toString();
+        StringBuilder pretty = new StringBuilder();
+        for (int i = 0; i < 5; i++) {
+            pretty.append(fp, i * 4, (i + 1) * 4).append(' ');
+        }
+        pretty.append(' ');
+        for (int i = 5; i < 9; i++) {
+            pretty.append(fp, i * 4, (i + 1) * 4).append(' ');
+        }
+        pretty.append(fp, 36, 40);
+        return pretty.toString();
+    }
+
+    public OpenPgpV4Fingerprint(@Nonnull byte[] bytes) {
+        super(bytes);
+    }
+
+    public OpenPgpV4Fingerprint(@Nonnull PGPPublicKey key) {
+        super(key);
+    }
+
+    public OpenPgpV4Fingerprint(@Nonnull PGPSecretKey key) {
+        this(key.getPublicKey());
+    }
+
+    public OpenPgpV4Fingerprint(@Nonnull PGPPublicKeyRing ring) {
+        super(ring);
+    }
+
+    public OpenPgpV4Fingerprint(@Nonnull PGPSecretKeyRing ring) {
+        super(ring);
+    }
+
+    public OpenPgpV4Fingerprint(@Nonnull PGPKeyRing ring) {
+        super(ring);
     }
 
     @Override
@@ -118,28 +110,7 @@ public class OpenPgpV4Fingerprint implements CharSequence, Comparable<OpenPgpV4F
 
     @Override
     public int hashCode() {
-        return fingerprint.hashCode();
-    }
-
-    @Override
-    public int length() {
-        return fingerprint.length();
-    }
-
-    @Override
-    public char charAt(int i) {
-        return fingerprint.charAt(i);
-    }
-
-    @Override
-    public CharSequence subSequence(int i, int i1) {
-        return fingerprint.subSequence(i, i1);
-    }
-
-    @Override
-    @Nonnull
-    public String toString() {
-        return fingerprint;
+        return toString().hashCode();
     }
 
     /**
@@ -151,14 +122,14 @@ public class OpenPgpV4Fingerprint implements CharSequence, Comparable<OpenPgpV4F
      */
     public URI toUri() {
         try {
-            return new URI(SCHEME, toString(), null);
+            return new URI(OpenPgpV4Fingerprint.SCHEME, toString(), null);
         } catch (URISyntaxException e) {
             throw new AssertionError(e);
         }
     }
 
     /**
-     * Convert a openpgp4fpr URI to an {@link OpenPgpV4Fingerprint}.
+     * Convert an openpgp4fpr URI to an {@link OpenPgpV4Fingerprint}.
      *
      * @param uri {@link URI} with scheme 'openpgp4fpr'
      * @return fingerprint parsed from the uri
@@ -172,7 +143,7 @@ public class OpenPgpV4Fingerprint implements CharSequence, Comparable<OpenPgpV4F
     }
 
     @Override
-    public int compareTo(@Nonnull OpenPgpV4Fingerprint openPgpV4Fingerprint) {
-        return fingerprint.compareTo(openPgpV4Fingerprint.fingerprint);
+    public int compareTo(@Nonnull OpenPgpFingerprint openPgpFingerprint) {
+        return toString().compareTo(openPgpFingerprint.toString());
     }
 }

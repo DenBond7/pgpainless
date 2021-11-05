@@ -1,18 +1,7 @@
-/*
- * Copyright 2020 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2020 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.modification;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -37,11 +26,15 @@ import org.bouncycastle.util.io.Streams;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.pgpainless.PGPainless;
+import org.pgpainless.algorithm.DocumentSignatureType;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.encryption_signing.EncryptionStream;
+import org.pgpainless.encryption_signing.ProducerOptions;
+import org.pgpainless.encryption_signing.SigningOptions;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.protection.KeyRingProtectionSettings;
 import org.pgpainless.key.protection.PasswordBasedSecretKeyRingProtector;
+import org.pgpainless.key.protection.UnlockSecretKey;
 import org.pgpainless.util.Passphrase;
 
 public class ChangeSecretKeyRingPassphraseTest {
@@ -52,8 +45,8 @@ public class ChangeSecretKeyRingPassphraseTest {
     }
 
     @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestUtil#provideImplementationFactories")
-    public void changePassphraseOfWholeKeyRingTest(ImplementationFactory implementationFactory) throws InvalidAlgorithmParameterException, NoSuchAlgorithmException, PGPException, IOException {
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
+    public void changePassphraseOfWholeKeyRingTest(ImplementationFactory implementationFactory) throws PGPException {
         ImplementationFactory.setFactoryImplementation(implementationFactory);
 
         PGPSecretKeyRing secretKeys = PGPainless.modifyKeyRing(keyRing)
@@ -80,7 +73,7 @@ public class ChangeSecretKeyRingPassphraseTest {
     }
 
     @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestUtil#provideImplementationFactories")
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
     public void changePassphraseOfWholeKeyRingToEmptyPassphrase(ImplementationFactory implementationFactory) throws PGPException, IOException {
         ImplementationFactory.setFactoryImplementation(implementationFactory);
         PGPSecretKeyRing secretKeys = PGPainless.modifyKeyRing(keyRing)
@@ -98,7 +91,7 @@ public class ChangeSecretKeyRingPassphraseTest {
     }
 
     @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestUtil#provideImplementationFactories")
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
     public void changePassphraseOfSingleSubkeyToNewPassphrase(ImplementationFactory implementationFactory) throws PGPException {
         ImplementationFactory.setFactoryImplementation(implementationFactory);
 
@@ -135,7 +128,7 @@ public class ChangeSecretKeyRingPassphraseTest {
     }
 
     @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestUtil#provideImplementationFactories")
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
     public void changePassphraseOfSingleSubkeyToEmptyPassphrase(ImplementationFactory implementationFactory) throws PGPException {
         ImplementationFactory.setFactoryImplementation(implementationFactory);
 
@@ -184,17 +177,16 @@ public class ChangeSecretKeyRingPassphraseTest {
         PBESecretKeyDecryptor decryptor = passphrase.isEmpty() ? null : new BcPBESecretKeyDecryptorBuilder(digestCalculatorProvider)
                 .build(passphrase.getChars());
 
-        secretKey.extractPrivateKey(decryptor);
+        UnlockSecretKey.unlockSecretKey(secretKey, decryptor);
     }
 
     private void signDummyMessageWithKeysAndPassphrase(PGPSecretKeyRing keyRing, Passphrase passphrase) throws IOException, PGPException {
         String dummyMessage = "dummy";
         ByteArrayOutputStream dummy = new ByteArrayOutputStream();
         EncryptionStream stream = PGPainless.encryptAndOrSign().onOutputStream(dummy)
-                .doNotEncrypt()
-                .signWith(PasswordBasedSecretKeyRingProtector.forKey(keyRing, passphrase), keyRing)
-                .signBinaryDocument()
-                .noArmor();
+                .withOptions(ProducerOptions.sign(SigningOptions.get()
+                        .addInlineSignature(PasswordBasedSecretKeyRingProtector.forKey(keyRing, passphrase),
+                                keyRing, DocumentSignatureType.BINARY_DOCUMENT)));
 
         Streams.pipeAll(new ByteArrayInputStream(dummyMessage.getBytes()), stream);
         stream.close();

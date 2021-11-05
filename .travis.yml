@@ -1,11 +1,15 @@
-language: android
-dist: trusty
-android:
-  components:
-    - android-10
+# SPDX-FileCopyrightText: 2021 Paul Schaub <info@pgpainless.org>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+language: java
+dist: bionic
 jdk:
   - openjdk8
   - openjdk11
+
+services:
+  - docker
 
 before_cache:
   - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
@@ -13,14 +17,17 @@ before_cache:
 cache:
   directories:
     - $HOME/.gradle/caches/
-    - $HOME/.android/build-cache
     - $HOME/.m2
 
 before_install:
   - export GRADLE_VERSION=6.2
   - wget https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-all.zip
   - unzip -q gradle-${GRADLE_VERSION}-all.zip
-  - export PATH="$(pwd)/gradle-${GRADLE_VERSION}/bin:$PATH"
+  - rm gradle-${GRADLE_VERSION}-all.zip
+  - sudo mv gradle-${GRADLE_VERSION} /usr/local/bin/
+  - export PATH="/usr/local/bin/gradle-${GRADLE_VERSION}/bin:$PATH"
+  - docker pull fsfe/reuse:latest
+  - docker run -v ${TRAVIS_BUILD_DIR}:/data fsfe/reuse:latest lint
 
 install: gradle assemble --stacktrace
 

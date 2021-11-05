@@ -1,18 +1,7 @@
-/*
- * Copyright 2018 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2018 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.util;
 
 import javax.annotation.Nonnull;
@@ -32,7 +21,48 @@ public class Passphrase {
      * @param chars may be null for empty passwords.
      */
     public Passphrase(@Nullable char[] chars) {
-        this.chars = chars;
+        if (chars == null) {
+            this.chars = null;
+        } else {
+            char[] trimmed = removeTrailingAndLeadingWhitespace(chars);
+            if (trimmed.length == 0) {
+                this.chars = null;
+            } else {
+                this.chars = trimmed;
+            }
+        }
+    }
+
+    /**
+     * Return a copy of the passed in char array, with leading and trailing whitespace characters removed.
+     *
+     * @param chars char array
+     * @return copy of char array with leading and trailing whitespace characters removed
+     */
+    private static char[] removeTrailingAndLeadingWhitespace(char[] chars) {
+        int i = 0;
+        while (i < chars.length && isWhitespace(chars[i])) {
+            i++;
+        }
+        int j = chars.length - 1;
+        while (j >= i && isWhitespace(chars[j])) {
+            j--;
+        }
+
+        char[] trimmed = new char[chars.length - i - (chars.length - 1 - j)];
+        System.arraycopy(chars, i, trimmed, 0, trimmed.length);
+
+        return trimmed;
+    }
+
+    /**
+     * Return true, if the passed in char is a whitespace symbol (space, newline, tab).
+     *
+     * @param xar char
+     * @return true if whitespace
+     */
+    private static boolean isWhitespace(char xar) {
+        return xar == ' ' || xar == '\n' || xar == '\t';
     }
 
     /**

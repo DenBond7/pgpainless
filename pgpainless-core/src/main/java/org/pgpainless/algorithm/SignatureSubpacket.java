@@ -1,18 +1,7 @@
-/*
- * Copyright 2021 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2021 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.algorithm;
 
 import static org.bouncycastle.bcpg.SignatureSubpacketTags.ATTESTED_CERTIFICATIONS;
@@ -49,6 +38,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Enumeration of possible subpackets that might be found in the hashed and unhashed area of an OpenPGP signature.
+ *
+ * @see <a href="https://tools.ietf.org/html/rfc4880#section-5.2.3.1">RFC4880: Signature Subpacket Specification</a>
+ */
 public enum SignatureSubpacket {
 
     /**
@@ -408,10 +402,20 @@ public enum SignatureSubpacket {
         this.code = code;
     }
 
+    /**
+     * Return the numerical identifier of the {@link SignatureSubpacket}.
+     * @return id
+     */
     public int getCode() {
         return code;
     }
 
+    /**
+     * Return the {@link SignatureSubpacket} that corresponds to the provided id.
+     *
+     * @param code id
+     * @return signature subpacket
+     */
     public static SignatureSubpacket fromCode(int code) {
         SignatureSubpacket tag = MAP.get(code);
         if (tag == null) {
@@ -420,6 +424,12 @@ public enum SignatureSubpacket {
         return tag;
     }
 
+    /**
+     * Convert an array of signature subpacket tags into a list of {@link SignatureSubpacket SignatureSubpackets}.
+     *
+     * @param codes array of codes
+     * @return list of subpackets
+     */
     public static List<SignatureSubpacket> fromCodes(int[] codes) {
         List<SignatureSubpacket> tags = new ArrayList<>();
         for (int code : codes) {

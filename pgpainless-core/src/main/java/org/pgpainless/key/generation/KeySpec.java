@@ -1,18 +1,7 @@
-/*
- * Copyright 2018 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2018 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.generation;
 
 import javax.annotation.Nonnull;
@@ -20,6 +9,7 @@ import javax.annotation.Nullable;
 
 import org.bouncycastle.openpgp.PGPSignatureSubpacketGenerator;
 import org.bouncycastle.openpgp.PGPSignatureSubpacketVector;
+import org.pgpainless.algorithm.KeyFlag;
 import org.pgpainless.key.generation.type.KeyType;
 
 public class KeySpec {
@@ -42,7 +32,7 @@ public class KeySpec {
     }
 
     @Nullable
-    PGPSignatureSubpacketVector getSubpackets() {
+    public PGPSignatureSubpacketVector getSubpackets() {
         return subpacketGenerator != null ? subpacketGenerator.generate() : null;
     }
 
@@ -54,7 +44,7 @@ public class KeySpec {
         return inheritedSubPackets;
     }
 
-    public static KeySpecBuilder getBuilder(KeyType type) {
-        return new KeySpecBuilder(type);
+    public static KeySpecBuilder getBuilder(KeyType type, KeyFlag flag, KeyFlag... flags) {
+        return new KeySpecBuilder(type, flag, flags);
     }
 }

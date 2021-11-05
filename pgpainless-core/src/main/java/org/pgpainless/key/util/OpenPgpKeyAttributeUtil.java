@@ -1,36 +1,30 @@
-/*
- * Copyright 2020 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2020 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.util;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSignature;
 import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.SignatureType;
 
-public class OpenPgpKeyAttributeUtil {
+public final class OpenPgpKeyAttributeUtil {
+
+    private OpenPgpKeyAttributeUtil() {
+
+    }
 
     public static List<HashAlgorithm> getPreferredHashAlgorithms(PGPPublicKey publicKey) {
         List<HashAlgorithm> hashAlgorithms = new ArrayList<>();
-        // TODO: I'd assume that we have to use publicKey.getKeySignatures() here, but that is empty...
         Iterator<?> keySignatures = publicKey.getSignatures();
         while (keySignatures.hasNext()) {
             PGPSignature signature = (PGPSignature) keySignatures.next();
@@ -51,8 +45,6 @@ public class OpenPgpKeyAttributeUtil {
                     hashAlgorithms.add(HashAlgorithm.fromId(h));
                 }
                 // Exit the loop after the first key signature with hash algorithms.
-                // TODO: Find out, if it is possible that there are multiple key signatures which specify preferred
-                //  algorithms and how to deal with that.
                 break;
             }
         }
@@ -93,5 +85,22 @@ public class OpenPgpKeyAttributeUtil {
             return Collections.emptyList();
         }
         return Collections.singletonList(hashAlgorithm);
+    }
+
+    /**
+     * Try to extract hash algorithm preferences from self signatures.
+     * If no self-signature containing hash algorithm preferences is found,
+     * try to derive a hash algorithm preference by inspecting the hash algorithm used by existing
+     * self-signatures.
+     *
+     * @param publicKey key
+     * @return hash algorithm preferences (might be empty!)
+     */
+    public static Set<HashAlgorithm> getOrGuessPreferredHashAlgorithms(PGPPublicKey publicKey) {
+        List<HashAlgorithm> preferredHashAlgorithms = OpenPgpKeyAttributeUtil.getPreferredHashAlgorithms(publicKey);
+        if (preferredHashAlgorithms.isEmpty()) {
+            preferredHashAlgorithms = OpenPgpKeyAttributeUtil.guessPreferredHashAlgorithms(publicKey);
+        }
+        return new LinkedHashSet<>(preferredHashAlgorithms);
     }
 }

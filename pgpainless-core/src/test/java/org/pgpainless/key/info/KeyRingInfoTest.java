@@ -1,45 +1,66 @@
-/*
- * Copyright 2020 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2020 Paul Schaub <vanitasvitae@fsfe.org>, 2021 Flowcrypt a.s.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.info;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Set;
 
 import org.bouncycastle.openpgp.PGPException;
+import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
+import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.junit.JUtils;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.pgpainless.PGPainless;
+import org.pgpainless.algorithm.CompressionAlgorithm;
+import org.pgpainless.algorithm.EncryptionPurpose;
+import org.pgpainless.algorithm.HashAlgorithm;
+import org.pgpainless.algorithm.KeyFlag;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
+import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
+import org.pgpainless.implementation.ImplementationFactory;
+import org.pgpainless.key.OpenPgpV4Fingerprint;
 import org.pgpainless.key.TestKeys;
+import org.pgpainless.key.generation.KeySpec;
+import org.pgpainless.key.generation.type.KeyType;
+import org.pgpainless.key.generation.type.ecc.EllipticCurve;
+import org.pgpainless.key.generation.type.eddsa.EdDSACurve;
+import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnprotectedKeysProtector;
 import org.pgpainless.key.util.KeyRingUtils;
+import org.pgpainless.key.util.UserId;
+import org.pgpainless.util.DateUtil;
 import org.pgpainless.util.Passphrase;
 
 public class KeyRingInfoTest {
 
-    @Test
-    public void testWithEmilsKeys() throws IOException, PGPException {
+    @ParameterizedTest
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
+    public void testWithEmilsKeys(ImplementationFactory implementationFactory) throws IOException, PGPException {
+        ImplementationFactory.setFactoryImplementation(implementationFactory);
+
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
         PGPPublicKeyRing publicKeys = TestKeys.getEmilPublicKeyRing();
         KeyRingInfo sInfo = PGPainless.inspectKeyRing(secretKeys);
@@ -52,13 +73,23 @@ public class KeyRingInfoTest {
         assertEquals(PublicKeyAlgorithm.ECDSA, sInfo.getAlgorithm());
         assertEquals(PublicKeyAlgorithm.ECDSA, pInfo.getAlgorithm());
 
+        assertEquals(Arrays.asList(KeyFlag.CERTIFY_OTHER, KeyFlag.SIGN_DATA, KeyFlag.AUTHENTICATION), pInfo.getKeyFlagsOf(TestKeys.EMIL_UID));
+        assertEquals(Arrays.asList(KeyFlag.CERTIFY_OTHER, KeyFlag.SIGN_DATA, KeyFlag.AUTHENTICATION), sInfo.getKeyFlagsOf(TestKeys.EMIL_UID));
+        assertEquals(Collections.emptyList(), pInfo.getKeyFlagsOf("invalid@user.id"));
+        assertEquals(Collections.emptyList(), sInfo.getKeyFlagsOf("invalid@user.id"));
+
         assertEquals(2, sInfo.getPublicKeys().size());
         assertEquals(2, pInfo.getPublicKeys().size());
+
+        assertEquals(2, sInfo.getSecretKeys().size());
+        assertEquals(0, pInfo.getSecretKeys().size());
 
         assertEquals(Collections.singletonList("<emil@email.user>"), sInfo.getUserIds());
         assertEquals(Collections.singletonList("<emil@email.user>"), pInfo.getUserIds());
         assertEquals(Collections.singletonList("emil@email.user"), sInfo.getEmailAddresses());
         assertEquals(Collections.singletonList("emil@email.user"), pInfo.getEmailAddresses());
+        assertEquals(4, sInfo.getVersion());
+        assertEquals(4, pInfo.getVersion());
 
         assertTrue(sInfo.isSecretKey());
         assertFalse(pInfo.isSecretKey());
@@ -67,19 +98,22 @@ public class KeyRingInfoTest {
 
         assertEquals(TestKeys.EMIL_CREATION_DATE, sInfo.getCreationDate());
         assertEquals(TestKeys.EMIL_CREATION_DATE, pInfo.getCreationDate());
-        assertNull(sInfo.getExpirationDate());
-        assertNull(pInfo.getExpirationDate());
+        assertNull(sInfo.getPrimaryKeyExpirationDate());
+        assertNull(pInfo.getPrimaryKeyExpirationDate());
         assertEquals(TestKeys.EMIL_CREATION_DATE.getTime(), sInfo.getLastModified().getTime(), 50);
         assertEquals(TestKeys.EMIL_CREATION_DATE.getTime(), pInfo.getLastModified().getTime(), 50);
 
         assertNull(sInfo.getRevocationDate());
         assertNull(pInfo.getRevocationDate());
-        Date revocationDate = new Date();
+        Date revocationDate = DateUtil.now();
         PGPSecretKeyRing revoked = PGPainless.modifyKeyRing(secretKeys).revoke(new UnprotectedKeysProtector()).done();
         KeyRingInfo rInfo = PGPainless.inspectKeyRing(revoked);
         assertNotNull(rInfo.getRevocationDate());
-        assertEquals(revocationDate.getTime(), rInfo.getRevocationDate().getTime(), 1000);
-        assertEquals(revocationDate.getTime(), rInfo.getLastModified().getTime(), 1000);
+        assertEquals(revocationDate.getTime(), rInfo.getRevocationDate().getTime(), 5);
+        assertEquals(revocationDate.getTime(), rInfo.getLastModified().getTime(), 5);
+
+        assertFalse(pInfo.isKeyValidlyBound(1230));
+        assertFalse(sInfo.isKeyValidlyBound(1230));
     }
 
     @Test
@@ -89,15 +123,33 @@ public class KeyRingInfoTest {
 
         assertTrue(info.isFullyDecrypted());
 
-        secretKeys = PGPainless.modifyKeyRing(secretKeys)
-                .changePassphraseFromOldPassphrase(null)
-                .withSecureDefaultSettings()
-                .toNewPassphrase(Passphrase.fromPassword("sw0rdf1sh"))
-                .done();
+        secretKeys = encryptSecretKeys(secretKeys);
         info = PGPainless.inspectKeyRing(secretKeys);
 
         assertFalse(info.isFullyDecrypted());
     }
+
+    @Test
+    public void testIsFullyEncrypted() throws IOException, PGPException {
+        PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
+        KeyRingInfo info = PGPainless.inspectKeyRing(secretKeys);
+
+        assertFalse(info.isFullyEncrypted());
+
+        secretKeys = encryptSecretKeys(secretKeys);
+        info = PGPainless.inspectKeyRing(secretKeys);
+
+        assertTrue(info.isFullyEncrypted());
+    }
+
+    private static PGPSecretKeyRing encryptSecretKeys(PGPSecretKeyRing secretKeys) throws PGPException {
+        return PGPainless.modifyKeyRing(secretKeys)
+                .changePassphraseFromOldPassphrase(null)
+                .withSecureDefaultSettings()
+                .toNewPassphrase(Passphrase.fromPassword("sw0rdf1sh"))
+                .done();
+    }
+
 
     @Test
     public void testGetSecretKey() throws IOException, PGPException {
@@ -120,5 +172,546 @@ public class KeyRingInfoTest {
 
         assertEquals(KeyRingUtils.requirePrimarySecretKeyFrom(secretKeys),
                 KeyRingUtils.requireSecretKeyFrom(secretKeys, secretKeys.getPublicKey().getKeyID()));
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
+    public void dummyS2KTest(ImplementationFactory implementationFactory) throws PGPException, IOException {
+        ImplementationFactory.setFactoryImplementation(implementationFactory);
+
+        String withDummyS2K = "-----BEGIN PGP PRIVATE KEY BLOCK-----\n" +
+                "\n" +
+                "lQCVBFZuSwwBBAC04VdUUq2REb7+IF/x21yOV3kIn798XRl7A7RiGcE9VpBjT5xM\n" +
+                "xtghWhH1mxyT+nrS36OJxdvtgJb3NB6hhh3qBQC6DmCGbWe61tT6TfyFbN6OvzZK\n" +
+                "MEa6RMunyd+2ErX4RLOcO+9X7a0weVASH5wRYjjqQtvPvt1/k25sloPnZQARAQAB\n" +
+                "/gNlAkdOVQG0EyA8dGVzdEBleGFtcGxlLmNvbT6IuAQTAQIAIgUCVm5LDAIbLwYL\n" +
+                "CQgHAwIGFQgCCQoLBBYCAwECHgECF4AACgkQwaXYFkPfLEVROQP/RF4GXi/yGm6y\n" +
+                "QoDNXFkFiwNhJndayfZxf5Qa+JWz1ltLyal7Dm1c+U6/R/7D25gmEslI+5YrHpbE\n" +
+                "xWXyfG8DbX/5Ef9Be04e9IvjoZboeRpxmyb8IflEw90tJGL8YAK2xWohvayigPnj\n" +
+                "jhycZQPMuMK9X35o89oJs+p1MxcC9EOwAgAAnQH9BFZuSwwBBADBDfq8oUK8Jr8I\n" +
+                "VkQEEEZzQ7AWh03oTVodROebMz4vAk34HkrebZuxT4U/8yFIP+kJ3Yie3T8V6F8j\n" +
+                "F3a3ZUHNj2ghgxMbPH+kRKwBphvX8Fb5GtoFVbJq1tNMDaLhVRIkDLBTqQp/20sp\n" +
+                "cuU5+OMzQRUt+Z6GxMaUwt5zLHPUgwARAQAB/gMDAvozhXZdexxPYMKrp7yC2FNN\n" +
+                "pVAC61hD0VQKvFeeeXZIGOBx57F1wVBNjuPyglji0kaX0m9yYI+I1V546END4aV/\n" +
+                "hXlZve3r6qYVE9W+T1imwx1NXPSb0j/nMmdiFYFXuyz70yEO+cDwHONzmRLdBZlP\n" +
+                "1DKYBcjF7rwF0gWuIoWgDYdfECo/aANSRQtKw5Q6UowQLzpHTV+X6iL/CbjIL5f8\n" +
+                "1KXPMO1AubxzAW+iatzI7jfL0MvA1FxRpMjpHc1uyT8oIfic17PklbjcnLe5GH78\n" +
+                "2AEGhXwn4bY1H+ss0bxmkJV9HkcMokJUVMQxKw+a6+/IuLXdFtcA5z4CDeIbt9rv\n" +
+                "+b8s0bfq9aW4kDxG3PDcyoMTrTuJLBd6/XwJgdtrmLSCtlU4fLzZEoAd2FVyWbS6\n" +
+                "Nys3eXgIBkRRokzKANknne78LpvIiamzinb0iJk2X+AYnRKoy1pUsC+unqaXm9YH\n" +
+                "fdpxv/OXLe13zhSJAT0EGAECAAkFAlZuSwwCGy4AqAkQwaXYFkPfLEWdIAQZAQIA\n" +
+                "BgUCVm5LDAAKCRBv1XiTGF5T/qsmA/9LOUNetM1QtsJ71OVdXE3dutUZULE/27DT\n" +
+                "rA/vvSfhzSFj3U3FnyI7AVsiiiwmnJnthf0zaa2HYBL844Bm7drtzGBNVvddgIJZ\n" +
+                "KBE0x2vUlTVc661e2FBhtLh6xX2nhEy9owc+C7PR9OXvGiET8tTRnUDUO3PgPkyA\n" +
+                "LkHfQMWMR11sA/0YQl4wf3knjk83DVVhFK5fT2lW4hmSO74tuCAA4V71C8B5rJzV\n" +
+                "q2vy1L2bGHAroe+LtX30LtZM5qWKzZzK7jjo1/eaXimOkJcnnpg6jmUP7TMkWpU7\n" +
+                "hlOQ3ZHjS2K5xJYJqBwP86TWPtDLxYD3mTlYtp2dDT8ogV/sEPPd44yWlrACAAA=\n" +
+                "=gU+0\n" +
+                "-----END PGP PRIVATE KEY BLOCK-----\n";
+
+        PGPSecretKeyRing secretKeys = PGPainless.readKeyRing().secretKeyRing(withDummyS2K);
+        assertTrue(new KeyInfo(secretKeys.getSecretKey()).hasDummyS2K());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
+    public void testGetKeysWithFlagsAndExpiry(ImplementationFactory implementationFactory) throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
+        ImplementationFactory.setFactoryImplementation(implementationFactory);
+
+        PGPSecretKeyRing secretKeys = PGPainless.buildKeyRing()
+                .setPrimaryKey(KeySpec.getBuilder(
+                KeyType.EDDSA(EdDSACurve._Ed25519), KeyFlag.CERTIFY_OTHER))
+                .addSubkey(KeySpec.getBuilder(
+                        KeyType.ECDH(EllipticCurve._BRAINPOOLP384R1),
+                        KeyFlag.ENCRYPT_STORAGE))
+                .addSubkey(KeySpec.getBuilder(
+                        KeyType.ECDSA(EllipticCurve._BRAINPOOLP384R1), KeyFlag.SIGN_DATA))
+                .addUserId(UserId.newBuilder().withName("Alice").withEmail("alice@pgpainless.org").build())
+                .build();
+
+        Iterator<PGPSecretKey> keys = secretKeys.iterator();
+        Date now = DateUtil.now();
+
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(now);
+        calendar.add(Calendar.DATE, 5);
+        Date primaryKeyExpiration = calendar.getTime(); // in 5 days
+        PGPSecretKey primaryKey = keys.next();
+
+        calendar.setTime(now);
+        calendar.add(Calendar.DATE, 10);
+        Date encryptionKeyExpiration = calendar.getTime(); // in 10 days
+        PGPSecretKey encryptionKey = keys.next();
+
+        calendar.setTime(now);
+        calendar.add(Calendar.DATE, 3);
+        Date signingKeyExpiration = calendar.getTime(); // in 3 days
+        PGPSecretKey signingKey = keys.next();
+
+        SecretKeyRingProtector protector = SecretKeyRingProtector.unprotectedKeys();
+        secretKeys = PGPainless.modifyKeyRing(secretKeys)
+                .setExpirationDate(new OpenPgpV4Fingerprint(primaryKey), primaryKeyExpiration, protector)
+                .setExpirationDate(new OpenPgpV4Fingerprint(encryptionKey), encryptionKeyExpiration, protector)
+                .setExpirationDate(new OpenPgpV4Fingerprint(signingKey), signingKeyExpiration, protector)
+                .done();
+
+        KeyRingInfo info = new KeyRingInfo(secretKeys);
+
+        List<PGPPublicKey> encryptionKeys = info.getKeysWithKeyFlag(KeyFlag.ENCRYPT_STORAGE);
+        assertEquals(1, encryptionKeys.size());
+        assertEquals(encryptionKey.getKeyID(), encryptionKeys.get(0).getKeyID());
+
+        List<PGPPublicKey> signingKeys = info.getKeysWithKeyFlag(KeyFlag.SIGN_DATA);
+        assertEquals(1, signingKeys.size());
+        assertEquals(signingKey.getKeyID(), signingKeys.get(0).getKeyID());
+
+        List<PGPPublicKey> certKeys = info.getKeysWithKeyFlag(KeyFlag.CERTIFY_OTHER);
+        assertEquals(1, certKeys.size());
+        assertEquals(primaryKey.getKeyID(), certKeys.get(0).getKeyID());
+
+        assertEquals(primaryKeyExpiration.getTime(), info.getPrimaryKeyExpirationDate().getTime(), 5);
+        assertEquals(signingKeyExpiration.getTime(), info.getExpirationDateForUse(KeyFlag.SIGN_DATA).getTime(), 5);
+
+        // Encryption key expires after primary key, so we return primary key expiration instead.
+        assertEquals(primaryKeyExpiration.getTime(), info.getExpirationDateForUse(KeyFlag.ENCRYPT_STORAGE).getTime(), 5);
+
+    }
+
+    @Test
+    public void subkeyIsHardRevokedTest() throws IOException {
+        String KEY = "-----BEGIN PGP ARMORED FILE-----\n" +
+                "Comment: ASCII Armor added by openpgp-interoperability-test-suite\n" +
+                "\n" +
+                "xsBNBFpJegABCAC1ePFquP0135m8DYhcybhv7l+ecojitFOd/jRM7hCczIqKgalD\n" +
+                "1Ro1gNr3VmH6FjRIKIvGT+sOzCKne1v3KyAAPoxtwxjkATTKdOGo15I6v5ZjmO1d\n" +
+                "rLQOLSt1TF7XbQSt+ns6PUZWJL907DvECUU5b9FkNUqfQ14QqY+gi7MOyAQez3b7\n" +
+                "Pg5Cyz/kVWQ6TSMW/myDEDEertQ4rDBsptEDFHCC2+iF4hO2LqfiCriu5qyLcKCQ\n" +
+                "pd6dEuwJQ/jjT0D9A9Fwf+i04x6ZPKSU9oNAWqn8OSAq3/0B/hu9V+0U0iHPnJxe\n" +
+                "quykvJk7maxhiGhxBWYXTvDJmoon0NOles7LABEBAAHCwHwEHwEKAA8Fgl4L4QAC\n" +
+                "FQoCmwMCHgEAIQkQaE+tYtwDj7sWIQTy0VCk/piSXVHpFTloT61i3AOPu8ffB/9Q\n" +
+                "60dg60qhA2rPnd/1dCL2B+c8RWnq44PpijE3gA1RQvcRQE5jNzMSo/MnG0mSL5wH\n" +
+                "eTsjSd/DRI3nHP06rs6Qub11NoKhNuya3maz9gyzeZMc/jNib83/BzFCrxsSQm+9\n" +
+                "WHurxXeWXOPMLZs3xS/jG0EDtCJ2Fm4UF19fcIydwN/ssF4NGpfCY82+wTSx4joI\n" +
+                "3cRKObCFJaaBgG5nl+eFr7cfjEIuqCJCaQsXiqBe7d6V3KqN18t+CgSaybMZXcys\n" +
+                "Q/USxEkLhIB2pOZwcz4E3TTFgxRAxcr4cs4Bd2PRz3Z5FKTzo0ma/Ft0UfFJR+fC\n" +
+                "cs55+n6kC9K0y/E7BY2hwsB8BB8BCgAPBYJaSXoAAhUKApsDAh4BACEJEGhPrWLc\n" +
+                "A4+7FiEE8tFQpP6Ykl1R6RU5aE+tYtwDj7uqDQf7BqTD6GNTwXPOt/0kHQPYmbdI\n" +
+                "tX+pWP+o3jaB6VTHDXcn27bttA5M82EXZfae4+bC1dMB+1uLal4ciVgO9ImJC9Nw\n" +
+                "s5fc3JH4R5uuSvpjzjudkJsGu3cAKE3hwiT93Mi6t6ENpLCDSxqxzAmfoOQbVJYW\n" +
+                "Y7gP7Z4Cj0IAP29aprEc0JWoMjHKpKgYF6u0sWgHWBuEXk/6o6GYb2HZYK4ycpY2\n" +
+                "WXKgVhy7/iQDYO1FOfcWQXHVGLn8OzILjobKohNenTT20ZhAASi3LUDSDMTQfxSS\n" +
+                "Vt0nhzWuXJJ4R8PzUVeRJ0A0oMyjZVHivHC6GwMsiQuSUTx8e/GnOByOqfGne80S\n" +
+                "anVsaWV0QGV4YW1wbGUub3JnwsBzBBMBCgAGBYJaSXoAACEJEGhPrWLcA4+7FiEE\n" +
+                "8tFQpP6Ykl1R6RU5aE+tYtwDj7tDfQf+PnxsIFu/0juKBUjjtAYfRzkrrYtMepPj\n" +
+                "taTvGfo1SzUkX/6F/GjdSeVg5Iq6YcBrj8c+cB3EoZpHnScTgWQHwceWQLd9Hhbg\n" +
+                "TrUNvW1eg2CVzN0RBuYMtWu9JM4pH7ssJW1NmN+/N9B67qb2y+JfBwH/la508NzC\n" +
+                "rl3xWTxjT5wNy+FGkNZg23s/0qlO2uxCjc+mRAuAlp5EmTOVWOIBbM0xttjBOx39\n" +
+                "ZmWWQKJZ0nrFjK1jppHqazwWWNX7RHkK81tlbSUtOPoTIJDz38NaiyMcZH3p9okN\n" +
+                "3DU4XtF+oE18M+Z/E0xUQmumbkajFzcUjmd7enozP5BnGESzdNS5Xc7ATQRaSsuA\n" +
+                "AQgAykb8tqlWXtqHGGkBqAq3EnpmvBqrKvqejjtZKAXqEszJ9NlibCGUuLwnNOVO\n" +
+                "R/hcOUlOGH+cyMcApBWJB+7d/83K1eCCdv88nDFVav7hKLKlEBbZJNHgHpJ313pl\n" +
+                "etzCR4x3STEISrEtO71l2HBdrKSYXaxGgILxYwcSi3i2EjzxRDy+0zyy8s7d+OD5\n" +
+                "ShFYexgSrKH3Xx1cxQAJzGGJVx75HHU9GVh3xHwJ7nDm26KzHegG2XPIBXJ2z8vm\n" +
+                "sSVTWyj0AjT4kVVapN0f84AKKjyQ7fguCzXGHFV9jmxDx+YH+9HhjIrHSzbDx6+4\n" +
+                "wyRsxj7Su+hu/bogJ28nnbTzQwARAQABwsBzBCgBCgAGBYJcKq2AACEJEGhPrWLc\n" +
+                "A4+7FiEE8tFQpP6Ykl1R6RU5aE+tYtwDj7u9+wf/Wl2BqJzeAw06pbpT8AEn8Sw4\n" +
+                "Hmv5o5LiTOMgCLlX8vK9aIwFGJj/BZW0BAY70JUWUrk0nSjYD16vlVUwKJ8SifTu\n" +
+                "eElBYp2I/wkin3FSng3Ewv1iRN5XoQMallKf3EHCbf4LnO1UqzzuIlKWLShl7oIZ\n" +
+                "hIQIqzelLJ0Y/2eOTAgoh9Wd3+aLLo7Yp7cUO6yrxBjTOS31yC2gQ3mQv7TWiQ+Z\n" +
+                "I0oUTfxFdUAF2efEqpfePYnPDgy0W0fhJEShO/jyAKqhiwT6YdV2Q+IONL1k7su2\n" +
+                "N6DkV7T4myGhRAaey/XOEZzLxYg9Jlromc6PZxVLug1nyQOc3ETrUslTfZ1hHMLB\n" +
+                "rAQYAQoACQWCXgvhAAKbAgFXCRBoT61i3AOPu8B0oAQZAQoABgWCXgvhAAAhCRBK\n" +
+                "cjSjoSE6ZRYhBFF5LA5I4v2pTpO5EUpyNKOhITplp0kIAIrv83RJh3+lm8H27P3O\n" +
+                "hTm3z8Rrsy5EK+H2SnKivNTLUdZodVlSyUYF1uLvHB7Wch+aU4Z4DHFIss1rGtIO\n" +
+                "iWs/MOrK/1r93tanUwiE7JDK1gg2qA4Q9rXgI5lrpPbvGQTye8YZnvkP1EPdMaJk\n" +
+                "PzXQiWn4q5Ng7Pdqeze0SkhEtSssAYXzjSWz8NU3WfTLbPgxo5LnGG3vmcz8ay6V\n" +
+                "l7q9QUhhKgbUwBlt3Uv8acAWDZYWrFx42DK+B3iGGGDsfqEeSYA2KFX6dpNA8Cv0\n" +
+                "F6IG42vv1Y7/i613TWNLdWwN+RTZ5et+zPIgja17yKERQEWzcoHvHP40lhjywf7S\n" +
+                "MjYWIQTy0VCk/piSXVHpFTloT61i3AOPuxS8CACtRp4DTJ67sVjOBKIISk0pija3\n" +
+                "eqf3d1rHfsttNfQOzc/uDsnZBA75jVVYZVHH4Dn9i+gX+t8HTdIaPjg4QrjUqh3u\n" +
+                "jS9TYXSE2zBpw3Sm+eyCAfQriRaSC5/S2dRIuiTxKZqYkhGi/lSbdXzJ33PI7RfD\n" +
+                "d1nEVXybKtWrJV3vDaYO9PWFYJtjl7DVoJLZfX3IruBDU8m0Bo6TfVk2tWlNZ5JK\n" +
+                "OjVKCH47TPjzuFVO8dNDPnUybGBoZ3PehLU/BH0gCBQSmUQJDARYRHHZMWvIQiiN\n" +
+                "/p8iN4E6tE3BUk98MtOQJqFe8JYM1ADLFuzFdjaRu3ybpdkO6bisPrnQVHNEwsGs\n" +
+                "BBgBCgAJBYJa6P+AApsCAVcJEGhPrWLcA4+7wHSgBBkBCgAGBYJa6P+AACEJEEpy\n" +
+                "NKOhITplFiEEUXksDkji/alOk7kRSnI0o6EhOmXhRwf/do4VE16xIIaOg2IZlRbl\n" +
+                "2tzRoQIyMmaN8mBzKC/Wmdw1Mo8YQMkQ6SNgq2oUOCbD4Xo9pvt3x1mt+P7W+ZqR\n" +
+                "2BVhGoUL3VkhQnFO6djVCnKtszQOosTtvn0EIZm62EfkxcWJoS4whlDbdeBP12iC\n" +
+                "9VcT0DgOSm4kT6WvAbFDZTYpPQEj1sp9GQNK4ydWVe5yWq11W7mQxHFA7g5t3AOb\n" +
+                "bqe47gfH089gQ3INymvjnDxM9BoGX6vSuNHYt6/SBywYTTx4nhVSI/Y/ycjJ071T\n" +
+                "nHjNyf0W9DAliVW1zQSqUTA4mwkIfu326skBDP8yKZpNE4AaU2WajD9IMWHViJk9\n" +
+                "SBYhBPLRUKT+mJJdUekVOWhPrWLcA4+7TrYIAIYAKrzgdeNi9kpEt2SHcLoQLViz\n" +
+                "xwrRMATqhrT/GdtOK6gJm5ycps6O+/jk/kknJw068MzlCZwotKj1MX7sYbx8ZwcQ\n" +
+                "SI2qDHBfvoirKhdb3+lrlzo2ydTfCNPKQdp4obeTMSGfazBg3gEo+/V+yPSY87Hd\n" +
+                "9DlRn02cst1cmD8XCep/7GaHDZmk79PxfCt04q0h+iQ13WOc4q0YvfRid0fgC+js\n" +
+                "8awobryxUhLSESa1uV1X4N8IXNFw/uSfUbB6C997m/WYUBxSrI639JxmGxBcDIUn\n" +
+                "crH02GDG8CotAnEHkLTz9GPO80q8mowzBV0EtHsXb4TeAFw5T5Qd0a5I+wk=\n" +
+                "=Vcb3\n" +
+                "-----END PGP ARMORED FILE-----\n";
+        PGPPublicKeyRing keys = PGPainless.readKeyRing().publicKeyRing(KEY);
+
+        KeyRingInfo info = new KeyRingInfo(keys, DateUtil.parseUTCDate("2021-10-10 00:00:00 UTC"));
+        // Subkey is hard revoked
+        assertFalse(info.isKeyValidlyBound(5364407983539305061L));
+    }
+
+    @Test
+    public void subkeyIsSoftRevokedTest() throws IOException {
+        String KEY = "-----BEGIN PGP ARMORED FILE-----\n" +
+                "Comment: ASCII Armor added by openpgp-interoperability-test-suite\n" +
+                "\n" +
+                "xsBNBFpJegABCAC1ePFquP0135m8DYhcybhv7l+ecojitFOd/jRM7hCczIqKgalD\n" +
+                "1Ro1gNr3VmH6FjRIKIvGT+sOzCKne1v3KyAAPoxtwxjkATTKdOGo15I6v5ZjmO1d\n" +
+                "rLQOLSt1TF7XbQSt+ns6PUZWJL907DvECUU5b9FkNUqfQ14QqY+gi7MOyAQez3b7\n" +
+                "Pg5Cyz/kVWQ6TSMW/myDEDEertQ4rDBsptEDFHCC2+iF4hO2LqfiCriu5qyLcKCQ\n" +
+                "pd6dEuwJQ/jjT0D9A9Fwf+i04x6ZPKSU9oNAWqn8OSAq3/0B/hu9V+0U0iHPnJxe\n" +
+                "quykvJk7maxhiGhxBWYXTvDJmoon0NOles7LABEBAAHCwHwEHwEKAA8Fgl4L4QAC\n" +
+                "FQoCmwMCHgEAIQkQaE+tYtwDj7sWIQTy0VCk/piSXVHpFTloT61i3AOPu8ffB/9Q\n" +
+                "60dg60qhA2rPnd/1dCL2B+c8RWnq44PpijE3gA1RQvcRQE5jNzMSo/MnG0mSL5wH\n" +
+                "eTsjSd/DRI3nHP06rs6Qub11NoKhNuya3maz9gyzeZMc/jNib83/BzFCrxsSQm+9\n" +
+                "WHurxXeWXOPMLZs3xS/jG0EDtCJ2Fm4UF19fcIydwN/ssF4NGpfCY82+wTSx4joI\n" +
+                "3cRKObCFJaaBgG5nl+eFr7cfjEIuqCJCaQsXiqBe7d6V3KqN18t+CgSaybMZXcys\n" +
+                "Q/USxEkLhIB2pOZwcz4E3TTFgxRAxcr4cs4Bd2PRz3Z5FKTzo0ma/Ft0UfFJR+fC\n" +
+                "cs55+n6kC9K0y/E7BY2hwsB8BB8BCgAPBYJaSXoAAhUKApsDAh4BACEJEGhPrWLc\n" +
+                "A4+7FiEE8tFQpP6Ykl1R6RU5aE+tYtwDj7uqDQf7BqTD6GNTwXPOt/0kHQPYmbdI\n" +
+                "tX+pWP+o3jaB6VTHDXcn27bttA5M82EXZfae4+bC1dMB+1uLal4ciVgO9ImJC9Nw\n" +
+                "s5fc3JH4R5uuSvpjzjudkJsGu3cAKE3hwiT93Mi6t6ENpLCDSxqxzAmfoOQbVJYW\n" +
+                "Y7gP7Z4Cj0IAP29aprEc0JWoMjHKpKgYF6u0sWgHWBuEXk/6o6GYb2HZYK4ycpY2\n" +
+                "WXKgVhy7/iQDYO1FOfcWQXHVGLn8OzILjobKohNenTT20ZhAASi3LUDSDMTQfxSS\n" +
+                "Vt0nhzWuXJJ4R8PzUVeRJ0A0oMyjZVHivHC6GwMsiQuSUTx8e/GnOByOqfGne80S\n" +
+                "anVsaWV0QGV4YW1wbGUub3JnwsBzBBMBCgAGBYJaSXoAACEJEGhPrWLcA4+7FiEE\n" +
+                "8tFQpP6Ykl1R6RU5aE+tYtwDj7tDfQf+PnxsIFu/0juKBUjjtAYfRzkrrYtMepPj\n" +
+                "taTvGfo1SzUkX/6F/GjdSeVg5Iq6YcBrj8c+cB3EoZpHnScTgWQHwceWQLd9Hhbg\n" +
+                "TrUNvW1eg2CVzN0RBuYMtWu9JM4pH7ssJW1NmN+/N9B67qb2y+JfBwH/la508NzC\n" +
+                "rl3xWTxjT5wNy+FGkNZg23s/0qlO2uxCjc+mRAuAlp5EmTOVWOIBbM0xttjBOx39\n" +
+                "ZmWWQKJZ0nrFjK1jppHqazwWWNX7RHkK81tlbSUtOPoTIJDz38NaiyMcZH3p9okN\n" +
+                "3DU4XtF+oE18M+Z/E0xUQmumbkajFzcUjmd7enozP5BnGESzdNS5Xc7ATQRaSsuA\n" +
+                "AQgAykb8tqlWXtqHGGkBqAq3EnpmvBqrKvqejjtZKAXqEszJ9NlibCGUuLwnNOVO\n" +
+                "R/hcOUlOGH+cyMcApBWJB+7d/83K1eCCdv88nDFVav7hKLKlEBbZJNHgHpJ313pl\n" +
+                "etzCR4x3STEISrEtO71l2HBdrKSYXaxGgILxYwcSi3i2EjzxRDy+0zyy8s7d+OD5\n" +
+                "ShFYexgSrKH3Xx1cxQAJzGGJVx75HHU9GVh3xHwJ7nDm26KzHegG2XPIBXJ2z8vm\n" +
+                "sSVTWyj0AjT4kVVapN0f84AKKjyQ7fguCzXGHFV9jmxDx+YH+9HhjIrHSzbDx6+4\n" +
+                "wyRsxj7Su+hu/bogJ28nnbTzQwARAQABwsCHBCgBCgAaBYJcKq2AEx0BS2V5IGlz\n" +
+                "IHN1cGVyc2VkZWQAIQkQaE+tYtwDj7sWIQTy0VCk/piSXVHpFTloT61i3AOPuxBk\n" +
+                "CACOpX6rx67fE33qOGStis1toGfDxcgDjfCC9VKXQ6DY5LSKNf2d32OJq5iPeuFb\n" +
+                "ZNBrSr+jE5kF2Zit3P1/cCLKb6sfyTLswWLiQaFNd/D1tWZR4W5H7cgC44NNIXbh\n" +
+                "jGvJWGPJZT9FgFCaZzq4Oxya+wwvFEvvtvl+tMPqaYUiDQKjRqi0OWCGTuIpblQf\n" +
+                "suc6Jw9qzE6TT2zhaTNWFvDvsLoqgJKsxa8sCZXCuUBB8fKaURTQBDMJSiTyeHgz\n" +
+                "4t/n9LKGmTGlTwy12Yhpsyp3yz/uFsJPoM32FWkFtd/bSdXiAxR5Al9mn+fuJLW2\n" +
+                "VeILEUjzY1/MfLq6KBlT7EePwsGsBBgBCgAJBYJeC+EAApsCAVcJEGhPrWLcA4+7\n" +
+                "wHSgBBkBCgAGBYJeC+EAACEJEEpyNKOhITplFiEEUXksDkji/alOk7kRSnI0o6Eh\n" +
+                "OmWnSQgAiu/zdEmHf6Wbwfbs/c6FObfPxGuzLkQr4fZKcqK81MtR1mh1WVLJRgXW\n" +
+                "4u8cHtZyH5pThngMcUiyzWsa0g6Jaz8w6sr/Wv3e1qdTCITskMrWCDaoDhD2teAj\n" +
+                "mWuk9u8ZBPJ7xhme+Q/UQ90xomQ/NdCJafirk2Ds92p7N7RKSES1KywBhfONJbPw\n" +
+                "1TdZ9Mts+DGjkucYbe+ZzPxrLpWXur1BSGEqBtTAGW3dS/xpwBYNlhasXHjYMr4H\n" +
+                "eIYYYOx+oR5JgDYoVfp2k0DwK/QXogbja+/Vjv+LrXdNY0t1bA35FNnl637M8iCN\n" +
+                "rXvIoRFARbNyge8c/jSWGPLB/tIyNhYhBPLRUKT+mJJdUekVOWhPrWLcA4+7FLwI\n" +
+                "AK1GngNMnruxWM4EoghKTSmKNrd6p/d3Wsd+y2019A7Nz+4OydkEDvmNVVhlUcfg\n" +
+                "Of2L6Bf63wdN0ho+ODhCuNSqHe6NL1NhdITbMGnDdKb57IIB9CuJFpILn9LZ1Ei6\n" +
+                "JPEpmpiSEaL+VJt1fMnfc8jtF8N3WcRVfJsq1aslXe8Npg709YVgm2OXsNWgktl9\n" +
+                "fciu4ENTybQGjpN9WTa1aU1nkko6NUoIfjtM+PO4VU7x00M+dTJsYGhnc96EtT8E\n" +
+                "fSAIFBKZRAkMBFhEcdkxa8hCKI3+nyI3gTq0TcFST3wy05AmoV7wlgzUAMsW7MV2\n" +
+                "NpG7fJul2Q7puKw+udBUc0TCwawEGAEKAAkFglro/4ACmwIBVwkQaE+tYtwDj7vA\n" +
+                "dKAEGQEKAAYFglro/4AAIQkQSnI0o6EhOmUWIQRReSwOSOL9qU6TuRFKcjSjoSE6\n" +
+                "ZeFHB/92jhUTXrEgho6DYhmVFuXa3NGhAjIyZo3yYHMoL9aZ3DUyjxhAyRDpI2Cr\n" +
+                "ahQ4JsPhej2m+3fHWa34/tb5mpHYFWEahQvdWSFCcU7p2NUKcq2zNA6ixO2+fQQh\n" +
+                "mbrYR+TFxYmhLjCGUNt14E/XaIL1VxPQOA5KbiRPpa8BsUNlNik9ASPWyn0ZA0rj\n" +
+                "J1ZV7nJarXVbuZDEcUDuDm3cA5tup7juB8fTz2BDcg3Ka+OcPEz0GgZfq9K40di3\n" +
+                "r9IHLBhNPHieFVIj9j/JyMnTvVOceM3J/Rb0MCWJVbXNBKpRMDibCQh+7fbqyQEM\n" +
+                "/zIpmk0TgBpTZZqMP0gxYdWImT1IFiEE8tFQpP6Ykl1R6RU5aE+tYtwDj7tOtggA\n" +
+                "hgAqvOB142L2SkS3ZIdwuhAtWLPHCtEwBOqGtP8Z204rqAmbnJymzo77+OT+SScn\n" +
+                "DTrwzOUJnCi0qPUxfuxhvHxnBxBIjaoMcF++iKsqF1vf6WuXOjbJ1N8I08pB2nih\n" +
+                "t5MxIZ9rMGDeASj79X7I9Jjzsd30OVGfTZyy3VyYPxcJ6n/sZocNmaTv0/F8K3Ti\n" +
+                "rSH6JDXdY5zirRi99GJ3R+AL6OzxrChuvLFSEtIRJrW5XVfg3whc0XD+5J9RsHoL\n" +
+                "33ub9ZhQHFKsjrf0nGYbEFwMhSdysfTYYMbwKi0CcQeQtPP0Y87zSryajDMFXQS0\n" +
+                "exdvhN4AXDlPlB3Rrkj7CQ==\n" +
+                "=7Feh\n" +
+                "-----END PGP ARMORED FILE-----\n";
+
+        PGPPublicKeyRing keys = PGPainless.readKeyRing().publicKeyRing(KEY);
+        final long subkeyId = 5364407983539305061L;
+
+        KeyRingInfo inspectDuringRevokedPeriod = new KeyRingInfo(keys, DateUtil.parseUTCDate("2019-01-02 00:00:00 UTC"));
+        assertFalse(inspectDuringRevokedPeriod.isKeyValidlyBound(subkeyId));
+        assertNotNull(inspectDuringRevokedPeriod.getSubkeyRevocationSignature(subkeyId));
+
+        KeyRingInfo inspectAfterRebinding = new KeyRingInfo(keys, DateUtil.parseUTCDate("2020-01-02 00:00:00 UTC"));
+        assertTrue(inspectAfterRebinding.isKeyValidlyBound(subkeyId));
+    }
+
+    @Test
+    public void primaryKeyIsHardRevokedTest() throws IOException {
+        String KEY = "-----BEGIN PGP ARMORED FILE-----\n" +
+                "Comment: ASCII Armor added by openpgp-interoperability-test-suite\n" +
+                "\n" +
+                "xsBNBFpJegABCAC1ePFquP0135m8DYhcybhv7l+ecojitFOd/jRM7hCczIqKgalD\n" +
+                "1Ro1gNr3VmH6FjRIKIvGT+sOzCKne1v3KyAAPoxtwxjkATTKdOGo15I6v5ZjmO1d\n" +
+                "rLQOLSt1TF7XbQSt+ns6PUZWJL907DvECUU5b9FkNUqfQ14QqY+gi7MOyAQez3b7\n" +
+                "Pg5Cyz/kVWQ6TSMW/myDEDEertQ4rDBsptEDFHCC2+iF4hO2LqfiCriu5qyLcKCQ\n" +
+                "pd6dEuwJQ/jjT0D9A9Fwf+i04x6ZPKSU9oNAWqn8OSAq3/0B/hu9V+0U0iHPnJxe\n" +
+                "quykvJk7maxhiGhxBWYXTvDJmoon0NOles7LABEBAAHCwJMEIAEKACYFglwqrYAf\n" +
+                "HchVbmtub3duIHJldm9jYXRpb24gcmVhc29uIDIwMAAhCRBoT61i3AOPuxYhBPLR\n" +
+                "UKT+mJJdUekVOWhPrWLcA4+7yUoH/1KmYWve5h9Tsl1dAguIwVhqNw5fQjxYQCy2\n" +
+                "kq+1XBBjKSalNpoFIgV0fJWo+x8i3neNH0pnWRPR9lddiW3C/TjsjGp69QvYaZnM\n" +
+                "NXGymkvb6JMFGtTBwpM6R8iH0UqQHWK984nEcD4ZTU2zWY5Q3zr/ahKDoMKooqbc\n" +
+                "tBlMumQ3KhSmDrJlU7xxn0K3A5bZoHd/ZlIxk7FX7yoSBUffy6gRdT0IFk9X93Vn\n" +
+                "GuUpo+vTjEBO3PQuKOMOT0qJxqZHCUN0LWHDdH3IwmfrlRSRWq63pbO6pyHyEehS\n" +
+                "5LQ7NbP994BNxT9yYQ3REvk/ngJk4aK5xRHXdPL529Dio4XWZ4rCwHwEHwEKAA8F\n" +
+                "gl4L4QACFQoCmwMCHgEAIQkQaE+tYtwDj7sWIQTy0VCk/piSXVHpFTloT61i3AOP\n" +
+                "u8ffB/9Q60dg60qhA2rPnd/1dCL2B+c8RWnq44PpijE3gA1RQvcRQE5jNzMSo/Mn\n" +
+                "G0mSL5wHeTsjSd/DRI3nHP06rs6Qub11NoKhNuya3maz9gyzeZMc/jNib83/BzFC\n" +
+                "rxsSQm+9WHurxXeWXOPMLZs3xS/jG0EDtCJ2Fm4UF19fcIydwN/ssF4NGpfCY82+\n" +
+                "wTSx4joI3cRKObCFJaaBgG5nl+eFr7cfjEIuqCJCaQsXiqBe7d6V3KqN18t+CgSa\n" +
+                "ybMZXcysQ/USxEkLhIB2pOZwcz4E3TTFgxRAxcr4cs4Bd2PRz3Z5FKTzo0ma/Ft0\n" +
+                "UfFJR+fCcs55+n6kC9K0y/E7BY2hwsB8BB8BCgAPBYJaSXoAAhUKApsDAh4BACEJ\n" +
+                "EGhPrWLcA4+7FiEE8tFQpP6Ykl1R6RU5aE+tYtwDj7uqDQf7BqTD6GNTwXPOt/0k\n" +
+                "HQPYmbdItX+pWP+o3jaB6VTHDXcn27bttA5M82EXZfae4+bC1dMB+1uLal4ciVgO\n" +
+                "9ImJC9Nws5fc3JH4R5uuSvpjzjudkJsGu3cAKE3hwiT93Mi6t6ENpLCDSxqxzAmf\n" +
+                "oOQbVJYWY7gP7Z4Cj0IAP29aprEc0JWoMjHKpKgYF6u0sWgHWBuEXk/6o6GYb2HZ\n" +
+                "YK4ycpY2WXKgVhy7/iQDYO1FOfcWQXHVGLn8OzILjobKohNenTT20ZhAASi3LUDS\n" +
+                "DMTQfxSSVt0nhzWuXJJ4R8PzUVeRJ0A0oMyjZVHivHC6GwMsiQuSUTx8e/GnOByO\n" +
+                "qfGne80SanVsaWV0QGV4YW1wbGUub3JnwsBzBBMBCgAGBYJaSXoAACEJEGhPrWLc\n" +
+                "A4+7FiEE8tFQpP6Ykl1R6RU5aE+tYtwDj7tDfQf+PnxsIFu/0juKBUjjtAYfRzkr\n" +
+                "rYtMepPjtaTvGfo1SzUkX/6F/GjdSeVg5Iq6YcBrj8c+cB3EoZpHnScTgWQHwceW\n" +
+                "QLd9HhbgTrUNvW1eg2CVzN0RBuYMtWu9JM4pH7ssJW1NmN+/N9B67qb2y+JfBwH/\n" +
+                "la508NzCrl3xWTxjT5wNy+FGkNZg23s/0qlO2uxCjc+mRAuAlp5EmTOVWOIBbM0x\n" +
+                "ttjBOx39ZmWWQKJZ0nrFjK1jppHqazwWWNX7RHkK81tlbSUtOPoTIJDz38NaiyMc\n" +
+                "ZH3p9okN3DU4XtF+oE18M+Z/E0xUQmumbkajFzcUjmd7enozP5BnGESzdNS5Xc7A\n" +
+                "TQRaSsuAAQgAykb8tqlWXtqHGGkBqAq3EnpmvBqrKvqejjtZKAXqEszJ9NlibCGU\n" +
+                "uLwnNOVOR/hcOUlOGH+cyMcApBWJB+7d/83K1eCCdv88nDFVav7hKLKlEBbZJNHg\n" +
+                "HpJ313pletzCR4x3STEISrEtO71l2HBdrKSYXaxGgILxYwcSi3i2EjzxRDy+0zyy\n" +
+                "8s7d+OD5ShFYexgSrKH3Xx1cxQAJzGGJVx75HHU9GVh3xHwJ7nDm26KzHegG2XPI\n" +
+                "BXJ2z8vmsSVTWyj0AjT4kVVapN0f84AKKjyQ7fguCzXGHFV9jmxDx+YH+9HhjIrH\n" +
+                "SzbDx6+4wyRsxj7Su+hu/bogJ28nnbTzQwARAQABwsGsBBgBCgAJBYJeC+EAApsC\n" +
+                "AVcJEGhPrWLcA4+7wHSgBBkBCgAGBYJeC+EAACEJEEpyNKOhITplFiEEUXksDkji\n" +
+                "/alOk7kRSnI0o6EhOmWnSQgAiu/zdEmHf6Wbwfbs/c6FObfPxGuzLkQr4fZKcqK8\n" +
+                "1MtR1mh1WVLJRgXW4u8cHtZyH5pThngMcUiyzWsa0g6Jaz8w6sr/Wv3e1qdTCITs\n" +
+                "kMrWCDaoDhD2teAjmWuk9u8ZBPJ7xhme+Q/UQ90xomQ/NdCJafirk2Ds92p7N7RK\n" +
+                "SES1KywBhfONJbPw1TdZ9Mts+DGjkucYbe+ZzPxrLpWXur1BSGEqBtTAGW3dS/xp\n" +
+                "wBYNlhasXHjYMr4HeIYYYOx+oR5JgDYoVfp2k0DwK/QXogbja+/Vjv+LrXdNY0t1\n" +
+                "bA35FNnl637M8iCNrXvIoRFARbNyge8c/jSWGPLB/tIyNhYhBPLRUKT+mJJdUekV\n" +
+                "OWhPrWLcA4+7FLwIAK1GngNMnruxWM4EoghKTSmKNrd6p/d3Wsd+y2019A7Nz+4O\n" +
+                "ydkEDvmNVVhlUcfgOf2L6Bf63wdN0ho+ODhCuNSqHe6NL1NhdITbMGnDdKb57IIB\n" +
+                "9CuJFpILn9LZ1Ei6JPEpmpiSEaL+VJt1fMnfc8jtF8N3WcRVfJsq1aslXe8Npg70\n" +
+                "9YVgm2OXsNWgktl9fciu4ENTybQGjpN9WTa1aU1nkko6NUoIfjtM+PO4VU7x00M+\n" +
+                "dTJsYGhnc96EtT8EfSAIFBKZRAkMBFhEcdkxa8hCKI3+nyI3gTq0TcFST3wy05Am\n" +
+                "oV7wlgzUAMsW7MV2NpG7fJul2Q7puKw+udBUc0TCwawEGAEKAAkFglro/4ACmwIB\n" +
+                "VwkQaE+tYtwDj7vAdKAEGQEKAAYFglro/4AAIQkQSnI0o6EhOmUWIQRReSwOSOL9\n" +
+                "qU6TuRFKcjSjoSE6ZeFHB/92jhUTXrEgho6DYhmVFuXa3NGhAjIyZo3yYHMoL9aZ\n" +
+                "3DUyjxhAyRDpI2CrahQ4JsPhej2m+3fHWa34/tb5mpHYFWEahQvdWSFCcU7p2NUK\n" +
+                "cq2zNA6ixO2+fQQhmbrYR+TFxYmhLjCGUNt14E/XaIL1VxPQOA5KbiRPpa8BsUNl\n" +
+                "Nik9ASPWyn0ZA0rjJ1ZV7nJarXVbuZDEcUDuDm3cA5tup7juB8fTz2BDcg3Ka+Oc\n" +
+                "PEz0GgZfq9K40di3r9IHLBhNPHieFVIj9j/JyMnTvVOceM3J/Rb0MCWJVbXNBKpR\n" +
+                "MDibCQh+7fbqyQEM/zIpmk0TgBpTZZqMP0gxYdWImT1IFiEE8tFQpP6Ykl1R6RU5\n" +
+                "aE+tYtwDj7tOtggAhgAqvOB142L2SkS3ZIdwuhAtWLPHCtEwBOqGtP8Z204rqAmb\n" +
+                "nJymzo77+OT+SScnDTrwzOUJnCi0qPUxfuxhvHxnBxBIjaoMcF++iKsqF1vf6WuX\n" +
+                "OjbJ1N8I08pB2niht5MxIZ9rMGDeASj79X7I9Jjzsd30OVGfTZyy3VyYPxcJ6n/s\n" +
+                "ZocNmaTv0/F8K3TirSH6JDXdY5zirRi99GJ3R+AL6OzxrChuvLFSEtIRJrW5XVfg\n" +
+                "3whc0XD+5J9RsHoL33ub9ZhQHFKsjrf0nGYbEFwMhSdysfTYYMbwKi0CcQeQtPP0\n" +
+                "Y87zSryajDMFXQS0exdvhN4AXDlPlB3Rrkj7CQ==\n" +
+                "=MhJL\n" +
+                "-----END PGP ARMORED FILE-----\n";
+
+        PGPPublicKeyRing keys = PGPainless.readKeyRing().publicKeyRing(KEY);
+
+        KeyRingInfo info = PGPainless.inspectKeyRing(keys);
+        // Primary key is hard revoked
+        assertFalse(info.isKeyValidlyBound(keys.getPublicKey().getKeyID()));
+        assertFalse(info.isFullyEncrypted());
+    }
+
+    @Test
+    public void getSecretKeyTest() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
+        PGPSecretKeyRing secretKeys = PGPainless.generateKeyRing().modernKeyRing("Alice", null);
+        KeyRingInfo info = PGPainless.inspectKeyRing(secretKeys);
+
+        OpenPgpV4Fingerprint primaryKeyFingerprint = new OpenPgpV4Fingerprint(secretKeys);
+        PGPSecretKey primaryKey = info.getSecretKey(primaryKeyFingerprint);
+
+        assertEquals(secretKeys.getSecretKey(), primaryKey);
+    }
+
+    @Test
+    public void testGetLatestKeyCreationDate() throws PGPException, IOException {
+        PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
+        Date latestCreationDate = DateUtil.parseUTCDate("2020-01-12 18:01:44 UTC");
+
+        KeyRingInfo info = PGPainless.inspectKeyRing(secretKeys);
+        JUtils.assertDateEquals(latestCreationDate, info.getLatestKeyCreationDate());
+    }
+
+    @Test
+    public void testGetExpirationDateForUse_SPLIT() throws PGPException, IOException {
+        PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
+        KeyRingInfo info = PGPainless.inspectKeyRing(secretKeys);
+        assertThrows(IllegalArgumentException.class, () -> info.getExpirationDateForUse(KeyFlag.SPLIT));
+    }
+
+    @Test
+    public void testGetExpirationDateForUse_SHARED() throws PGPException, IOException {
+        PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
+        KeyRingInfo info = PGPainless.inspectKeyRing(secretKeys);
+        assertThrows(IllegalArgumentException.class, () -> info.getExpirationDateForUse(KeyFlag.SHARED));
+    }
+
+    @Test
+    public void testGetExpirationDateForUse_NoSuchKey() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
+        PGPSecretKeyRing secretKeys = PGPainless.buildKeyRing()
+                .addUserId("Alice")
+                .setPrimaryKey(KeySpec.getBuilder(KeyType.EDDSA(EdDSACurve._Ed25519), KeyFlag.CERTIFY_OTHER))
+                .build();
+
+        KeyRingInfo info = PGPainless.inspectKeyRing(secretKeys);
+
+        assertThrows(NoSuchElementException.class, () -> info.getExpirationDateForUse(KeyFlag.ENCRYPT_COMMS));
+    }
+
+    @Test
+    public void testGetPreferredAlgorithms() throws IOException {
+        String KEY = "-----BEGIN PGP PRIVATE KEY BLOCK-----\n" +
+                "Version: PGPainless\n" +
+                "Comment: AC6F E854 F1F8 FC2C 121F  64BC 5C33 8C29 81C0 25F0\n" +
+                "Comment: Alice\n" +
+                "\n" +
+                "lFgEYWWA1BYJKwYBBAHaRw8BAQdAdrm6pbGxiF810GBTscYRc5Nj3ds1BS3OoMOK\n" +
+                "Ae7LPEoAAQDqwu/sBr0UQbxwinbc5SxajwkIZFmZppLugkEu19eNIRB8tAVBbGlj\n" +
+                "ZYh4BBMWCgAgBQJhZYDUAhsBBRYCAwEABRUKCQgLBAsJCAcCHgECGQEACgkQXDOM\n" +
+                "KYHAJfAqLwEA1H99UN3+/iJZjD0ZecqDZGeH2axtFj9WRr1hqokwFv0A/jXyBV+Q\n" +
+                "Y+bQYiKcmHwk2n7VxHC4PBNY0pEDI/iDwYcBnF0EYWWA1BIKKwYBBAGXVQEFAQEH\n" +
+                "QMDczPpxXth89G/sJ84tYrg2WPIut04H4z8Ys49FuH0GAwEIBwAA/0ASQkU3tbCD\n" +
+                "jqwbnJ69qqQ9Qko+CnwuMcxXBCy5rNBYDl2IdQQYFgoAHQUCYWWA1AIbDAUWAgMB\n" +
+                "AAUVCgkICwQLCQgHAh4BAAoJEFwzjCmBwCXwcBoBAKhQxSlacUPB27OJ0KVUXJsQ\n" +
+                "CGoZ4wcOsstla9N1da8uAP9+W6zxc4VFYFZa3L9PsGLaQ01NTgngWJmPG+gRVu9h\n" +
+                "BJxYBGFlgNQWCSsGAQQB2kcPAQEHQFW53p+2ZwsazALz7P5dYzx0LaQ7lv0veR8e\n" +
+                "DjKAeAMVAAD6AlUAJfkp19PmEEDWW7I3iSpXB3e5njEDbGs12Kt2XLoOwIjVBBgW\n" +
+                "CgB9BQJhZYDUAhsCBRYCAwEABRUKCQgLBAsJCAcCHgFfIAQZFgoABgUCYWWA1AAK\n" +
+                "CRDShjEjcUDsWJA+AQCtbMUCXa8M3znR95V22zxptRmPsapGpw21/t2U4YHYhgD/\n" +
+                "aFFrxG7Q3pbjHJa42u9jakpCm4zIhyfWI0wasPuaBwMACgkQXDOMKYHAJfCTYgD/\n" +
+                "Uc9F3P6UQM0KpeUbensec/fKs8tp67WLLBvBa+p0YBIA/272CXdHaJurCEJoDYaG\n" +
+                "/+XL+qMMgLHaQ25aA11GVAkC\n" +
+                "=7gbt\n" +
+                "-----END PGP PRIVATE KEY BLOCK-----";
+
+        PGPSecretKeyRing secretKeys = PGPainless.readKeyRing().secretKeyRing(KEY);
+        final long pkid = 6643807985200014832L;
+        final long skid1 = -2328413746552029063L;
+        final long skid2 = -3276877650571760552L;
+        Set<HashAlgorithm> preferredHashAlgorithms = new LinkedHashSet<>(
+                Arrays.asList(HashAlgorithm.SHA512, HashAlgorithm.SHA384, HashAlgorithm.SHA256, HashAlgorithm.SHA224));
+        Set<CompressionAlgorithm> preferredCompressionAlgorithms = new LinkedHashSet<>(
+                Arrays.asList(CompressionAlgorithm.ZLIB, CompressionAlgorithm.BZIP2, CompressionAlgorithm.ZIP, CompressionAlgorithm.UNCOMPRESSED));
+        Set<SymmetricKeyAlgorithm> preferredSymmetricAlgorithms = new LinkedHashSet<>(
+                Arrays.asList(SymmetricKeyAlgorithm.AES_256, SymmetricKeyAlgorithm.AES_192, SymmetricKeyAlgorithm.AES_128));
+        KeyRingInfo info = PGPainless.inspectKeyRing(secretKeys);
+
+        // Bob is an invalid userId
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredSymmetricKeyAlgorithms("Bob", 0));
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredSymmetricKeyAlgorithms("Bob", pkid));
+        // 123 is an invalid keyid
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredSymmetricKeyAlgorithms(null, 123L));
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredSymmetricKeyAlgorithms("Alice", 123L));
+
+        assertEquals(preferredHashAlgorithms, info.getPreferredHashAlgorithms("Alice", pkid));
+        assertEquals(preferredHashAlgorithms, info.getPreferredHashAlgorithms(null, pkid));
+        assertEquals(preferredHashAlgorithms, info.getPreferredHashAlgorithms(null, skid1));
+        assertEquals(preferredHashAlgorithms, info.getPreferredHashAlgorithms(null, skid2));
+
+        // Bob is an invalid userId
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredCompressionAlgorithms("Bob", 0));
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredCompressionAlgorithms("Bob", pkid));
+        // 123 is an invalid keyid
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredCompressionAlgorithms(null, 123L));
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredCompressionAlgorithms("Alice", 123L));
+
+        assertEquals(preferredCompressionAlgorithms, info.getPreferredCompressionAlgorithms("Alice", pkid));
+        assertEquals(preferredCompressionAlgorithms, info.getPreferredCompressionAlgorithms(null, pkid));
+        assertEquals(preferredCompressionAlgorithms, info.getPreferredCompressionAlgorithms(null, skid1));
+        assertEquals(preferredCompressionAlgorithms, info.getPreferredCompressionAlgorithms(null, skid2));
+
+        // Bob is an invalid userId
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredSymmetricKeyAlgorithms("Bob", 0));
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredSymmetricKeyAlgorithms("Bob", pkid));
+        // 123 is an invalid keyid
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredSymmetricKeyAlgorithms(null, 123L));
+        assertThrows(IllegalArgumentException.class, () -> info.getPreferredSymmetricKeyAlgorithms("Alice", 123L));
+
+        assertEquals(preferredSymmetricAlgorithms, info.getPreferredSymmetricKeyAlgorithms("Alice", pkid));
+        assertEquals(preferredSymmetricAlgorithms, info.getPreferredSymmetricKeyAlgorithms(null, pkid));
+        assertEquals(preferredSymmetricAlgorithms, info.getPreferredSymmetricKeyAlgorithms(null, skid1));
+        assertEquals(preferredSymmetricAlgorithms, info.getPreferredSymmetricKeyAlgorithms(null, skid2));
+
+    }
+
+    @Test
+    public void testUnboundSubkeyIsIgnored() throws IOException {
+        // Contains unbound subkey D622C916384E0F6D364907E55D918BBD521CCD10
+        String KEY = "-----BEGIN PGP PUBLIC KEY BLOCK-----\n" +
+                "\n" +
+                "xsDNBF2lnPIBDAC5cL9PQoQLTMuhjbYvb4Ncuuo0bfmgPRFywX53jPhoFf4Zg6mv\n" +
+                "/seOXpgecTdOcVttfzC8ycIKrt3aQTiwOG/ctaR4Bk/t6ayNFfdUNxHWk4WCKzdz\n" +
+                "/56fW2O0F23qIRd8UUJp5IIlN4RDdRCtdhVQIAuzvp2oVy/LaS2kxQoKvph/5pQ/\n" +
+                "5whqsyroEWDJoSV0yOb25B/iwk/pLUFoyhDG9bj0kIzDxrEqW+7Ba8nocQlecMF3\n" +
+                "X5KMN5kp2zraLv9dlBBpWW43XktjcCZgMy20SouraVma8Je/ECwUWYUiAZxLIlMv\n" +
+                "9CurEOtxUw6N3RdOtLmYZS9uEnn5y1UkF88o8Nku890uk6BrewFzJyLAx5wRZ4F0\n" +
+                "qV/yq36UWQ0JB/AUGhHVPdFf6pl6eaxBwT5GXvbBUibtf8YI2og5RsgTWtXfU7eb\n" +
+                "SGXrl5ZMpbA6mbfhd0R8aPxWfmDWiIOhBufhMCvUHh1sApMKVZnvIff9/0Dca3wb\n" +
+                "vLIwa3T4CyshfT0AEQEAAc0hQm9iIEJhYmJhZ2UgPGJvYkBvcGVucGdwLmV4YW1w\n" +
+                "bGU+wsEOBBMBCgA4AhsDBQsJCAcCBhUKCQgLAgQWAgMBAh4BAheAFiEE0aZuGiOx\n" +
+                "gsmYD3iM+/zIKgFeczAFAl2lnvoACgkQ+/zIKgFeczBvbAv/VNk90a6hG8Od9xTz\n" +
+                "XxH5YRFUSGfIA1yjPIVOnKqhMwps2U+sWE3urL+MvjyQRlyRV8oY9IOhQ5Esm6DO\n" +
+                "ZYrTnE7qVETm1ajIAP2OFChEc55uH88x/anpPOXOJY7S8jbn3naC9qad75BrZ+3g\n" +
+                "9EBUWiy5p8TykP05WSnSxNRt7vFKLfEB4nGkehpwHXOVF0CRNwYle42bg8lpmdXF\n" +
+                "DcCZCi+qEbafmTQzkAqyzS3nCh3IAqq6Y0kBuaKLm2tSNUOlZbD+OHYQNZ5Jix7c\n" +
+                "ZUzs6Xh4+I55NRWl5smrLq66yOQoFPy9jot/Qxikx/wP3MsAzeGaZSEPc0fHp5G1\n" +
+                "6rlGbxQ3vl8/usUV7W+TMEMljgwd5x8POR6HC8EaCDfVnUBCPi/Gv+egLjsIbPJZ\n" +
+                "ZEroiE40e6/UoCiQtlpQB5exPJYSd1Q1txCwueih99PHepsDhmUQKiACszNU+RRo\n" +
+                "zAYau2VdHqnRJ7QYdxHDiH49jPK4NTMyb/tJh2TiIwcmsIpGzsDNBF2lnPIBDADW\n" +
+                "ML9cbGMrp12CtF9b2P6z9TTT74S8iyBOzaSvdGDQY/sUtZXRg21HWamXnn9sSXvI\n" +
+                "DEINOQ6A9QxdxoqWdCHrOuW3ofneYXoG+zeKc4dC86wa1TR2q9vW+RMXSO4uImA+\n" +
+                "Uzula/6k1DogDf28qhCxMwG/i/m9g1c/0aApuDyKdQ1PXsHHNlgd/Dn6rrd5y2AO\n" +
+                "baifV7wIhEJnvqgFXDN2RXGjLeCOHV4Q2WTYPg/S4k1nMXVDwZXrvIsA0YwIMgIT\n" +
+                "86Rafp1qKlgPNbiIlC1g9RY/iFaGN2b4Ir6GDohBQSfZW2+LXoPZuVE/wGlQ01rh\n" +
+                "827KVZW4lXvqsge+wtnWlszcselGATyzqOK9LdHPdZGzROZYI2e8c+paLNDdVPL6\n" +
+                "vdRBUnkCaEkOtl1mr2JpQi5nTU+gTX4IeInC7E+1a9UDF/Y85ybUz8XV8rUnR76U\n" +
+                "qVC7KidNepdHbZjjXCt8/Zo+Tec9JNbYNQB/e9ExmDntmlHEsSEQzFwzj8sxH48A\n" +
+                "EQEAAcLA9gQYAQoAIBYhBNGmbhojsYLJmA94jPv8yCoBXnMwBQJdpZzyAhsMAAoJ\n" +
+                "EPv8yCoBXnMw6f8L/26C34dkjBffTzMj5Bdzm8MtF67OYneJ4TQMw7+41IL4rVcS\n" +
+                "KhIhk/3Ud5knaRtP2ef1+5F66h9/RPQOJ5+tvBwhBAcUWSupKnUrdVaZQanYmtSx\n" +
+                "cVV2PL9+QEiNN3tzluhaWO//rACxJ+K/ZXQlIzwQVTpNhfGzAaMVV9zpf3u0k14i\n" +
+                "tcv6alKY8+rLZvO1wIIeRZLmU0tZDD5HtWDvUV7rIFI1WuoLb+KZgbYn3OWjCPHV\n" +
+                "dTrdZ2CqnZbG3SXw6awH9bzRLV9EXkbhIMez0deCVdeo+wFFklh8/5VK2b0vk/+w\n" +
+                "qMJxfpa1lHvJLobzOP9fvrswsr92MA2+k901WeISR7qEzcI0Fdg8AyFAExaEK6Vy\n" +
+                "jP7SXGLwvfisw34OxuZr3qmx1Sufu4toH3XrB7QJN8XyqqbsGxUCBqWif9RSK4xj\n" +
+                "zRTe56iPeiSJJOIciMP9i2ldI+KgLycyeDvGoBj0HCLO3gVaBe4ubVrj5KjhX2PV\n" +
+                "NEJd3XZRzaXZE2aAMc7ATQRhaDWyAQgA1CaZPxLUMm7sH0i/KTWVqqFgTTxVJjy+\n" +
+                "Aj3vjhrzAsQw1gqtbLXTlwBVVqhGIisEf7ZsFBBIzXNXi2Gk2O8HiZoKyey87f4R\n" +
+                "MkVCmHZKJyL2vBhsl8bfHI8rK41XeVmmpGnM+pUgD2MSoBbyDZKqhr3+zsnJD4gt\n" +
+                "hNMEYmZkqOzO20c1TO/92qPmmNn8hFa7sRqcff4TEzy3SsYUxsXvV/FjCfVNC3ij\n" +
+                "2u3RlB/8xljVjXhtrvlyl5uwmjJYs2fR9RHQPfhQt0YvcXw5ihCcLK0mu2FP0qT+\n" +
+                "C9h35EjDuD+1COXUOoW2B8LX6m2yf8cY72K70QgtGemj7UWhXL5u/wARAQAB\n" +
+                "=A3B8\n" +
+                "-----END PGP PUBLIC KEY BLOCK-----\n";
+
+        PGPPublicKeyRing certificate = PGPainless.readKeyRing().publicKeyRing(KEY);
+        OpenPgpV4Fingerprint unboundKey = new OpenPgpV4Fingerprint("D622C916384E0F6D364907E55D918BBD521CCD10");
+        KeyRingInfo info = PGPainless.inspectKeyRing(certificate);
+
+        assertFalse(info.isKeyValidlyBound(unboundKey.getKeyId()));
+
+        List<PGPPublicKey> encryptionSubkeys = info.getEncryptionSubkeys(EncryptionPurpose.ANY);
+        assertTrue(encryptionSubkeys.stream().map(OpenPgpV4Fingerprint::new).noneMatch(f -> f.equals(unboundKey)),
+                "Unbound subkey MUST NOT be considered a valid encryption subkey");
+
+        List<PGPPublicKey> signingSubkeys = info.getSigningSubkeys();
+        assertTrue(signingSubkeys.stream().map(OpenPgpV4Fingerprint::new).noneMatch(f -> f.equals(unboundKey)),
+                "Unbound subkey MUST NOT be considered a valid signing subkey");
+
+        assertTrue(info.getKeyFlagsOf(unboundKey.getKeyId()).isEmpty());
+
+        Date latestModification = info.getLastModified();
+        Date latestKeyCreation = info.getLatestKeyCreationDate();
+        Date unboundKeyCreation = certificate.getPublicKey(unboundKey.getKeyId()).getCreationTime();
+        assertTrue(unboundKeyCreation.after(latestModification));
+        assertTrue(unboundKeyCreation.after(latestKeyCreation));
     }
 }

@@ -1,4 +1,6 @@
-import java.text.SimpleDateFormat
+// SPDX-FileCopyrightText: 2021 Paul Schaub <info@pgpainless.org>
+//
+// SPDX-License-Identifier: Apache-2.0
 
 buildscript {
 
@@ -11,12 +13,12 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath "org.kt3k.gradle.plugin:coveralls-gradle-plugin:2.8.2"
+        classpath "gradle.plugin.org.kt3k.gradle.plugin:coveralls-gradle-plugin:2.12.0"
     }
 }
 
 plugins {
-    id 'ru.vyarus.animalsniffer' version '1.5.0'
+    id 'ru.vyarus.animalsniffer' version '1.5.3'
 }
 
 apply from: 'version.gradle'
@@ -28,7 +30,8 @@ allprojects {
     apply plugin: 'jacoco'
     apply plugin: 'checkstyle'
 
-    if (!it.name.equals('pgpainless-sop')) {
+    // For non-sop modules, enable android api compatibility check
+    if (it.name.equals('pgpainless-core') || it.name.equals('sop-java') || it.name.equals('pgpainless-sop')) {
         // animalsniffer
         apply plugin: 'ru.vyarus.animalsniffer'
         dependencies {
@@ -54,12 +57,19 @@ allprojects {
         mavenCentral()
     }
 
+    // Reproducible Builds
+    tasks.withType(AbstractArchiveTask) {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
+
     project.ext {
-        junitVersion = '5.7.0'
-        androidBootClasspath = getAndroidRuntimeJar(pgpainlessMinAndroidSdk)
+        slf4jVersion = '1.7.32'
+        logbackVersion = '1.2.6'
+        junitVersion = '5.7.2'
+        picocliVersion = '4.6.1'
         rootConfigDir = new File(rootDir, 'config')
         gitCommit = getGitCommit()
-        builtDate = (new SimpleDateFormat("yyyy-MM-dd")).format(new Date())
         isContinuousIntegrationEnvironment = Boolean.parseBoolean(System.getenv('CI'))
         isReleaseVersion = !isSnapshot
         signingRequired = !(isSnapshot || isContinuousIntegrationEnvironment)
@@ -82,7 +92,7 @@ allprojects {
     }
 
     jacoco {
-        toolVersion = "0.8.5"
+        toolVersion = "0.8.7"
     }
 
     jacocoTestReport {
@@ -96,6 +106,10 @@ allprojects {
 
     test {
         useJUnitPlatform()
+        testLogging {
+            events "passed", "skipped", "failed"
+            exceptionFormat "full"
+        }
     }
 }
 
@@ -171,45 +185,6 @@ subprojects {
         required { signingRequired }
         sign publishing.publications.mavenJava
     }
-
-    def generatedVersionDir = "${buildDir}/generated-version"
-
-    sourceSets {
-        main {
-            output.dir(generatedVersionDir, builtBy: 'generateVersionProperties')
-        }
-    }
-
-    task generateVersionProperties {
-        doLast {
-            def propertiesFile = file "$generatedVersionDir/version.properties"
-            propertiesFile.parentFile.mkdirs()
-            def properties = new Properties()
-            properties.setProperty("version", rootProject.version.toString())
-            propertiesFile.withWriter { properties.store(it, null) }
-        }
-    }
-    processResources.dependsOn generateVersionProperties
-}
-
-def getAndroidRuntimeJar(androidSdkApiLevel) {
-    def androidHome = getAndroidHome()
-    def androidJar = new File("$androidHome/platforms/android-$androidSdkApiLevel/android.jar")
-    if (androidJar.isFile()) {
-        return androidJar
-    } else {
-        throw new Exception("Can't find android.jar for API level $androidSdkApiLevel at $androidHome/platforms/android-$androidSdkApiLevel/android.jar. Please install corresponding SDK platform package")
-    }
-}
-
-def getAndroidHome() {
-    def androidHomeEnv = System.getenv("ANDROID_HOME")
-    if (androidHomeEnv == null) {
-        throw new Exception("ANDROID_HOME environment variable is not set")
-    }
-    def androidHome = new File(androidHomeEnv)
-    if (!androidHome.isDirectory()) throw new Exception("Environment variable ANDROID_HOME is not pointing to a directory")
-    return androidHome
 }
 
 def getGitCommit() {
@@ -241,7 +216,6 @@ apply plugin: "com.github.kt3k.coveralls"
 coveralls {
 	sourceDirs = files(subprojects.sourceSets.main.allSource.srcDirs).files.absolutePath
 }
-
 
 task jacocoRootReport(type: JacocoReport) {
     dependsOn = subprojects.jacocoTestReport

@@ -1,18 +1,7 @@
-/*
- * Copyright 2020 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2020 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.algorithm;
 
 import org.bouncycastle.openpgp.PGPSignature;
@@ -173,6 +162,12 @@ public enum SignatureType {
         }
     }
 
+    /**
+     * Convert a numerical id into a {@link SignatureType}.
+     *
+     * @param code numeric id
+     * @return signature type enum
+     */
     public static SignatureType valueOf(int code) {
         SignatureType type = map.get(code);
         if (type != null) {
@@ -187,8 +182,41 @@ public enum SignatureType {
         this.code = code;
     }
 
+    /**
+     * Return the numeric id of the signature type enum.
+     *
+     * @return numeric id
+     */
     public int getCode() {
         return code;
+    }
+
+    public static boolean isRevocationSignature(int signatureType) {
+        return isRevocationSignature(SignatureType.valueOf(signatureType));
+    }
+
+    public static boolean isRevocationSignature(SignatureType signatureType) {
+        switch (signatureType) {
+            case BINARY_DOCUMENT:
+            case CANONICAL_TEXT_DOCUMENT:
+            case STANDALONE:
+            case GENERIC_CERTIFICATION:
+            case NO_CERTIFICATION:
+            case CASUAL_CERTIFICATION:
+            case POSITIVE_CERTIFICATION:
+            case SUBKEY_BINDING:
+            case PRIMARYKEY_BINDING:
+            case DIRECT_KEY:
+            case TIMESTAMP:
+            case THIRD_PARTY_CONFIRMATION:
+                return false;
+            case KEY_REVOCATION:
+            case SUBKEY_REVOCATION:
+            case CERTIFICATION_REVOCATION:
+                return true;
+            default:
+                throw new IllegalArgumentException("Unknown signature type: " + signatureType);
+        }
     }
 
 }

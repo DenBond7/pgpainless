@@ -1,28 +1,20 @@
-/*
- * Copyright 2021 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2020 Paul Schaub <vanitasvitae@fsfe.org>, 2021 Flowcrypt a.s.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.info;
 
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.bcpg.ECDHPublicBCPGKey;
 import org.bouncycastle.bcpg.ECDSAPublicBCPGKey;
 import org.bouncycastle.bcpg.ECPublicBCPGKey;
 import org.bouncycastle.bcpg.EdDSAPublicBCPGKey;
+import org.bouncycastle.bcpg.S2K;
 import org.bouncycastle.jcajce.provider.asymmetric.util.ECUtil;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSecretKey;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
+import org.pgpainless.key.generation.type.eddsa.EdDSACurve;
 
 public class KeyInfo {
 
@@ -37,6 +29,38 @@ public class KeyInfo {
     public KeyInfo(PGPPublicKey publicKey) {
         this.publicKey = publicKey;
         this.secretKey = null;
+    }
+
+    public String getCurveName() {
+        return getCurveName(publicKey);
+    }
+
+    /**
+     * Returns indication that a contained secret key is encrypted.
+     *
+     * @return true if secret key is encrypted, false if secret key is not encrypted or there is public key only.
+     */
+    public boolean isEncrypted() {
+        return secretKey != null && isEncrypted(secretKey);
+    }
+
+    /**
+     * Returns indication that a contained secret key is not encrypted.
+     *
+     * @return true if secret key is not encrypted or there is public key only, false if secret key is encrypted.
+     */
+    public boolean isDecrypted() {
+        return secretKey == null || isDecrypted(secretKey);
+    }
+
+    /**
+     * Returns indication that a contained secret key has S2K of a type GNU_DUMMY_S2K.
+     *
+     * @return true if secret key has S2K of a type GNU_DUMMY_S2K, false if there is public key only,
+     *         or S2K on the secret key is absent or not of a type GNU_DUMMY_S2K.
+     */
+    public boolean hasDummyS2K() {
+        return secretKey != null && hasDummyS2K(secretKey);
     }
 
     public static String getCurveName(PGPPublicKey publicKey) {
@@ -56,12 +80,50 @@ public class KeyInfo {
                 break;
             }
             default:
-                throw new IllegalArgumentException("Not a EC public key (" + algorithm + ")");
+                throw new IllegalArgumentException("Not an elliptic curve public key (" + algorithm + ")");
         }
         return getCurveName(key);
     }
 
     public static String getCurveName(ECPublicBCPGKey key) {
-        return ECUtil.getCurveName(key.getCurveOID());
+        ASN1ObjectIdentifier identifier = key.getCurveOID();
+
+        // Workaround for ECUtil not recognizing ed25519
+        if (identifier.getId().equals("1.3.6.1.4.1.11591.15.1")) {
+            return EdDSACurve._Ed25519.getName();
+        }
+
+        return ECUtil.getCurveName(identifier);
+    }
+
+    /**
+     * Returns indication that a secret key is encrypted.
+     *
+     * @param secretKey A secret key to examine.
+     * @return true if secret key is encrypted, false otherwise.
+     */
+    public static boolean isEncrypted(PGPSecretKey secretKey) {
+        return secretKey.getS2KUsage() != 0;
+    }
+
+    /**
+     * Returns indication that a secret key is not encrypted.
+     *
+     * @param secretKey A secret key to examine.
+     * @return true if secret key is encrypted, false otherwise.
+     */
+    public static boolean isDecrypted(PGPSecretKey secretKey) {
+        return secretKey.getS2KUsage() == 0;
+    }
+
+    /**
+     * Returns indication that a secret key has S2K of a type GNU_DUMMY_S2K.
+     *
+     * @param secretKey A secret key to examine.
+     * @return true if secret key has S2K of a type GNU_DUMMY_S2K, false otherwise.
+     */
+    public static boolean hasDummyS2K(PGPSecretKey secretKey) {
+        final S2K s2k = secretKey.getS2K();
+        return s2k != null && s2k.getType() == S2K.GNU_DUMMY_S2K;
     }
 }

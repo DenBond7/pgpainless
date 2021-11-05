@@ -1,18 +1,7 @@
-/*
- * Copyright 2021 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2021 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.decryption_verification;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -21,17 +10,14 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
-import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
 import org.bouncycastle.util.io.Streams;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.pgpainless.PGPainless;
 import org.pgpainless.implementation.ImplementationFactory;
-import org.pgpainless.key.protection.SecretKeyRingProtector;
 
 public class RecursionDepthTest {
 
@@ -39,11 +25,9 @@ public class RecursionDepthTest {
      * Test that decryption is aborted when maximum recursion depth of nested packets is exceeded.
      *
      * @see <a href="https://tests.sequoia-pgp.org/#Maximum_recursion_depth">Sequoia-PGP Test Suite</a>
-     * @throws IOException
-     * @throws PGPException
      */
     @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestUtil#provideImplementationFactories")
+    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
     public void decryptionAbortsWhenMaximumRecursionDepthReachedTest(ImplementationFactory implementationFactory) throws IOException, PGPException {
         ImplementationFactory.setFactoryImplementation(implementationFactory);
         String key = "-----BEGIN PGP PRIVATE KEY BLOCK-----\n" +
@@ -129,7 +113,6 @@ public class RecursionDepthTest {
                 "=miES\n" +
                 "-----END PGP PRIVATE KEY BLOCK-----\n";
         PGPSecretKeyRing secretKey = PGPainless.readKeyRing().secretKeyRing(key);
-        PGPSecretKeyRingCollection secretKeys = new PGPSecretKeyRingCollection(Collections.singletonList(secretKey));
 
         // message contains compressed data that contains compressed data that contains... 64 times.
         String msg = "-----BEGIN PGP ARMORED FILE-----\n" +
@@ -163,9 +146,7 @@ public class RecursionDepthTest {
         assertThrows(PGPException.class, () -> {
             DecryptionStream decryptionStream = PGPainless.decryptAndOrVerify()
                     .onInputStream(new ByteArrayInputStream(msg.getBytes(StandardCharsets.UTF_8)))
-                    .decryptWith(SecretKeyRingProtector.unprotectedKeys(), secretKeys)
-                    .doNotVerify()
-                    .build();
+                    .withOptions(new ConsumerOptions().addDecryptionKey(secretKey));
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             Streams.pipeAll(decryptionStream, outputStream);

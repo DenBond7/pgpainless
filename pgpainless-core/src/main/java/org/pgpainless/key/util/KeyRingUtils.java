@@ -1,36 +1,34 @@
-/*
- * Copyright 2020 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2020 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.key.util;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import javax.annotation.Nonnull;
 
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPKeyRing;
 import org.bouncycastle.openpgp.PGPPrivateKey;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
+import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
 import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
-import org.bouncycastle.openpgp.operator.PBESecretKeyDecryptor;
+import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
+import org.pgpainless.key.protection.UnlockSecretKey;
 
-public class KeyRingUtils {
+public final class KeyRingUtils {
+
+    private KeyRingUtils() {
+
+    }
 
     /**
      * Return the primary {@link PGPSecretKey} from the provided {@link PGPSecretKeyRing}.
@@ -136,8 +134,24 @@ public class KeyRingUtils {
      * @throws PGPException if something goes wrong (eg. wrong passphrase)
      */
     public static PGPPrivateKey unlockSecretKey(PGPSecretKey secretKey, SecretKeyRingProtector protector) throws PGPException {
-        PBESecretKeyDecryptor secretKeyDecryptor = protector.getDecryptor(secretKey.getKeyID());
-        PGPPrivateKey privateKey = secretKey.extractPrivateKey(secretKeyDecryptor);
-        return privateKey;
+        return UnlockSecretKey.unlockSecretKey(secretKey, protector);
+    }
+
+    /*
+        PGPXxxKeyRing -> PGPXxxKeyRingCollection
+         */
+    public static PGPPublicKeyRingCollection keyRingsToKeyRingCollection(@Nonnull PGPPublicKeyRing... rings)
+            throws IOException, PGPException {
+        return new PGPPublicKeyRingCollection(Arrays.asList(rings));
+    }
+
+    public static PGPSecretKeyRingCollection keyRingsToKeyRingCollection(@Nonnull PGPSecretKeyRing... rings)
+            throws IOException, PGPException {
+        return new PGPSecretKeyRingCollection(Arrays.asList(rings));
+    }
+
+    public static boolean keyRingContainsKeyWithId(@Nonnull PGPPublicKeyRing ring,
+                                                   long keyId) {
+        return ring.getPublicKey(keyId) != null;
     }
 }

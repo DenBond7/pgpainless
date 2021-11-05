@@ -1,27 +1,12 @@
-/*
- * Copyright 2020 Paul Schaub.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// SPDX-FileCopyrightText: 2020 Paul Schaub <vanitasvitae@fsfe.org>
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package org.pgpainless.implementation;
 
-import java.io.IOException;
 import java.security.KeyPair;
-import java.security.NoSuchAlgorithmException;
-import java.security.spec.InvalidKeySpecException;
 import java.util.Date;
 
-import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPKeyPair;
 import org.bouncycastle.openpgp.PGPPrivateKey;
@@ -46,18 +31,16 @@ import org.pgpainless.util.Passphrase;
 
 public abstract class ImplementationFactory {
 
-    enum FactoryType {
-        bc,
-        jce
-    }
-
-    private static ImplementationFactory FACTORY_IMPLEMENTATION = new BcImplementationFactory();
+    private static ImplementationFactory FACTORY_IMPLEMENTATION;
 
     public static void setFactoryImplementation(ImplementationFactory implementation) {
         FACTORY_IMPLEMENTATION = implementation;
     }
 
     public static ImplementationFactory getInstance() {
+        if (FACTORY_IMPLEMENTATION == null) {
+            FACTORY_IMPLEMENTATION = new BcImplementationFactory();
+        }
         return FACTORY_IMPLEMENTATION;
     }
 
@@ -112,10 +95,12 @@ public abstract class ImplementationFactory {
 
     public abstract PGPKeyPair getPGPKeyPair(PublicKeyAlgorithm algorithm, KeyPair keyPair, Date creationDate) throws PGPException;
 
-    public abstract PGPKeyPair getPGPKeyPair(PublicKeyAlgorithm algorithm, AsymmetricCipherKeyPair keyPair, Date creationDate)
-            throws PGPException, NoSuchAlgorithmException, IOException, InvalidKeySpecException;
-
     public abstract PBESecretKeyEncryptor getPBESecretKeyEncryptor(SymmetricKeyAlgorithm encryptionAlgorithm,
                                                                    HashAlgorithm hashAlgorithm, int s2kCount,
                                                                    Passphrase passphrase) throws PGPException;
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName();
+    }
 }
