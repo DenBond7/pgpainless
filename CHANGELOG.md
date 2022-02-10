@@ -5,6 +5,10 @@ SPDX-License-Identifier: CC0-1.0
 
 # PGPainless Changelog
 
+## 1.1.0-SNAPSHOT
+- `pgpainless-sop`: Update `sop-java` to version 1.2.0
+  - Treat passwords and session keys as indirect parameters
+
 ## 1.0.2
 - Update SOP implementation to specification revision 03
 - Move `sop-java` and `sop-java-picocli` modules to [its own repository](https://github.com/pgpainless/sop-java)
