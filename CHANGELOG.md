@@ -5,6 +5,75 @@ SPDX-License-Identifier: CC0-1.0
 
 # PGPainless Changelog
 
+
+## 1.2.0
+- Improve exception hierarchy for key-related exceptions
+  - See [PR](https://github.com/pgpainless/pgpainless/pull/261) for more information on how to migrate.
+- Bump Bouncy Castle to `1.71`
+  - Switch from `bcpg-jdk15on:1.70` to `bcpg-jdk15to18:1.71`
+  - Switch from `bcprov-jdk15on:1.70` to `bcprov-jdk15to18:1.71`
+- Implement merging of certificate copies
+  - can be used to implement updating certificates from key servers
+- Fix `KeyRingUtils.keysPlusPublicKey()`
+- Add support for adding `PolicyURI` and `RegularExpression` signature subpackets on signatures
+
+## 1.1.5
+- SOP encrypt: match signature type when using `encrypt --as=` option
+- `ProducerOptions.setEncoding()`: The encoding is henceforth only considered metadata and will no longer trigger CRLF encoding.
+  - This fixes broken signature generation for mismatching (`StreamEncoding`,`DocumentSignatureType`) tuples.
+  - Applications that rely on CRLF-encoding can request PGPainless to apply this encoding by calling `ProducerOptions.applyCRLFEncoding(true)`.
+- Rename `KeyRingUtils.removeSecretKey()` to `stripSecretKey()`.
+- Add handy `SignatureOptions.addSignature()` method.
+- Fix `ClassCastException` when evaluating a certificate with third party signatures. Thanks @p-barabas for the initial report and bug fix!
+
+## 1.1.4
+- Add utility method `KeyRingUtils.removeSecretKey()` to remove secret key part from key ring
+  - This can come in handy when using primary keys stored offline
+- Add `EncryptionResult.isEncryptedFor(certificate)`
+- `ArmorUtils.toAsciiArmoredString()` methods now print out primary user-id and brief information about further user-ids (thanks @bratkartoffel for the patch)
+- Methods of `KeyRingUtils` and `ArmorUtils` classes are now annotated with `@Nonnull/@Nullable`
+- Enums `fromId(code)` methods are now annotated with `@Nullable` and there are now `requireFromId(code)` counterparts which are `@Nonnull`.
+- `ProducerOptions.setForYourEyesOnly()` is now deprecated (reason is deprecation in the 
+- [crypto-refresh-05](https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-05.html#name-special-filename-_console-d) document)
+- Add `SessionKey.toString()`
+- Partially fix generation of malformed signature packets when using different combinations of `StreamEncoding` and `DocumentSignatureType` values
+  - Unfortunately PGPainless still produces broken signatures when using either `StreamEncoding.TEXT` or `StreamEncoding.UTF8` in combination with `DocumentSignatureType.BINARY_DOCUMENT`.
+- Deprecate `ProducerOptions.setEncoding(StreamEncoding)`
+  - Will be removed in a future release
+- Remove `StreamEncoding.MIME` (was removed from the standard)
+
+## 1.1.3
+- Make `SigningOptions.getSigningMethods()` part of internal API
+- Fix crash when trying to do verification of unmatched `SignersUserId` signature subpacket
+  - For now, verification of `SignersUserId` is disabled but can be enabled via `Policy.setSignerUserIdValidationLevel()`
+- Initial support for `OpenPgpV5Fingerprint`
+- Add `OpenPgpFingerprint.parse(string)`
+- Security: Fix `KeyRingInfo.getValidAndExpiredUserIds()` accidentally including unbound user-ids
+
+## 1.0.5
+- Security: Fix `KeyRingInfo.getValidAndExpiredUserIds()` accidentally including unbound user-ids
+
+## 1.1.2
+- Fix `keyRingInfo.getEmailAddresses()` incorrectly matching some mail addresses (thanks @bratkartoffel for reporting and initial patch proposal)
+- Fix generic type of `CertificationSubpackets.Callback`
+- Add `KeyRingInfo.isUsableForEncryption()`
+- Add `PGPainless.inspectKeyRing(key, date)`
+- Allow custom key creation dates during key generation
+- Reject subkeys with bindings that predate key generation
+- `EncryptionOptions.addRecipient()`: Transform `NoSuchElementException` into `IllegalArgumentException` with proper error message
+- Fix `ClassCastException` by preventing accidental verification of 3rd-party-issued user-id revocation with primary key.
+- Fix `NullPointerException` when trying to verify malformed signature
+
+## 1.1.1
+- Add `producerOptions.setComment(string)` to allow adding ASCII armor comments when creating OpenPGP messages (thanks @ferenc-hechler)
+- Simplify consumption of cleartext-signed data
+- Change default criticality of signature subpackets
+  - Issuer Fingerprint: critical -> non-critical
+  - Revocable: non-critical -> critical
+  - Issuer KeyID: critical -> non-critical
+  - Preferred Algorithms: critical -> non-critical
+  - Revocation Reason: critical -> non-critical
+
 ## 1.1.0
 - `pgpainless-sop`: Update `sop-java` to version 1.2.0
     - Treat passwords and session keys as indirect parameters

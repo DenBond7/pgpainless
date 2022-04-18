@@ -36,7 +36,7 @@ import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.KeyFlag;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
-import org.pgpainless.exception.KeyValidationError;
+import org.pgpainless.exception.KeyException;
 import org.pgpainless.key.OpenPgpFingerprint;
 import org.pgpainless.key.SubkeyIdentifier;
 import org.pgpainless.key.util.RevocationAttributes;
@@ -50,7 +50,8 @@ import org.pgpainless.signature.subpackets.SignatureSubpacketsUtil;
  */
 public class KeyRingInfo {
 
-    private static final Pattern PATTERN_EMAIL = Pattern.compile("[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}");
+    private static final Pattern PATTERN_EMAIL_FROM_USERID = Pattern.compile("<([a-zA-Z0-9_!#$%&'*+/=?`{|}~^.-]+@[a-zA-Z0-9.-]+)>");
+    private static final Pattern PATTERN_EMAIL_EXPLICIT = Pattern.compile("^([a-zA-Z0-9_!#$%&'*+/=?`{|}~^.-]+@[a-zA-Z0-9.-]+)$");
 
     private final PGPKeyRing keys;
     private final Signatures signatures;
@@ -346,6 +347,11 @@ public class KeyRingInfo {
             PGPSignature certification = signatures.userIdCertifications.get(userId);
             PGPSignature revocation = signatures.userIdRevocations.get(userId);
 
+            // Unbound user-id
+            if (certification == null) {
+                continue;
+            }
+
             // Not revoked -> valid
             if (revocation == null) {
                 probablyExpired.add(userId);
@@ -421,9 +427,14 @@ public class KeyRingInfo {
         List<String> userIds = getUserIds();
         List<String> emails = new ArrayList<>();
         for (String userId : userIds) {
-            Matcher matcher = PATTERN_EMAIL.matcher(userId);
+            Matcher matcher = PATTERN_EMAIL_FROM_USERID.matcher(userId);
             if (matcher.find()) {
-                emails.add(matcher.group());
+                emails.add(matcher.group(1));
+            } else {
+                matcher = PATTERN_EMAIL_EXPLICIT.matcher(userId);
+                if (matcher.find()) {
+                    emails.add(matcher.group(1));
+                }
             }
         }
         return emails;
@@ -556,8 +567,9 @@ public class KeyRingInfo {
      *
      * @return public key algorithm
      */
+    @Nonnull
     public PublicKeyAlgorithm getAlgorithm() {
-        return PublicKeyAlgorithm.fromId(getPublicKey().getAlgorithm());
+        return PublicKeyAlgorithm.requireFromId(getPublicKey().getAlgorithm());
     }
 
     /**
@@ -937,7 +949,12 @@ public class KeyRingInfo {
      */
     public @Nonnull List<PGPPublicKey> getEncryptionSubkeys(String userId, EncryptionPurpose purpose) {
         if (userId != null && !isUserIdValid(userId)) {
-            throw new KeyValidationError(userId, getLatestUserIdCertification(userId), getUserIdRevocation(userId));
+            throw new KeyException.UnboundUserIdException(
+                    OpenPgpFingerprint.of(keys),
+                    userId,
+                    getLatestUserIdCertification(userId),
+                    getUserIdRevocation(userId)
+            );
         }
 
         return getEncryptionSubkeys(purpose);
@@ -1001,6 +1018,25 @@ public class KeyRingInfo {
 
     public Set<CompressionAlgorithm> getPreferredCompressionAlgorithms(long keyId) {
         return new KeyAccessor.SubKey(this, new SubkeyIdentifier(keys, keyId)).getPreferredCompressionAlgorithms();
+    }
+
+    /**
+     * Returns true, if the certificate has at least one usable encryption subkey.
+     *
+     * @return true if usable for encryption
+     */
+    public boolean isUsableForEncryption() {
+        return isUsableForEncryption(EncryptionPurpose.ANY);
+    }
+
+    /**
+     * Returns true, if the certificate has at least one usable encryption subkey for the given purpose.
+     *
+     * @param purpose purpose of encryption
+     * @return true if usable for encryption
+     */
+    public boolean isUsableForEncryption(@Nonnull EncryptionPurpose purpose) {
+        return !getEncryptionSubkeys(purpose).isEmpty();
     }
 
     private KeyAccessor getKeyAccessor(@Nullable String userId, long keyID) {

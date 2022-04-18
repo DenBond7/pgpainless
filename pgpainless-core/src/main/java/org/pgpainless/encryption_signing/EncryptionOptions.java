@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 
 import javax.annotation.Nonnull;
@@ -22,6 +23,7 @@ import org.bouncycastle.openpgp.operator.PBEKeyEncryptionMethodGenerator;
 import org.bouncycastle.openpgp.operator.PGPKeyEncryptionMethodGenerator;
 import org.pgpainless.algorithm.EncryptionPurpose;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
+import org.pgpainless.exception.KeyException;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.OpenPgpFingerprint;
 import org.pgpainless.key.SubkeyIdentifier;
@@ -153,7 +155,7 @@ public class EncryptionOptions {
         List<PGPPublicKey> encryptionSubkeys = encryptionKeySelectionStrategy
                 .selectEncryptionSubkeys(info.getEncryptionSubkeys(userId, purpose));
         if (encryptionSubkeys.isEmpty()) {
-            throw new IllegalArgumentException("Key has no suitable encryption subkeys.");
+            throw new KeyException.UnacceptableEncryptionKeyException(OpenPgpFingerprint.of(key));
         }
 
         for (PGPPublicKey encryptionSubkey : encryptionSubkeys) {
@@ -184,15 +186,24 @@ public class EncryptionOptions {
      * @return this
      */
     public EncryptionOptions addRecipient(PGPPublicKeyRing key, EncryptionKeySelector encryptionKeySelectionStrategy) {
-        KeyRingInfo info = new KeyRingInfo(key, new Date());
-        Date primaryKeyExpiration = info.getPrimaryKeyExpirationDate();
-        if (primaryKeyExpiration != null && primaryKeyExpiration.before(new Date())) {
-            throw new IllegalArgumentException("Provided key " + OpenPgpFingerprint.of(key) + " is expired: " + primaryKeyExpiration);
+        Date evaluationDate = new Date();
+        KeyRingInfo info;
+        info = new KeyRingInfo(key, evaluationDate);
+
+        Date primaryKeyExpiration;
+        try {
+            primaryKeyExpiration = info.getPrimaryKeyExpirationDate();
+        } catch (NoSuchElementException e) {
+            throw new KeyException.UnacceptableSelfSignatureException(OpenPgpFingerprint.of(key));
         }
+        if (primaryKeyExpiration != null && primaryKeyExpiration.before(evaluationDate)) {
+            throw new KeyException.ExpiredKeyException(OpenPgpFingerprint.of(key), primaryKeyExpiration);
+        }
+
         List<PGPPublicKey> encryptionSubkeys = encryptionKeySelectionStrategy
                 .selectEncryptionSubkeys(info.getEncryptionSubkeys(purpose));
         if (encryptionSubkeys.isEmpty()) {
-            throw new IllegalArgumentException("Key has no suitable encryption subkeys.");
+            throw new KeyException.UnacceptableEncryptionKeyException(OpenPgpFingerprint.of(key));
         }
 
         for (PGPPublicKey encryptionSubkey : encryptionSubkeys) {
@@ -272,6 +283,7 @@ public class EncryptionOptions {
      * If the algorithm is not overridden, a suitable algorithm will be negotiated.
      *
      * @param encryptionAlgorithm encryption algorithm override
+     * @return this
      */
     public EncryptionOptions overrideEncryptionAlgorithm(SymmetricKeyAlgorithm encryptionAlgorithm) {
         if (encryptionAlgorithm == SymmetricKeyAlgorithm.NULL) {

@@ -257,7 +257,10 @@ public final class SignatureSubpacketsUtil {
         PreferredAlgorithms preferences = getPreferredSymmetricAlgorithms(signature);
         if (preferences != null) {
             for (int code : preferences.getPreferences()) {
-                algorithms.add(SymmetricKeyAlgorithm.fromId(code));
+                SymmetricKeyAlgorithm algorithm = SymmetricKeyAlgorithm.fromId(code);
+                if (algorithm != null) {
+                    algorithms.add(algorithm);
+                }
             }
         }
         return algorithms;
@@ -286,7 +289,10 @@ public final class SignatureSubpacketsUtil {
         PreferredAlgorithms preferences = getPreferredHashAlgorithms(signature);
         if (preferences != null) {
             for (int code : preferences.getPreferences()) {
-                algorithms.add(HashAlgorithm.fromId(code));
+                HashAlgorithm algorithm = HashAlgorithm.fromId(code);
+                if (algorithm != null) {
+                    algorithms.add(algorithm);
+                }
             }
         }
         return algorithms;
@@ -315,7 +321,10 @@ public final class SignatureSubpacketsUtil {
         PreferredAlgorithms preferences = getPreferredCompressionAlgorithms(signature);
         if (preferences != null) {
             for (int code : preferences.getPreferences()) {
-                algorithms.add(CompressionAlgorithm.fromId(code));
+                CompressionAlgorithm algorithm = CompressionAlgorithm.fromId(code);
+                if (algorithm != null) {
+                    algorithms.add(algorithm);
+                }
             }
         }
         return algorithms;
@@ -429,7 +438,7 @@ public final class SignatureSubpacketsUtil {
     /**
      * Return the notation data subpackets from the signatures unhashed area.
      *
-     * @param signature signture
+     * @param signature signature
      * @return unhashed notations
      */
     public static List<NotationData> getUnhashedNotationData(PGPSignature signature) {
@@ -497,6 +506,8 @@ public final class SignatureSubpacketsUtil {
      *
      * @param signature signature
      * @return embedded signature
+     *
+     * @throws PGPException in case the embedded signatures cannot be parsed
      */
     public static PGPSignatureList getEmbeddedSignature(PGPSignature signature) throws PGPException {
         PGPSignatureList hashed = signature.getHashedSubPackets().getEmbeddedSignatures();
@@ -567,7 +578,7 @@ public final class SignatureSubpacketsUtil {
     }
 
     /**
-     * Return the last occurence of a subpacket type in the given signature subpacket vector.
+     * Return the last occurrence of a subpacket type in the given signature subpacket vector.
      *
      * @param vector subpacket vector (hashed/unhashed)
      * @param type subpacket type
@@ -575,21 +586,16 @@ public final class SignatureSubpacketsUtil {
      * @return last occurrence of the subpacket in the vector
      */
     public static <P extends org.bouncycastle.bcpg.SignatureSubpacket> P getSignatureSubpacket(PGPSignatureSubpacketVector vector, SignatureSubpacket type) {
+        if (vector == null) {
+            // Almost never happens, but may be caused by broken signatures.
+            return null;
+        }
         org.bouncycastle.bcpg.SignatureSubpacket[] allPackets = vector.getSubpackets(type.getCode());
         if (allPackets.length == 0) {
             return null;
         }
 
         org.bouncycastle.bcpg.SignatureSubpacket last = allPackets[allPackets.length - 1];
-
-        if (type == SignatureSubpacket.revocationKey) {
-            // RevocationKey subpackets are not castable for some reason
-            // See https://github.com/bcgit/bc-java/pull/1085 for an upstreamed fix
-            // We need to manually construct the new object for now.
-            // TODO: Remove workaround when BC 1.71 is released (and has our fix)
-            return (P) new RevocationKey(last.isCritical(), last.isLongLength(), last.getData());
-        }
-
         return (P) last;
     }
 
@@ -623,6 +629,12 @@ public final class SignatureSubpacketsUtil {
         }
     }
 
+    /**
+     * Make sure that a key of the given {@link PublicKeyAlgorithm} is able to carry the given key flags.
+     *
+     * @param algorithm key algorithm
+     * @param flags key flags
+     */
     public static void assureKeyCanCarryFlags(PublicKeyAlgorithm algorithm, KeyFlag... flags) {
         final int mask = KeyFlag.toBitmask(flags);
 

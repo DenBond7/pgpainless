@@ -12,8 +12,10 @@ import org.bouncycastle.bcpg.sig.IntendedRecipientFingerprint;
 import org.bouncycastle.bcpg.sig.KeyExpirationTime;
 import org.bouncycastle.bcpg.sig.KeyFlags;
 import org.bouncycastle.bcpg.sig.NotationData;
+import org.bouncycastle.bcpg.sig.PolicyURI;
 import org.bouncycastle.bcpg.sig.PreferredAlgorithms;
 import org.bouncycastle.bcpg.sig.PrimaryUserID;
+import org.bouncycastle.bcpg.sig.RegularExpression;
 import org.bouncycastle.bcpg.sig.Revocable;
 import org.bouncycastle.bcpg.sig.RevocationKey;
 import org.bouncycastle.bcpg.sig.RevocationReason;
@@ -33,7 +35,7 @@ public class SignatureSubpacketsHelper {
 
     public static SignatureSubpackets applyFrom(PGPSignatureSubpacketVector vector, SignatureSubpackets subpackets) {
         for (SignatureSubpacket subpacket : vector.toArray()) {
-            org.pgpainless.algorithm.SignatureSubpacket type = org.pgpainless.algorithm.SignatureSubpacket.fromCode(subpacket.getType());
+            org.pgpainless.algorithm.SignatureSubpacket type = org.pgpainless.algorithm.SignatureSubpacket.requireFromCode(subpacket.getType());
             switch (type) {
                 case signatureCreationTime:
                 case issuerKeyId:
@@ -102,8 +104,8 @@ public class SignatureSubpacketsHelper {
                 case signatureTarget:
                     SignatureTarget target = (SignatureTarget) subpacket;
                     subpackets.setSignatureTarget(target.isCritical(),
-                            PublicKeyAlgorithm.fromId(target.getPublicKeyAlgorithm()),
-                            HashAlgorithm.fromId(target.getHashAlgorithm()),
+                            PublicKeyAlgorithm.requireFromId(target.getPublicKeyAlgorithm()),
+                            HashAlgorithm.requireFromId(target.getHashAlgorithm()),
                             target.getHashData());
                     break;
                 case embeddedSignature:
@@ -114,11 +116,17 @@ public class SignatureSubpacketsHelper {
                     IntendedRecipientFingerprint intendedRecipientFingerprint = (IntendedRecipientFingerprint) subpacket;
                     subpackets.addIntendedRecipientFingerprint(intendedRecipientFingerprint);
                     break;
-
+                case policyUrl:
+                    PolicyURI policyURI = (PolicyURI) subpacket;
+                    subpackets.setPolicyUrl(policyURI);
+                    break;
                 case regularExpression:
+                    RegularExpression regex = (RegularExpression) subpacket;
+                    subpackets.setRegularExpression(regex);
+                    break;
+
                 case keyServerPreferences:
                 case preferredKeyServers:
-                case policyUrl:
                 case placeholder:
                 case preferredAEADAlgorithms:
                 case attestedCertification:
@@ -135,6 +143,8 @@ public class SignatureSubpacketsHelper {
         addSubpacket(generator, subpackets.getSignatureCreationTimeSubpacket());
         addSubpacket(generator, subpackets.getSignatureExpirationTimeSubpacket());
         addSubpacket(generator, subpackets.getExportableSubpacket());
+        addSubpacket(generator, subpackets.getPolicyURI());
+        addSubpacket(generator, subpackets.getRegularExpression());
         for (NotationData notationData : subpackets.getNotationDataSubpackets()) {
             addSubpacket(generator, notationData);
         }

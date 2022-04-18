@@ -5,6 +5,7 @@
 package org.pgpainless.signature.subpackets;
 
 import java.io.IOException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -26,8 +27,10 @@ import org.bouncycastle.bcpg.sig.IssuerKeyID;
 import org.bouncycastle.bcpg.sig.KeyExpirationTime;
 import org.bouncycastle.bcpg.sig.KeyFlags;
 import org.bouncycastle.bcpg.sig.NotationData;
+import org.bouncycastle.bcpg.sig.PolicyURI;
 import org.bouncycastle.bcpg.sig.PreferredAlgorithms;
 import org.bouncycastle.bcpg.sig.PrimaryUserID;
+import org.bouncycastle.bcpg.sig.RegularExpression;
 import org.bouncycastle.bcpg.sig.Revocable;
 import org.bouncycastle.bcpg.sig.RevocationKey;
 import org.bouncycastle.bcpg.sig.RevocationReason;
@@ -68,7 +71,9 @@ public class SignatureSubpackets
     private final List<EmbeddedSignature> embeddedSignatureList = new ArrayList<>();
     private SignerUserID signerUserId;
     private KeyExpirationTime keyExpirationTime;
+    private PolicyURI policyURI;
     private PrimaryUserID primaryUserId;
+    private RegularExpression regularExpression;
     private Revocable revocable;
     private RevocationReason revocationReason;
     private final List<SignatureSubpacket> residualSubpackets = new ArrayList<>();
@@ -116,7 +121,7 @@ public class SignatureSubpackets
 
     @Override
     public SignatureSubpackets setIssuerKeyId(long keyId) {
-        return setIssuerKeyId(true, keyId);
+        return setIssuerKeyId(false, keyId);
     }
 
     @Override
@@ -136,7 +141,7 @@ public class SignatureSubpackets
 
     @Override
     public SignatureSubpackets setIssuerFingerprint(@Nonnull PGPPublicKey key) {
-        return setIssuerFingerprint(true, key);
+        return setIssuerFingerprint(false, key);
     }
 
     @Override
@@ -303,7 +308,7 @@ public class SignatureSubpackets
 
     @Override
     public SignatureSubpackets setPreferredCompressionAlgorithms(Set<CompressionAlgorithm> algorithms) {
-        return setPreferredCompressionAlgorithms(true, algorithms);
+        return setPreferredCompressionAlgorithms(false, algorithms);
     }
 
     @Override
@@ -342,7 +347,7 @@ public class SignatureSubpackets
 
     @Override
     public SignatureSubpackets setPreferredSymmetricKeyAlgorithms(Set<SymmetricKeyAlgorithm> algorithms) {
-        return setPreferredSymmetricKeyAlgorithms(true, algorithms);
+        return setPreferredSymmetricKeyAlgorithms(false, algorithms);
     }
 
     @Override
@@ -381,7 +386,7 @@ public class SignatureSubpackets
 
     @Override
     public SignatureSubpackets setPreferredHashAlgorithms(Set<HashAlgorithm> algorithms) {
-        return setPreferredHashAlgorithms(true, algorithms);
+        return setPreferredHashAlgorithms(false, algorithms);
     }
 
     @Override
@@ -466,6 +471,11 @@ public class SignatureSubpackets
     }
 
     @Override
+    public SignatureSubpackets setExportable(boolean exportable) {
+        return setExportable(true, exportable);
+    }
+
+    @Override
     public SignatureSubpackets setExportable(boolean isCritical, boolean isExportable) {
         return setExportable(new Exportable(isCritical, isExportable));
     }
@@ -478,6 +488,51 @@ public class SignatureSubpackets
 
     public Exportable getExportableSubpacket() {
         return exportable;
+    }
+
+    @Override
+    public BaseSignatureSubpackets setPolicyUrl(@Nonnull URL policyUrl) {
+        return setPolicyUrl(false, policyUrl);
+    }
+
+    @Override
+    public BaseSignatureSubpackets setPolicyUrl(boolean isCritical, @Nonnull URL policyUrl) {
+        return setPolicyUrl(new PolicyURI(isCritical, policyUrl.toString()));
+    }
+
+    @Override
+    public BaseSignatureSubpackets setPolicyUrl(@Nullable PolicyURI policyUrl) {
+        this.policyURI = policyUrl;
+        return this;
+    }
+
+    public PolicyURI getPolicyURI() {
+        return policyURI;
+    }
+
+    @Override
+    public BaseSignatureSubpackets setRegularExpression(@Nonnull String regex) {
+        return setRegularExpression(false, regex);
+    }
+
+    @Override
+    public BaseSignatureSubpackets setRegularExpression(boolean isCritical, @Nonnull String regex) {
+        return setRegularExpression(new RegularExpression(isCritical, regex));
+    }
+
+    @Override
+    public BaseSignatureSubpackets setRegularExpression(@Nullable RegularExpression regex) {
+        this.regularExpression = regex;
+        return this;
+    }
+
+    public RegularExpression getRegularExpression() {
+        return regularExpression;
+    }
+
+    @Override
+    public SignatureSubpackets setRevocable(boolean revocable) {
+        return setRevocable(true, revocable);
     }
 
     @Override
@@ -530,7 +585,7 @@ public class SignatureSubpackets
 
     @Override
     public SignatureSubpackets setRevocationReason(RevocationAttributes revocationAttributes) {
-        return setRevocationReason(true, revocationAttributes);
+        return setRevocationReason(false, revocationAttributes);
     }
 
     @Override

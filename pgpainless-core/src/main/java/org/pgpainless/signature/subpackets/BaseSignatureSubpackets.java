@@ -5,6 +5,7 @@
 package org.pgpainless.signature.subpackets;
 
 import java.io.IOException;
+import java.net.URL;
 import java.util.Date;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -15,6 +16,8 @@ import org.bouncycastle.bcpg.sig.IntendedRecipientFingerprint;
 import org.bouncycastle.bcpg.sig.IssuerFingerprint;
 import org.bouncycastle.bcpg.sig.IssuerKeyID;
 import org.bouncycastle.bcpg.sig.NotationData;
+import org.bouncycastle.bcpg.sig.PolicyURI;
+import org.bouncycastle.bcpg.sig.RegularExpression;
 import org.bouncycastle.bcpg.sig.Revocable;
 import org.bouncycastle.bcpg.sig.SignatureCreationTime;
 import org.bouncycastle.bcpg.sig.SignatureExpirationTime;
@@ -82,9 +85,25 @@ public interface BaseSignatureSubpackets {
 
     BaseSignatureSubpackets clearIntendedRecipientFingerprints();
 
+    BaseSignatureSubpackets setExportable(boolean isExportable);
+
     BaseSignatureSubpackets setExportable(boolean isCritical, boolean isExportable);
 
     BaseSignatureSubpackets setExportable(@Nullable Exportable exportable);
+
+    BaseSignatureSubpackets setPolicyUrl(@Nonnull URL policyUrl);
+
+    BaseSignatureSubpackets setPolicyUrl(boolean isCritical, @Nonnull URL policyUrl);
+
+    BaseSignatureSubpackets setPolicyUrl(@Nullable PolicyURI policyUrl);
+
+    BaseSignatureSubpackets setRegularExpression(@Nonnull String regex);
+
+    BaseSignatureSubpackets setRegularExpression(boolean isCritical, @Nonnull String regex);
+
+    BaseSignatureSubpackets setRegularExpression(@Nullable RegularExpression regex);
+
+    BaseSignatureSubpackets setRevocable(boolean revocable);
 
     BaseSignatureSubpackets setRevocable(boolean isCritical, boolean isRevocable);
 

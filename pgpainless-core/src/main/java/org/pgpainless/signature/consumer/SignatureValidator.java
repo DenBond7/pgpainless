@@ -9,6 +9,7 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.bouncycastle.bcpg.sig.KeyFlags;
@@ -92,7 +93,7 @@ public abstract class SignatureValidator {
         return new SignatureValidator() {
             @Override
             public void verify(PGPSignature signature) throws SignatureValidationException {
-                if (!PublicKeyAlgorithm.fromId(signature.getKeyAlgorithm()).isSigningCapable()) {
+                if (!PublicKeyAlgorithm.requireFromId(signature.getKeyAlgorithm()).isSigningCapable()) {
                     // subkey is not signing capable -> No need to process embedded sigs
                     return;
                 }
@@ -168,7 +169,7 @@ public abstract class SignatureValidator {
         return new SignatureValidator() {
             @Override
             public void verify(PGPSignature signature) throws SignatureValidationException {
-                PublicKeyAlgorithm algorithm = PublicKeyAlgorithm.fromId(signingKey.getAlgorithm());
+                PublicKeyAlgorithm algorithm = PublicKeyAlgorithm.requireFromId(signingKey.getAlgorithm());
                     int bitStrength = signingKey.getBitStrength();
                     if (bitStrength == -1) {
                         throw new SignatureValidationException("Cannot determine bit strength of signing key.");
@@ -191,11 +192,14 @@ public abstract class SignatureValidator {
         return new SignatureValidator() {
             @Override
             public void verify(PGPSignature signature) throws SignatureValidationException {
-                HashAlgorithm hashAlgorithm = HashAlgorithm.fromId(signature.getHashAlgorithm());
-                Policy.HashAlgorithmPolicy hashAlgorithmPolicy = getHashAlgorithmPolicyForSignature(signature, policy);
-
-                if (!hashAlgorithmPolicy.isAcceptable(signature.getHashAlgorithm())) {
-                    throw new SignatureValidationException("Signature uses unacceptable hash algorithm " + hashAlgorithm);
+                try {
+                    HashAlgorithm hashAlgorithm = HashAlgorithm.requireFromId(signature.getHashAlgorithm());
+                    Policy.HashAlgorithmPolicy hashAlgorithmPolicy = getHashAlgorithmPolicyForSignature(signature, policy);
+                    if (!hashAlgorithmPolicy.isAcceptable(signature.getHashAlgorithm())) {
+                        throw new SignatureValidationException("Signature uses unacceptable hash algorithm " + hashAlgorithm);
+                    }
+                } catch (NoSuchElementException e) {
+                    throw new SignatureValidationException("Signature uses unknown hash algorithm " + signature.getHashAlgorithm());
                 }
             }
         };
@@ -255,8 +259,8 @@ public abstract class SignatureValidator {
                 PGPSignatureSubpacketVector hashedSubpackets = signature.getHashedSubPackets();
                 for (int criticalTag : hashedSubpackets.getCriticalTags()) {
                     try {
-                        SignatureSubpacket.fromCode(criticalTag);
-                    } catch (IllegalArgumentException e) {
+                        SignatureSubpacket.requireFromCode(criticalTag);
+                    } catch (NoSuchElementException e) {
                         throw new SignatureValidationException("Signature contains unknown critical subpacket of type " + Long.toHexString(criticalTag));
                     }
                 }
@@ -355,6 +359,10 @@ public abstract class SignatureValidator {
         };
     }
 
+    public static SignatureValidator signatureDoesNotPredateSignee(PGPPublicKey signee) {
+        return signatureDoesNotPredateKeyCreation(signee);
+    }
+
     /**
      * Verify that a signature has a hashed creation time subpacket.
      *
@@ -379,6 +387,16 @@ public abstract class SignatureValidator {
      * @return validator
      */
     public static SignatureValidator signatureDoesNotPredateSigningKey(PGPPublicKey key) {
+        return signatureDoesNotPredateKeyCreation(key);
+    }
+
+    /**
+     * Verify that a signature does not predate the creation time of the given key.
+     *
+     * @param key key
+     * @return validator
+     */
+    public static SignatureValidator signatureDoesNotPredateKeyCreation(PGPPublicKey key) {
         return new SignatureValidator() {
             @Override
             public void verify(PGPSignature signature) throws SignatureValidationException {
@@ -386,7 +404,7 @@ public abstract class SignatureValidator {
                 Date signatureCreationTime = signature.getCreationTime();
 
                 if (keyCreationTime.after(signatureCreationTime)) {
-                    throw new SignatureValidationException("Signature predates its signing key (key creation: " + keyCreationTime + ", signature creation: " + signatureCreationTime + ")");
+                    throw new SignatureValidationException("Signature predates key (key creation: " + keyCreationTime + ", signature creation: " + signatureCreationTime + ")");
                 }
             }
         };
@@ -443,7 +461,7 @@ public abstract class SignatureValidator {
                     if (!valid) {
                         throw new SignatureValidationException("Signature is not correct.");
                     }
-                } catch (PGPException e) {
+                } catch (PGPException | ClassCastException e) {
                     throw new SignatureValidationException("Cannot verify subkey binding signature correctness", e);
                 }
             }
@@ -467,7 +485,7 @@ public abstract class SignatureValidator {
                     if (!valid) {
                         throw new SignatureValidationException("Primary Key Binding Signature is not correct.");
                     }
-                } catch (PGPException e) {
+                } catch (PGPException | ClassCastException e) {
                     throw new SignatureValidationException("Cannot verify primary key binding signature correctness", e);
                 }
             }
@@ -496,7 +514,7 @@ public abstract class SignatureValidator {
                     if (!valid) {
                         throw new SignatureValidationException("Signature is not correct.");
                     }
-                } catch (PGPException e) {
+                } catch (PGPException | ClassCastException e) {
                     throw new SignatureValidationException("Cannot verify direct-key signature correctness", e);
                 }
             }
@@ -559,7 +577,7 @@ public abstract class SignatureValidator {
                     if (!valid) {
                         throw new SignatureValidationException("Signature over user-id '" + userId + "' is not correct.");
                     }
-                } catch (PGPException e) {
+                } catch (PGPException | ClassCastException e) {
                     throw new SignatureValidationException("Cannot verify signature over user-id '" + userId + "'.", e);
                 }
             }
@@ -584,7 +602,7 @@ public abstract class SignatureValidator {
                     if (!valid) {
                         throw new SignatureValidationException("Signature over user-attribute vector is not correct.");
                     }
-                } catch (PGPException e) {
+                } catch (PGPException | ClassCastException e) {
                     throw new SignatureValidationException("Cannot verify signature over user-attribute vector.", e);
                 }
             }

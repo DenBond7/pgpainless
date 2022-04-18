@@ -72,6 +72,10 @@ public final class CertificateValidator {
         Iterator<PGPSignature> primaryKeyRevocationIterator = primaryKey.getSignaturesOfType(SignatureType.KEY_REVOCATION.getCode());
         while (primaryKeyRevocationIterator.hasNext()) {
             PGPSignature revocation = primaryKeyRevocationIterator.next();
+            if (revocation.getKeyID() != primaryKey.getKeyID()) {
+                // Revocation was not made by primary key, skip
+                // TODO: What about external revocation keys?
+            }
             try {
                 if (SignatureVerifier.verifyKeyRevocationSignature(revocation, primaryKey, policy, signature.getCreationTime())) {
                     directKeySignatures.add(revocation);
@@ -86,6 +90,10 @@ public final class CertificateValidator {
         Iterator<PGPSignature> keySignatures = primaryKey.getSignaturesOfType(SignatureType.DIRECT_KEY.getCode());
         while (keySignatures.hasNext()) {
             PGPSignature keySignature = keySignatures.next();
+            if (keySignature.getKeyID() != primaryKey.getKeyID()) {
+                // Signature was not made by primary key, skip
+                continue;
+            }
             try {
                 if (SignatureVerifier.verifyDirectKeySignature(keySignature, primaryKey, policy, signature.getCreationTime())) {
                     directKeySignatures.add(keySignature);
@@ -112,6 +120,10 @@ public final class CertificateValidator {
             Iterator<PGPSignature> userIdSigs = primaryKey.getSignaturesForID(userId);
             while (userIdSigs.hasNext()) {
                 PGPSignature userIdSig = userIdSigs.next();
+                if (userIdSig.getKeyID() != primaryKey.getKeyID()) {
+                    // Sig was made by external key, skip
+                    continue;
+                }
                 try {
                     if (SignatureVerifier.verifySignatureOverUserId(userId, userIdSig, primaryKey, policy, signature.getCreationTime())) {
                         signaturesOnUserId.add(userIdSig);
@@ -143,8 +155,14 @@ public final class CertificateValidator {
 
         // Specific signer user-id
         SignerUserID signerUserID = SignatureSubpacketsUtil.getSignerUserID(signature);
-        if (signerUserID != null) {
-            PGPSignature userIdSig = userIdSignatures.get(signerUserID.getID()).get(0);
+        if (signerUserID != null && policy.getSignerUserIdValidationLevel() == Policy.SignerUserIdValidationLevel.STRICT) {
+            List<PGPSignature> signerUserIdSigs = userIdSignatures.get(signerUserID.getID());
+            if (signerUserIdSigs == null || signerUserIdSigs.isEmpty()) {
+                throw new SignatureValidationException("Signature was allegedly made by user-id '" + signerUserID.getID() +
+                        "' but we have no valid signatures for that on the certificate.");
+            }
+
+            PGPSignature userIdSig = signerUserIdSigs.get(0);
             if (userIdSig.getSignatureType() == SignatureType.CERTIFICATION_REVOCATION.getCode()) {
                 throw new SignatureValidationException("Signature was made with user-id '" + signerUserID.getID() + "' which is revoked.");
             }
@@ -162,6 +180,10 @@ public final class CertificateValidator {
             Iterator<PGPSignature> bindingRevocations = signingSubkey.getSignaturesOfType(SignatureType.SUBKEY_REVOCATION.getCode());
             while (bindingRevocations.hasNext()) {
                 PGPSignature revocation = bindingRevocations.next();
+                if (revocation.getKeyID() != primaryKey.getKeyID()) {
+                    // Subkey Revocation was not made by primary key, skip
+                    continue;
+                }
                 try {
                     if (SignatureVerifier.verifySubkeyBindingRevocation(revocation, primaryKey, signingSubkey, policy, signature.getCreationTime())) {
                         subkeySigs.add(revocation);

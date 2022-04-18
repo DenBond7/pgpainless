@@ -60,7 +60,11 @@ public class EncryptImpl implements Encrypt {
                 signingOptions = SigningOptions.get();
             }
             try {
-                signingOptions.addInlineSignatures(SecretKeyRingProtector.unprotectedKeys(), keys, DocumentSignatureType.BINARY_DOCUMENT);
+                signingOptions.addInlineSignatures(
+                        SecretKeyRingProtector.unprotectedKeys(),
+                        keys,
+                        (encryptAs == EncryptAs.Binary ? DocumentSignatureType.BINARY_DOCUMENT : DocumentSignatureType.CANONICAL_TEXT_DOCUMENT)
+                );
             } catch (IllegalArgumentException e) {
                 throw new SOPGPException.KeyCannotSign();
             } catch (WrongPassphraseException e) {
@@ -121,10 +125,9 @@ public class EncryptImpl implements Encrypt {
     private static StreamEncoding encryptAsToStreamEncoding(EncryptAs encryptAs) {
         switch (encryptAs) {
             case Binary:
+            case MIME:
                 return StreamEncoding.BINARY;
             case Text:
-                return StreamEncoding.TEXT;
-            case MIME:
                 return StreamEncoding.UTF8;
         }
         throw new IllegalArgumentException("Invalid value encountered: " + encryptAs);

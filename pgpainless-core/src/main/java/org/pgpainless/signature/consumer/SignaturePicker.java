@@ -43,6 +43,8 @@ public final class SignaturePicker {
      * validationDate or if it is already expired.
      *
      * @param keyRing key ring
+     * @param policy policy
+     * @param validationDate date of signature validation
      * @return most recent, valid key revocation signature
      */
     public static PGPSignature pickCurrentRevocationSelfSignature(PGPKeyRing keyRing, Policy policy, Date validationDate) {
@@ -69,6 +71,7 @@ public final class SignaturePicker {
      * This method might return null, if there is no direct key self-signature which is valid at validationDate.
      *
      * @param keyRing key ring
+     * @param policy policy
      * @param validationDate validation date
      * @return direct-key self-signature
      */
@@ -83,6 +86,7 @@ public final class SignaturePicker {
      *
      * @param signingKey key that created the signature
      * @param signedKey key that carries the signature
+     * @param policy policy
      * @param validationDate validation date
      * @return direct key sig
      */
@@ -110,6 +114,7 @@ public final class SignaturePicker {
      * yet already effective direct-key signature will be returned.
      *
      * @param keyRing key ring
+     * @param policy policy
      * @param validationDate validation date
      * @return latest direct key signature
      */
@@ -126,6 +131,7 @@ public final class SignaturePicker {
      *
      * @param signingKey signing key (key that made the sig)
      * @param signedKey signed key (key that carries the sig)
+     * @param policy policy
      * @param validationDate date of validation
      * @return latest direct key sig
      */
@@ -160,6 +166,7 @@ public final class SignaturePicker {
      *
      * @param keyRing key ring
      * @param userId user-Id that gets revoked
+     * @param policy policy
      * @param validationDate validation date
      * @return revocation signature
      */
@@ -169,6 +176,11 @@ public final class SignaturePicker {
 
         PGPSignature latestUserIdRevocation = null;
         for (PGPSignature signature : signatures) {
+            PGPPublicKey signer = keyRing.getPublicKey(signature.getKeyID());
+            if (signer == null) {
+                // Signature made by external key. Skip.
+                continue;
+            }
             try {
                 SignatureVerifier.verifyUserIdRevocation(userId, signature, primaryKey, policy, validationDate);
             } catch (SignatureValidationException e) {
@@ -188,6 +200,7 @@ public final class SignaturePicker {
      *
      * @param keyRing keyring
      * @param userId userid
+     * @param policy policy
      * @param validationDate validation date
      * @return user-id certification
      */
@@ -196,10 +209,15 @@ public final class SignaturePicker {
 
         Iterator<PGPSignature> userIdSigIterator = primaryKey.getSignaturesForID(userId);
         List<PGPSignature> signatures = CollectionUtils.iteratorToList(userIdSigIterator);
+
         Collections.sort(signatures, new SignatureCreationDateComparator());
 
         PGPSignature mostRecentUserIdCertification = null;
         for (PGPSignature signature : signatures) {
+            if (primaryKey.getKeyID() != signature.getKeyID()) {
+                // Signature not made by primary key
+                continue;
+            }
             try {
                 SignatureVerifier.verifyUserIdCertification(userId, signature, primaryKey, policy, validationDate);
             } catch (SignatureValidationException e) {
@@ -220,6 +238,7 @@ public final class SignaturePicker {
      *
      * @param keyRing keyring
      * @param userId userid
+     * @param policy policy
      * @param validationDate validation date
      * @return user-id certification
      */
@@ -256,6 +275,7 @@ public final class SignaturePicker {
      *
      * @param keyRing keyring
      * @param subkey subkey
+     * @param policy policy
      * @param validationDate validation date
      * @return subkey revocation signature
      */
@@ -288,6 +308,7 @@ public final class SignaturePicker {
      *
      * @param keyRing key ring
      * @param subkey subkey
+     * @param policy policy
      * @param validationDate date of validation
      * @return most recent valid subkey binding signature
      */
@@ -321,6 +342,7 @@ public final class SignaturePicker {
      *
      * @param keyRing key ring
      * @param subkey subkey
+     * @param policy policy
      * @param validationDate validationDate
      * @return subkey binding signature
      */
@@ -337,6 +359,7 @@ public final class SignaturePicker {
             try {
                 SignatureValidator.signatureIsOfType(SignatureType.SUBKEY_BINDING).verify(signature);
                 SignatureValidator.signatureStructureIsAcceptable(primaryKey, policy).verify(signature);
+                SignatureValidator.signatureDoesNotPredateSignee(subkey).verify(signature);
                 SignatureValidator.signatureIsAlreadyEffective(validationDate).verify(signature);
                 // if the currently latest signature is not yet expired, check if the next candidate is not yet expired
                 if (latestSubkeyBinding != null && !SignatureUtils.isSignatureExpired(latestSubkeyBinding, validationDate)) {

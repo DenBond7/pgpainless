@@ -24,8 +24,7 @@ import org.pgpainless.algorithm.DocumentSignatureType;
 import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
 import org.pgpainless.algorithm.negotiation.HashAlgorithmNegotiator;
-import org.pgpainless.exception.KeyCannotSignException;
-import org.pgpainless.exception.KeyValidationError;
+import org.pgpainless.exception.KeyException;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.OpenPgpFingerprint;
 import org.pgpainless.key.SubkeyIdentifier;
@@ -58,6 +57,7 @@ public final class SigningOptions {
          * The resulting signature will be written into the message itself, together with a one-pass-signature packet.
          *
          * @param signatureGenerator signature generator
+         * @param hashAlgorithm hash algorithm used to generate the signature
          * @return inline signing method
          */
         public static SigningMethod inlineSignature(PGPSignatureGenerator signatureGenerator, HashAlgorithm hashAlgorithm) {
@@ -70,6 +70,7 @@ public final class SigningOptions {
          * to the signed message.
          *
          * @param signatureGenerator signature generator
+         * @param hashAlgorithm hash algorithm used to generate the signature
          * @return detached signing method
          */
         public static SigningMethod detachedSignature(PGPSignatureGenerator signatureGenerator, HashAlgorithm hashAlgorithm) {
@@ -97,19 +98,34 @@ public final class SigningOptions {
     }
 
     /**
+     * Sign the message using an inline signature made by the provided signing key.
+     *
+     * @param signingKeyProtector protector to unlock the signing key
+     * @param signingKey key ring containing the signing key
+     * @return this
+     *
+     * @throws PGPException if the key cannot be unlocked or a signing method cannot be created
+     */
+    public SigningOptions addSignature(SecretKeyRingProtector signingKeyProtector,
+                                       PGPSecretKeyRing signingKey)
+            throws PGPException {
+        return addInlineSignature(signingKeyProtector, signingKey, DocumentSignatureType.BINARY_DOCUMENT);
+    }
+
+    /**
      * Add inline signatures with all secret key rings in the provided secret key ring collection.
      *
      * @param secrectKeyDecryptor decryptor to unlock the signing secret keys
      * @param signingKeys collection of signing keys
      * @param signatureType type of signature (binary, canonical text)
      * @return this
-     * @throws KeyValidationError if something is wrong with any of the keys
+     * @throws KeyException if something is wrong with any of the keys
      * @throws PGPException if any of the keys cannot be unlocked or a signing method cannot be created
      */
     public SigningOptions addInlineSignatures(SecretKeyRingProtector secrectKeyDecryptor,
                                               Iterable<PGPSecretKeyRing> signingKeys,
                                               DocumentSignatureType signatureType)
-            throws KeyValidationError, PGPException {
+            throws KeyException, PGPException {
         for (PGPSecretKeyRing signingKey : signingKeys) {
             addInlineSignature(secrectKeyDecryptor, signingKey, signatureType);
         }
@@ -124,14 +140,14 @@ public final class SigningOptions {
      * @param secretKeyDecryptor decryptor to unlock the signing secret key
      * @param secretKey signing key
      * @param signatureType type of signature (binary, canonical text)
-     * @throws KeyValidationError if something is wrong with the key
+     * @throws KeyException if something is wrong with the key
      * @throws PGPException if the key cannot be unlocked or the signing method cannot be created
      * @return this
      */
     public SigningOptions addInlineSignature(SecretKeyRingProtector secretKeyDecryptor,
                                              PGPSecretKeyRing secretKey,
                                              DocumentSignatureType signatureType)
-            throws KeyValidationError, PGPException {
+            throws KeyException, PGPException {
         return addInlineSignature(secretKeyDecryptor, secretKey, null, signatureType);
     }
 
@@ -147,14 +163,14 @@ public final class SigningOptions {
      * @param userId user-id of the signer
      * @param signatureType signature type (binary, canonical text)
      * @return this
-     * @throws KeyValidationError if the key is invalid
+     * @throws KeyException if the key is invalid
      * @throws PGPException if the key cannot be unlocked or the signing method cannot be created
      */
     public SigningOptions addInlineSignature(SecretKeyRingProtector secretKeyDecryptor,
                                              PGPSecretKeyRing secretKey,
                                              String userId,
                                              DocumentSignatureType signatureType)
-            throws KeyValidationError, PGPException {
+            throws KeyException, PGPException {
         return addInlineSignature(secretKeyDecryptor, secretKey, userId, signatureType, null);
     }
 
@@ -171,7 +187,8 @@ public final class SigningOptions {
      * @param signatureType signature type (binary, canonical text)
      * @param subpacketsCallback callback to modify the hashed and unhashed subpackets of the signature
      * @return this
-     * @throws KeyValidationError if the key is invalid
+     * @throws KeyException
+     * if the key is invalid
      * @throws PGPException if the key cannot be unlocked or the signing method cannot be created
      */
     public SigningOptions addInlineSignature(SecretKeyRingProtector secretKeyDecryptor,
@@ -179,19 +196,27 @@ public final class SigningOptions {
                                              String userId,
                                              DocumentSignatureType signatureType,
                                              @Nullable BaseSignatureSubpackets.Callback subpacketsCallback)
-            throws KeyValidationError, PGPException {
+            throws KeyException, PGPException {
         KeyRingInfo keyRingInfo = new KeyRingInfo(secretKey, new Date());
         if (userId != null && !keyRingInfo.isUserIdValid(userId)) {
-            throw new KeyValidationError(userId, keyRingInfo.getLatestUserIdCertification(userId), keyRingInfo.getUserIdRevocation(userId));
+            throw new KeyException.UnboundUserIdException(
+                    OpenPgpFingerprint.of(secretKey),
+                    userId,
+                    keyRingInfo.getLatestUserIdCertification(userId),
+                    keyRingInfo.getUserIdRevocation(userId)
+            );
         }
 
         List<PGPPublicKey> signingPubKeys = keyRingInfo.getSigningSubkeys();
         if (signingPubKeys.isEmpty()) {
-            throw new KeyCannotSignException("Key " + OpenPgpFingerprint.of(secretKey) + " has no valid signing key.");
+            throw new KeyException.UnacceptableSigningKeyException(OpenPgpFingerprint.of(secretKey));
         }
 
         for (PGPPublicKey signingPubKey : signingPubKeys) {
             PGPSecretKey signingSecKey = secretKey.getSecretKey(signingPubKey.getKeyID());
+            if (signingSecKey == null) {
+                throw new KeyException.MissingSecretKeyException(OpenPgpFingerprint.of(secretKey), signingPubKey.getKeyID());
+            }
             PGPPrivateKey signingSubkey = UnlockSecretKey.unlockSecretKey(signingSecKey, secretKeyDecryptor);
             Set<HashAlgorithm> hashAlgorithms = userId != null ? keyRingInfo.getPreferredHashAlgorithms(userId)
                     : keyRingInfo.getPreferredHashAlgorithms(signingPubKey.getKeyID());
@@ -287,18 +312,23 @@ public final class SigningOptions {
             throws PGPException {
         KeyRingInfo keyRingInfo = new KeyRingInfo(secretKey, new Date());
         if (userId != null && !keyRingInfo.isUserIdValid(userId)) {
-            throw new KeyValidationError(userId, keyRingInfo.getLatestUserIdCertification(userId), keyRingInfo.getUserIdRevocation(userId));
+            throw new KeyException.UnboundUserIdException(
+                    OpenPgpFingerprint.of(secretKey),
+                    userId,
+                    keyRingInfo.getLatestUserIdCertification(userId),
+                    keyRingInfo.getUserIdRevocation(userId)
+            );
         }
 
         List<PGPPublicKey> signingPubKeys = keyRingInfo.getSigningSubkeys();
         if (signingPubKeys.isEmpty()) {
-            throw new KeyCannotSignException("Key has no valid signing key.");
+            throw new KeyException.UnacceptableSigningKeyException(OpenPgpFingerprint.of(secretKey));
         }
 
         for (PGPPublicKey signingPubKey : signingPubKeys) {
             PGPSecretKey signingSecKey = secretKey.getSecretKey(signingPubKey.getKeyID());
             if (signingSecKey == null) {
-                throw new PGPException("Missing secret key for signing key " + Long.toHexString(signingPubKey.getKeyID()));
+                throw new KeyException.MissingSecretKeyException(OpenPgpFingerprint.of(secretKey), signingPubKey.getKeyID());
             }
             PGPPrivateKey signingSubkey = signingSecKey.extractPrivateKey(
                     secretKeyDecryptor.getDecryptor(signingPubKey.getKeyID()));
@@ -320,11 +350,12 @@ public final class SigningOptions {
             throws PGPException {
         SubkeyIdentifier signingKeyIdentifier = new SubkeyIdentifier(secretKey, signingSubkey.getKeyID());
         PGPSecretKey signingSecretKey = secretKey.getSecretKey(signingSubkey.getKeyID());
-        PublicKeyAlgorithm publicKeyAlgorithm = PublicKeyAlgorithm.fromId(signingSecretKey.getPublicKey().getAlgorithm());
+        PublicKeyAlgorithm publicKeyAlgorithm = PublicKeyAlgorithm.requireFromId(signingSecretKey.getPublicKey().getAlgorithm());
         int bitStrength = secretKey.getPublicKey().getBitStrength();
         if (!PGPainless.getPolicy().getPublicKeyAlgorithmPolicy().isAcceptable(publicKeyAlgorithm, bitStrength)) {
-            throw new IllegalArgumentException("Public key algorithm policy violation: " +
-                    publicKeyAlgorithm + " with bit strength " + bitStrength + " is not acceptable.");
+            throw new KeyException.UnacceptableSigningKeyException(
+                    new KeyException.PublicKeyAlgorithmPolicyException(
+                            OpenPgpFingerprint.of(secretKey), signingSecretKey.getKeyID(), publicKeyAlgorithm, bitStrength));
         }
 
         PGPSignatureGenerator generator = createSignatureGenerator(signingSubkey, hashAlgorithm, signatureType);
@@ -385,7 +416,7 @@ public final class SigningOptions {
      *
      * @return signing methods
      */
-    public Map<SubkeyIdentifier, SigningMethod> getSigningMethods() {
+    Map<SubkeyIdentifier, SigningMethod> getSigningMethods() {
         return Collections.unmodifiableMap(signingMethods);
     }
 

@@ -19,12 +19,14 @@ public final class ProducerOptions {
     private final SigningOptions signingOptions;
     private String fileName = "";
     private Date modificationDate = PGPLiteralData.NOW;
-    private StreamEncoding streamEncoding = StreamEncoding.BINARY;
+    private StreamEncoding encodingField = StreamEncoding.BINARY;
+    private boolean applyCRLFEncoding = false;
     private boolean cleartextSigned = false;
 
     private CompressionAlgorithm compressionAlgorithmOverride = PGPainless.getPolicy().getCompressionAlgorithmPolicy()
             .defaultCompressionAlgorithm();
     private boolean asciiArmor = true;
+    private String comment = null;
 
     private ProducerOptions(EncryptionOptions encryptionOptions, SigningOptions signingOptions) {
         this.encryptionOptions = encryptionOptions;
@@ -107,6 +109,43 @@ public final class ProducerOptions {
         return asciiArmor;
     }
 
+    /**
+     * Set the comment header in ASCII armored output.
+     * The default value is null, which means no comment header is added.
+     * Multiline comments are possible using '\\n'.
+     *
+     * Note: If a default header comment is set using {@link org.pgpainless.util.ArmoredOutputStreamFactory#setComment(String)},
+     * then both comments will be written to the produced ASCII armor.
+     *
+     * @param comment comment header text
+     * @return builder
+     */
+    public ProducerOptions setComment(String comment) {
+        if (!asciiArmor) {
+            throw new IllegalArgumentException("Comment can only be set when ASCII armoring is enabled.");
+        }
+        this.comment = comment;
+        return this;
+    }
+
+    /**
+     * Return comment set for header in ascii armored output.
+     *
+     * @return comment
+     */
+    public String getComment() {
+        return comment;
+    }
+
+    /**
+     * Return whether a comment was set (!= null).
+     *
+     * @return comment
+     */
+    public boolean hasComment() {
+        return comment != null;
+    }
+
     public ProducerOptions setCleartextSigned() {
         if (signingOptions == null) {
             throw new IllegalArgumentException("Signing Options cannot be null if cleartext signing is enabled.");
@@ -155,7 +194,10 @@ public final class ProducerOptions {
      * Note: Therefore this method cannot be used simultaneously with {@link #setFileName(String)}.
      *
      * @return this
+     * @deprecated deprecated since at least crypto-refresh-05. It is not recommended using this special filename in
+     * newly generated literal data packets
      */
+    @Deprecated
     public ProducerOptions setForYourEyesOnly() {
         this.fileName = PGPLiteralData.CONSOLE;
         return this;
@@ -182,22 +224,53 @@ public final class ProducerOptions {
     }
 
     /**
-     * Set the format of the literal data packet.
+     * Set format metadata field of the literal data packet.
      * Defaults to {@link StreamEncoding#BINARY}.
+     *
+     * This does not change the encoding of the wrapped data itself.
+     * To apply CR/LF encoding to your input data before processing, use {@link #applyCRLFEncoding()} instead.
      *
      * @see <a href="https://datatracker.ietf.org/doc/html/rfc4880#section-5.9">RFC4880 §5.9. Literal Data Packet</a>
      *
      * @param encoding encoding
      * @return this
+     *
+     * @deprecated options other than the default value of {@link StreamEncoding#BINARY} are discouraged.
      */
+    @Deprecated
     public ProducerOptions setEncoding(@Nonnull StreamEncoding encoding) {
-        this.streamEncoding = encoding;
+        this.encodingField = encoding;
         return this;
     }
 
     public StreamEncoding getEncoding() {
-        return streamEncoding;
+        return encodingField;
     }
+
+    /**
+     * Apply special encoding of line endings to the input data.
+     * By default, this is disabled, which means that the data is not altered.
+     *
+     * Enabling it will change the line endings to CR/LF.
+     * Note: The encoding will not be reversed when decrypting, so applying CR/LF encoding will result in
+     * the identity "decrypt(encrypt(data)) == data == verify(sign(data))".
+     *
+     * @return this
+     */
+    public ProducerOptions applyCRLFEncoding() {
+        this.applyCRLFEncoding = true;
+        return this;
+    }
+
+    /**
+     * Return the input encoding that will be applied before signing / encryption.
+     *
+     * @return input encoding
+     */
+    public boolean isApplyCRLFEncoding() {
+        return applyCRLFEncoding;
+    }
+
     /**
      * Override which compression algorithm shall be used.
      *

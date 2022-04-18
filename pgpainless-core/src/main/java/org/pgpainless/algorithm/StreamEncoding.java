@@ -5,9 +5,13 @@
 package org.pgpainless.algorithm;
 
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.bouncycastle.openpgp.PGPLiteralData;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 /**
  * Enumeration of possible encoding formats of the content of the literal data packet.
@@ -31,17 +35,6 @@ public enum StreamEncoding {
      * Indication that the implementation believes that the literal data contains UTF-8 text.
      */
     UTF8(PGPLiteralData.UTF8),
-
-    /**
-     * The literal data packet contains a MIME message body part (RFC2045).
-     * Introduced in rfc4880-bis10.
-     *
-     * TODO: Replace 'm' with 'PGPLiteralData.MIME' once BC 1.71 gets released and contains our fix:
-     *  https://github.com/bcgit/bc-java/pull/1088
-     *
-     * @see <a href="https://tools.ietf.org/id/draft-ietf-openpgp-rfc4880bis-10.html#name-literal-data-packet-tag-11">RFC4880-bis10</a>
-     */
-    MIME('m'),
 
     /**
      * Early versions of PGP also defined a value of 'l' as a 'local' mode for machine-local conversions.
@@ -78,11 +71,31 @@ public enum StreamEncoding {
 
     /**
      * Return the {@link StreamEncoding} corresponding to the provided code identifier.
+     * If no matching encoding is found, return null.
      *
      * @param code identifier
      * @return encoding enum
      */
+    @Nullable
     public static StreamEncoding fromCode(int code) {
         return MAP.get((char) code);
+    }
+
+    /**
+     * Return the {@link StreamEncoding} corresponding to the provided code identifier.
+     * If no matching encoding is found, throw a {@link NoSuchElementException}.
+     *
+     * @param code identifier
+     * @return encoding enum
+     *
+     * @throws NoSuchElementException in case of an unmatched identifier
+     */
+    @Nonnull
+    public static StreamEncoding requireFromCode(int code) {
+        StreamEncoding encoding = fromCode(code);
+        if (encoding == null) {
+            throw new NoSuchElementException("No StreamEncoding found for code " + code);
+        }
+        return encoding;
     }
 }

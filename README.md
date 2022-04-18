@@ -13,16 +13,18 @@ SPDX-License-Identifier: Apache-2.0
 [![PGP](https://img.shields.io/badge/pgp-A027%20DB2F%203E1E%20118A-blue)](https://keyoxide.org/7F9116FEA90A5983936C7CFAA027DB2F3E1E118A)
 [![REUSE status](https://api.reuse.software/badge/github.com/pgpainless/pgpainless)](https://api.reuse.software/info/github.com/pgpainless/pgpainless)
 
+**PGPainless is an easy-to-use OpenPGP library for Java and Android applications**
+
 ## About
 
 PGPainless aims to make using OpenPGP in Java projects as simple as possible.
 It does so by introducing an intuitive Builder structure, which allows easy 
 setup of encryption/decryption operations, as well as straight forward key generation.
 
-PGPainless is based around the Bouncycastle java library and can be used on Android down to API level 10.
-It can be configured to either use the Java Cryptographic Engine (JCE), or Bouncycastles lightweight reimplementation.
+PGPainless is based around the Bouncy Castle java library and can be used on Android down to API level 10.
+It can be configured to either use the Java Cryptographic Engine (JCE), or Bouncy Castles lightweight reimplementation.
 
-While signature verification in Bouncycastle is limited to signature correctness, PGPainless goes much further.
+While signature verification in Bouncy Castle is limited to signature correctness, PGPainless goes much further.
 It also checks if signing subkeys are properly bound to their primary key, if keys are expired or revoked, as well as
 if keys are allowed to create signatures in the first place.
 
@@ -107,7 +109,7 @@ There are some predefined key archetypes, but it is possible to fully customize 
                                         KeyFlag.ENCRYPT_COMMS, KeyFlag.ENCRYPT_STORAGE)
                 ).addUserId("Juliet <juliet@montague.lit>")
                 .addUserId("xmpp:juliet@capulet.lit")
-                .setPassphrase("romeo_oh_Romeo<3")
+                .setPassphrase(Passphrase.fromPassword("romeo_oh_Romeo<3"))
                 .build();
 ```
 
@@ -186,7 +188,7 @@ repositories {
 }
 
 dependencies {
-	implementation 'org.pgpainless:pgpainless-core:1.1.0'
+	implementation 'org.pgpainless:pgpainless-core:1.2.0'
 }
 ```
 
@@ -207,6 +209,23 @@ PGPainless is developed in - and accepts contributions from - the following plac
 
 * [Github](https://github.com/pgpainless/pgpainless)
 * [Codeberg](https://codeberg.org/PGPainless/pgpainless)
+
+We are using SemVer (MAJOR.MINOR.PATCH) versioning, although MINOR releases could contain breaking changes from time to time.
+
+If you want to contribute a bug fix, please check the `release/X.Y` branches first to see, what the oldest release is
+which contains the bug you are fixing. That way we can update older revisions of the library easily.
+
+### Branches
+* `release/X.Y` contains the state of the latest `X.Y.Z` PATCH release + next PATCH snapshot definition.
+* `master` contains the state of the latest MINOR release + some smaller changes that will make it into the next PATCH release.
+* `development` contains new features that will make it into the next MINOR release.
+
+#### Example:
+Latest release: 1.1.4
+* `release/1.0` contains the state of `1.0.5-SNAPSHOT`
+* `release/1.1` contains the state of `1.1.5-SNAPSHOT`
+* `master` contains the state `release/1.1` plus patch level changes that will make it into `1.1.5`.
+* `development` contains the state which will at some point become `1.2.0`.
 
 Please follow the [code of conduct](CODE_OF_CONDUCT.md) if you want to be part of the project.
 
