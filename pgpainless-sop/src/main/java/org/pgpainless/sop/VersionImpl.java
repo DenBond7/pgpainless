@@ -6,11 +6,17 @@ package org.pgpainless.sop;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Locale;
 import java.util.Properties;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import sop.operation.Version;
 
 public class VersionImpl implements Version {
+
+    // draft version
+    private static final String SOP_VERSION = "03";
+
     @Override
     public String getName() {
         return "PGPainless-SOP";
@@ -32,5 +38,26 @@ public class VersionImpl implements Version {
             version = "DEVELOPMENT";
         }
         return version;
+    }
+
+    @Override
+    public String getBackendVersion() {
+        double bcVersion = new BouncyCastleProvider().getVersion();
+        return String.format(Locale.US, "Bouncy Castle %.2f", bcVersion);
+    }
+
+    @Override
+    public String getExtendedVersion() {
+        return getName() + " " + getVersion() + "\n" +
+                "https://codeberg.org/PGPainless/pgpainless/src/branch/master/pgpainless-sop\n" +
+                "\n" +
+                "Implementation of the Stateless OpenPGP Protocol Version " + SOP_VERSION + "\n" +
+                "https://datatracker.ietf.org/doc/html/draft-dkg-openpgp-stateless-cli-" + SOP_VERSION + "\n" +
+                "\n" +
+                "Based on pgpainless-core " + getVersion() + "\n" +
+                "https://pgpainless.org\n" +
+                "\n" +
+                "Using " + getBackendVersion() + "\n" +
+                "https://www.bouncycastle.org/java.html";
     }
 }

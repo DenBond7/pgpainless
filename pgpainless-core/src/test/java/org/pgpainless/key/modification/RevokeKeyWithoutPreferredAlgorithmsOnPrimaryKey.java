@@ -5,24 +5,20 @@
 package org.pgpainless.key.modification;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.junit.JUtils;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pgpainless.PGPainless;
-import org.pgpainless.implementation.ImplementationFactory;
-import org.pgpainless.key.OpenPgpV4Fingerprint;
 import org.pgpainless.key.info.KeyRingInfo;
 import org.pgpainless.key.modification.secretkeyring.SecretKeyRingEditorInterface;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnprotectedKeysProtector;
 import org.pgpainless.util.DateUtil;
+import org.pgpainless.util.TestAllImplementations;
 
 public class RevokeKeyWithoutPreferredAlgorithmsOnPrimaryKey {
 
@@ -100,30 +96,21 @@ public class RevokeKeyWithoutPreferredAlgorithmsOnPrimaryKey {
             "=3Zyp\n" +
             "-----END PGP PRIVATE KEY BLOCK-----";
 
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void testChangingExpirationTimeWithKeyWithoutPrefAlgos(ImplementationFactory implementationFactory) throws IOException, PGPException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
-        Date expirationDate = DateUtil.parseUTCDate(DateUtil.formatUTCDate(new Date()));
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void testChangingExpirationTimeWithKeyWithoutPrefAlgos()
+            throws IOException, PGPException {
+        Date expirationDate = DateUtil.now();
         PGPSecretKeyRing secretKeys = PGPainless.readKeyRing().secretKeyRing(KEY);
-        List<OpenPgpV4Fingerprint> fingerprintList = new ArrayList<>();
-        for (PGPSecretKey secretKey : secretKeys) {
-            fingerprintList.add(new OpenPgpV4Fingerprint(secretKey));
-        }
+
         SecretKeyRingProtector protector = new UnprotectedKeysProtector();
 
         SecretKeyRingEditorInterface modify = PGPainless.modifyKeyRing(secretKeys)
                 .setExpirationDate(expirationDate, protector);
-        for (int i = 1; i < fingerprintList.size(); i++) {
-            modify.setExpirationDate(fingerprintList.get(i), expirationDate, protector);
-        }
         secretKeys = modify.done();
 
         KeyRingInfo info = PGPainless.inspectKeyRing(secretKeys);
 
         JUtils.assertDateEquals(expirationDate, info.getPrimaryKeyExpirationDate());
-        for (OpenPgpV4Fingerprint fingerprint : fingerprintList) {
-            JUtils.assertDateEquals(expirationDate, info.getSubkeyExpirationDate(fingerprint));
-        }
     }
 }

@@ -6,20 +6,19 @@ package org.pgpainless.key.generation;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pgpainless.algorithm.KeyFlag;
-import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.generation.type.KeyType;
 import org.pgpainless.key.generation.type.eddsa.EdDSACurve;
 import org.pgpainless.key.generation.type.xdh.XDHSpec;
+import org.pgpainless.util.TestAllImplementations;
 
 public class IllegalKeyFlagsTest {
 
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void testKeyCannotCarryFlagsTest(ImplementationFactory implementationFactory) {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void testKeyCannotCarryFlagsTest() {
         assertThrows(IllegalArgumentException.class, () -> KeySpec.getBuilder(
                 KeyType.XDH(XDHSpec._X25519), KeyFlag.SIGN_DATA));
 

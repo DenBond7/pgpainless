@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 plugins {
-    id 'java'
+    id 'java-library'
 }
 
 group 'org.pgpainless'
@@ -18,10 +18,9 @@ dependencies {
 
     // Logging
     testImplementation "ch.qos.logback:logback-classic:$logbackVersion"
-    runtime "ch.qos.logback:logback-classic:$logbackVersion"
 
     implementation(project(":pgpainless-core"))
-    implementation(project(":sop-java"))
+    api "org.pgpainless:sop-java:$sopJavaVersion"
 }
 
 test {

@@ -5,6 +5,178 @@ SPDX-License-Identifier: CC0-1.0
 
 # PGPainless Changelog
 
+
+## 1.2.0
+- Improve exception hierarchy for key-related exceptions
+  - See [PR](https://github.com/pgpainless/pgpainless/pull/261) for more information on how to migrate.
+- Bump Bouncy Castle to `1.71`
+  - Switch from `bcpg-jdk15on:1.70` to `bcpg-jdk15to18:1.71`
+  - Switch from `bcprov-jdk15on:1.70` to `bcprov-jdk15to18:1.71`
+- Implement merging of certificate copies
+  - can be used to implement updating certificates from key servers
+- Fix `KeyRingUtils.keysPlusPublicKey()`
+- Add support for adding `PolicyURI` and `RegularExpression` signature subpackets on signatures
+
+## 1.1.5
+- SOP encrypt: match signature type when using `encrypt --as=` option
+- `ProducerOptions.setEncoding()`: The encoding is henceforth only considered metadata and will no longer trigger CRLF encoding.
+  - This fixes broken signature generation for mismatching (`StreamEncoding`,`DocumentSignatureType`) tuples.
+  - Applications that rely on CRLF-encoding can request PGPainless to apply this encoding by calling `ProducerOptions.applyCRLFEncoding(true)`.
+- Rename `KeyRingUtils.removeSecretKey()` to `stripSecretKey()`.
+- Add handy `SignatureOptions.addSignature()` method.
+- Fix `ClassCastException` when evaluating a certificate with third party signatures. Thanks @p-barabas for the initial report and bug fix!
+
+## 1.1.4
+- Add utility method `KeyRingUtils.removeSecretKey()` to remove secret key part from key ring
+  - This can come in handy when using primary keys stored offline
+- Add `EncryptionResult.isEncryptedFor(certificate)`
+- `ArmorUtils.toAsciiArmoredString()` methods now print out primary user-id and brief information about further user-ids (thanks @bratkartoffel for the patch)
+- Methods of `KeyRingUtils` and `ArmorUtils` classes are now annotated with `@Nonnull/@Nullable`
+- Enums `fromId(code)` methods are now annotated with `@Nullable` and there are now `requireFromId(code)` counterparts which are `@Nonnull`.
+- `ProducerOptions.setForYourEyesOnly()` is now deprecated (reason is deprecation in the 
+- [crypto-refresh-05](https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-05.html#name-special-filename-_console-d) document)
+- Add `SessionKey.toString()`
+- Partially fix generation of malformed signature packets when using different combinations of `StreamEncoding` and `DocumentSignatureType` values
+  - Unfortunately PGPainless still produces broken signatures when using either `StreamEncoding.TEXT` or `StreamEncoding.UTF8` in combination with `DocumentSignatureType.BINARY_DOCUMENT`.
+- Deprecate `ProducerOptions.setEncoding(StreamEncoding)`
+  - Will be removed in a future release
+- Remove `StreamEncoding.MIME` (was removed from the standard)
+
+## 1.1.3
+- Make `SigningOptions.getSigningMethods()` part of internal API
+- Fix crash when trying to do verification of unmatched `SignersUserId` signature subpacket
+  - For now, verification of `SignersUserId` is disabled but can be enabled via `Policy.setSignerUserIdValidationLevel()`
+- Initial support for `OpenPgpV5Fingerprint`
+- Add `OpenPgpFingerprint.parse(string)`
+- Security: Fix `KeyRingInfo.getValidAndExpiredUserIds()` accidentally including unbound user-ids
+
+## 1.0.5
+- Security: Fix `KeyRingInfo.getValidAndExpiredUserIds()` accidentally including unbound user-ids
+
+## 1.1.2
+- Fix `keyRingInfo.getEmailAddresses()` incorrectly matching some mail addresses (thanks @bratkartoffel for reporting and initial patch proposal)
+- Fix generic type of `CertificationSubpackets.Callback`
+- Add `KeyRingInfo.isUsableForEncryption()`
+- Add `PGPainless.inspectKeyRing(key, date)`
+- Allow custom key creation dates during key generation
+- Reject subkeys with bindings that predate key generation
+- `EncryptionOptions.addRecipient()`: Transform `NoSuchElementException` into `IllegalArgumentException` with proper error message
+- Fix `ClassCastException` by preventing accidental verification of 3rd-party-issued user-id revocation with primary key.
+- Fix `NullPointerException` when trying to verify malformed signature
+
+## 1.1.1
+- Add `producerOptions.setComment(string)` to allow adding ASCII armor comments when creating OpenPGP messages (thanks @ferenc-hechler)
+- Simplify consumption of cleartext-signed data
+- Change default criticality of signature subpackets
+  - Issuer Fingerprint: critical -> non-critical
+  - Revocable: non-critical -> critical
+  - Issuer KeyID: critical -> non-critical
+  - Preferred Algorithms: critical -> non-critical
+  - Revocation Reason: critical -> non-critical
+
+## 1.1.0
+- `pgpainless-sop`: Update `sop-java` to version 1.2.0
+    - Treat passwords and session keys as indirect parameters
+      This means they are no longer treated as string input, but pointers to files or env variables
+
+## 1.0.4
+- Yet another patch for faulty ASCII armor detection 😒
+
+## 1.0.3
+- Fix detection of unarmored data in signature verification
+
+## 1.0.2
+- Update SOP implementation to specification revision 03
+- Move `sop-java` and `sop-java-picocli` modules to [its own repository](https://github.com/pgpainless/sop-java)
+- `OpenPGPV4Fingerprint`: Hex decode bytes in constructor
+- Add `ArmorUtils.toAsciiArmoredString()` for single key
+- Fix `ClassCastException` when retrieving `RevocationKey` subpackets from signatures
+- Fix `pgpainless-sop` gradle script
+  - it now automatically pulls in transitive dependencies
+
+## 1.0.1
+- Fix sourcing of preferred algorithms by primary user-id when key is located via key-id
+
+## 1.0.0
+- Introduce `DateUtil.toSecondsPrecision()`
+- Clean JUnit tests, fix code style issues and fix typos in documentation
+
+## 1.0.0-rc9
+- When key has both direct-key sig + primary user-id sig: resolve expiration date to the earliest expiration
+- Add `SecretKeyRingEditor.removeUserId()` convenience methods that do soft-revoke the user-id.
+- Add `SelectUserId.byEmail()` which also matches the plain email address
+
+## 1.0.0-rc8
+- `KeyRingInfo.getPrimaryUserId()`: return first user-id when no primary user-id is found
+- Rename method `getBoundButPossiblyExpiredUserIds` to `getValidAndExpiredUserIds()`
+- Remove audit resource material
+
+## 1.0.0-rc7
+- Make `Passphrase` comparison constant time
+- Bump Bouncycastle to 1.70
+  - Use new `PGPCanonicalizedDataGenerator` where applicable
+  - Implement decryption with user-provided session key
+  - Remove workaround for invalid signature processing
+- Remove Blowfish from default symmetric decryption/encryption policy
+- When adding/generating keys: Check compliance to `PublicKeyAlgorithmPolicy`
+- Fix `BaseSecretKeyRingProtector` misinterpreting empty passphrases
+- SOP: Fix NPE when attempting to sign with key with missing signing subkey
+- Describe Threat Model in [pgpainless-core/README.md]
+- Fix NPE when attempting to decrypt GNU_DUMMY_S2K key
+- Validate public key parameters when unlocking secret keys
+- Introduce iteration limits to prevent resource exhaustion when
+  - reading signatures
+  - reading keys
+- `CachingSecretKeyRingProtector`: Prevent accidental passphrase overriding via `addPassphrase()`
+- `EncryptionOptions`: replace method argument type `PGPPublicKeyRingCollection` with `Iterable<PGPPublicKeyRing>` to allow for `Collection<PGPPublicKeyRing>` as argument
+- `SigningOptions`: replace method argument type `PGPSecretKeyRingCollection` with `Iterable<PGPSecretKeyRing>` to allow for `Collection<PGPSecretKeyRing>` as argument
+- Prevent message decryption with non-encryption subkey
+- Rework key modification API to fix inconsistency problems with expiration and primary user-ids.
+  - Remove methods to change expiration dates of subkeys and specific user-ids
+  - Rework primary user-id marking logic to unmark non-primary ids
+- Added [Cure53 Security Audit Report](https://gh.pgpainless.org/assets/Audit-PGPainless.pdf) to the website
+- Reworked tests for cryptographic backend to use custom `InvocationContextProvider` implementation
+- Source `PGPObjectFactory` objects from `ImplementationProvider`
+- Fix typo `getCommendHeader() -> getCommentHeader()`
+
+## 1.0.0-rc6
+- Restructure method arguments in `SecretKeyRingEditor`
+- Add explanations of revocation reasons to `RevocationAttributes`
+- Rename `CertificationSignatureBuilder` to `ThirdPartyCertificationSignatureBuilder`
+- `KeyAccessor.ViaKeyId`: Differentiate between primary key (rely on direct-key sig) and subkey (subkey binding sig)
+- Expose `SignatureSubpacketsUtil.getKeyLifetimeInSeconds`
+- Various cleanup steps and new tests
+
+## 1.0.0-rc5
+- Fix invalid cursor mark in `BufferedInputStream` when processing large cleartext signed messages
+- Add `SecretKeyRingEditor.revokeUserIds(SelectUserId, SecretKeyRingProtector, RevocationSignatureSubpackets.Callback)`
+
+## 1.0.0-rc4
+- Fix bug where `KeyRingBuilder` would mark additional user-ids as primary
+
+## 1.0.0-rc3
+- New Signature builder API for more fine-grained control over key-signatures:
+  - Introduce `CertificationSignatureSubpackets` builder class to wrap `PGPSignatureSubpacketGenerator` for
+    certification style signatures.
+  - Introduce `SelfSignatureSubpackets` builder class for self-signatures.
+  - Introduce `RevocationSignatureSubpackets` builder class for revocation signatures.
+  - Introduce `CertificationSignatureSubpackets.Callback`, `SelfSignatureSubpackets.Callback` and
+    `RevocationSignatureSubpackets.Callback` to allow modification of signature subpackets by the user.
+  - Incorporate `*SignatureSubpackets.Callback` classes as arguments in `SecretKeyRingEditor` and `KeyRingBuilder` methods.
+- Start working on `ProofUtil` to create KeyOxide style identity proofs (WIP)
+- Move Signature verification related code to `org.pgpainless.signature.consumer` package
+- Ensure keyflags and other common subpackets are set in new signatures when adding user-ids
+- Ensure subkey can carry keyflag when adding it to a key
+- Refactor `SecretKeyRingProtector` methods and code
+
+## 1.0.0-rc2
+- `SecretKeyRingEditor`: Remove support for user-id- and subkey *deletion* in favor of *revocation*
+  - Deletion causes all sorts of problems. Most notably, receiving implementations will not honor deletion of user-ids/subkeys.
+    If you really need to delete user-ids there now is `KeyRingUtils.deleteUserId(keys, userid)`,
+    but its use is highly discouraged and should only (if ever) be used for local manipulations of keys.
+- `pgpainless-core` & `pgpainless-sop`: Fix accidental compile scope dependency on `logback-classic`
+- `KeyRingInfo`: Sensible arguments for methods to get preferred algorithms
+
 ## 1.0.0-rc1
 - First release candidate for a 1.0.0 release! \o/
 - Rename `EncryptionPurpose.STORAGE_AND_COMMUNICATIONS` to `EncryptionPurpose.ANY`
@@ -34,7 +206,7 @@ SPDX-License-Identifier: CC0-1.0
 
 ## 0.2.16
 - Fix handling of subkey revocation signatures
-- SOP: improve API use with byte arrays
+- SOP: improve API usage with byte arrays
 - Fix `AssertionError` when determining encryption subkeys from set containing unbound key
 - Add `ConsumerOptions.setMissingKeyPassphraseStrategy(strategy)` to modify behavior when missing key passphrases are encountered during decryption
 

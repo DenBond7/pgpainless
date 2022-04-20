@@ -16,15 +16,13 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPPrivateKey;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.KeyFlag;
-import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.TestKeys;
 import org.pgpainless.key.generation.KeySpec;
 import org.pgpainless.key.generation.type.ecc.EllipticCurve;
@@ -34,13 +32,14 @@ import org.pgpainless.key.protection.PasswordBasedSecretKeyRingProtector;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnlockSecretKey;
 import org.pgpainless.util.Passphrase;
+import org.pgpainless.util.TestAllImplementations;
 
 public class AddSubKeyTest {
 
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void testAddSubKey(ImplementationFactory implementationFactory) throws IOException, PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void testAddSubKey()
+            throws IOException, PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
         PGPSecretKeyRing secretKeys = TestKeys.getCryptieSecretKeyRing();
 
         List<Long> keyIdsBefore = new ArrayList<>();
@@ -65,9 +64,9 @@ public class AddSubKeyTest {
         long subKeyId = keyIdsAfter.get(0);
 
         PGPSecretKey subKey = secretKeys.getSecretKey(subKeyId);
-        SecretKeyRingProtector protector = SecretKeyRingProtector.unlockAllKeysWith(
+        SecretKeyRingProtector protector = SecretKeyRingProtector.unlockEachKeyWith(
                 Passphrase.fromPassword("subKeyPassphrase"), secretKeys);
-        PGPPrivateKey privateKey = UnlockSecretKey.unlockSecretKey(subKey, protector);
+        UnlockSecretKey.unlockSecretKey(subKey, protector);
 
         KeyRingInfo info = new KeyRingInfo(secretKeys);
         assertEquals(Collections.singletonList(KeyFlag.SIGN_DATA), info.getKeyFlagsOf(subKeyId));

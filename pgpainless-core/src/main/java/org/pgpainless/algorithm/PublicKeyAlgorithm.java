@@ -5,9 +5,13 @@
 package org.pgpainless.algorithm;
 
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.bouncycastle.bcpg.PublicKeyAlgorithmTags;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 /**
  * Enumeration of public key algorithms as defined in RFC4880.
@@ -96,10 +100,28 @@ public enum PublicKeyAlgorithm {
      * If an invalid id is provided, null is returned.
      *
      * @param id numeric algorithm id
-     * @return algorithm
+     * @return algorithm or null
      */
+    @Nullable
     public static PublicKeyAlgorithm fromId(int id) {
         return MAP.get(id);
+    }
+
+    /**
+     * Return the {@link PublicKeyAlgorithm} that corresponds to the provided algorithm id.
+     * If an invalid id is provided, throw a {@link NoSuchElementException}.
+     *
+     * @param id numeric algorithm id
+     * @return algorithm
+     * @throws NoSuchElementException in case of an unmatched algorithm id
+     */
+    @Nonnull
+    public static PublicKeyAlgorithm requireFromId(int id) {
+        PublicKeyAlgorithm algorithm = fromId(id);
+        if (algorithm == null) {
+            throw new NoSuchElementException("No PublicKeyAlgorithm found for id " + id);
+        }
+        return algorithm;
     }
 
     private final int algorithmId;
@@ -124,7 +146,7 @@ public enum PublicKeyAlgorithm {
     /**
      * Return true if this public key algorithm is able to create signatures.
      *
-     * @return true if can sign
+     * @return true if the algorithm can sign
      */
     public boolean isSigningCapable() {
         return signingCapable;
@@ -133,7 +155,7 @@ public enum PublicKeyAlgorithm {
     /**
      * Return true if this public key algorithm can be used as an encryption algorithm.
      *
-     * @return true if can encrypt
+     * @return true if the algorithm can encrypt
      */
     public boolean isEncryptionCapable() {
         return encryptionCapable;

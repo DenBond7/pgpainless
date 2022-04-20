@@ -19,7 +19,6 @@ import org.bouncycastle.bcpg.sig.RevocationReason;
 import org.bouncycastle.bcpg.sig.SignatureExpirationTime;
 import org.bouncycastle.openpgp.PGPCompressedData;
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPMarker;
 import org.bouncycastle.openpgp.PGPObjectFactory;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSecretKey;
@@ -34,6 +33,7 @@ import org.pgpainless.algorithm.SignatureType;
 import org.pgpainless.algorithm.negotiation.HashAlgorithmNegotiator;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.OpenPgpFingerprint;
+import org.pgpainless.key.OpenPgpV4Fingerprint;
 import org.pgpainless.key.util.OpenPgpKeyAttributeUtil;
 import org.pgpainless.key.util.RevocationAttributes;
 import org.pgpainless.signature.subpackets.SignatureSubpacketsUtil;
@@ -43,6 +43,8 @@ import org.pgpainless.util.ArmorUtils;
  * Utility methods related to signatures.
  */
 public final class SignatureUtils {
+
+    public static final int MAX_ITERATIONS = 10000;
 
     private SignatureUtils() {
 
@@ -75,14 +77,14 @@ public final class SignatureUtils {
     /**
      * Return a content signer builder for the passed public key.
      *
-     * The content signer will use a hash algorithm derived from the keys algorithm preferences.
+     * The content signer will use a hash algorithm derived from the keys' algorithm preferences.
      * If no preferences can be derived, the key will fall back to the default hash algorithm as set in
      * the {@link org.pgpainless.policy.Policy}.
      *
      * @param publicKey public key
      * @return content signer builder
      */
-    private static PGPContentSignerBuilder getPgpContentSignerBuilderForKey(PGPPublicKey publicKey) {
+    public static PGPContentSignerBuilder getPgpContentSignerBuilderForKey(PGPPublicKey publicKey) {
         Set<HashAlgorithm> hashAlgorithmSet = OpenPgpKeyAttributeUtil.getOrGuessPreferredHashAlgorithms(publicKey);
 
         HashAlgorithm hashAlgorithm = HashAlgorithmNegotiator.negotiateSignatureHashAlgorithm(PGPainless.getPolicy())
@@ -122,7 +124,7 @@ public final class SignatureUtils {
     /**
      * Return a new date which represents the given date plus the given amount of seconds added.
      *
-     * Since '0' is a special value in the OpenPGP specification when it comes to dates
+     * Since '0' is a special date value in the OpenPGP specification
      * (e.g. '0' means no expiration for expiration dates), this method will return 'null' if seconds is 0.
      *
      * @param date date
@@ -191,10 +193,14 @@ public final class SignatureUtils {
      *
      * @param encodedSignatures ASCII armored signature list
      * @return signature list
+     *
      * @throws IOException if the signatures cannot be read
+     * @throws PGPException in case of a broken signature
      */
     public static List<PGPSignature> readSignatures(String encodedSignatures) throws IOException, PGPException {
-        byte[] bytes = encodedSignatures.getBytes(Charset.forName("UTF8"));
+        @SuppressWarnings("CharsetObjectCanBeUsed")
+        Charset utf8 = Charset.forName("UTF-8");
+        byte[] bytes = encodedSignatures.getBytes(utf8);
         return readSignatures(bytes);
     }
 
@@ -221,34 +227,42 @@ public final class SignatureUtils {
      * @throws PGPException in case of an OpenPGP error
      */
     public static List<PGPSignature> readSignatures(InputStream inputStream) throws IOException, PGPException {
+        return readSignatures(inputStream, MAX_ITERATIONS);
+    }
+
+    /**
+     * Read and return {@link PGPSignature PGPSignatures}.
+     * This method can deal with signatures that may be armored, compressed and may contain marker packets.
+     *
+     * @param inputStream input stream
+     * @param maxIterations number of loop iterations until reading is aborted
+     * @return list of encountered signatures
+     * @throws IOException in case of a stream error
+     * @throws PGPException in case of an OpenPGP error
+     */
+    public static List<PGPSignature> readSignatures(InputStream inputStream, int maxIterations) throws IOException, PGPException {
         List<PGPSignature> signatures = new ArrayList<>();
         InputStream pgpIn = ArmorUtils.getDecoderStream(inputStream);
-        PGPObjectFactory objectFactory = new PGPObjectFactory(
-                pgpIn, ImplementationFactory.getInstance().getKeyFingerprintCalculator());
+        PGPObjectFactory objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(pgpIn);
 
-        Object nextObject = tryNext(objectFactory);
-        while (nextObject != null) {
-            if (nextObject instanceof PGPMarker) {
-                nextObject = tryNext(objectFactory);
-                continue;
-            }
+        int i = 0;
+        Object nextObject;
+        while (i++ < maxIterations && (nextObject = objectFactory.nextObject()) != null) {
             if (nextObject instanceof PGPCompressedData) {
                 PGPCompressedData compressedData = (PGPCompressedData) nextObject;
-                objectFactory = new PGPObjectFactory(compressedData.getDataStream(),
-                        ImplementationFactory.getInstance().getKeyFingerprintCalculator());
-                nextObject = tryNext(objectFactory);
-                continue;
+                objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(compressedData.getDataStream());
             }
+
             if (nextObject instanceof PGPSignatureList) {
                 PGPSignatureList signatureList = (PGPSignatureList) nextObject;
                 for (PGPSignature s : signatureList) {
                     signatures.add(s);
                 }
             }
+
             if (nextObject instanceof PGPSignature) {
                 signatures.add((PGPSignature) nextObject);
             }
-            nextObject = tryNext(objectFactory);
         }
         pgpIn.close();
 
@@ -256,32 +270,11 @@ public final class SignatureUtils {
     }
 
     /**
-     * Try reading the next signature from the factory.
-     *
-     * This is a helper method for BC choking on unexpected data like invalid signature versions.
-     * Unfortunately, this solves only half the issue, see bcgit/bc-java#1006 for a proper fix.
-     *
-     * @see <a href="https://github.com/bcgit/bc-java/pull/1006">BC-Java: Ignore PGPSignature with invalid version</a>
-     *
-     * @param factory pgp object factory
-     * @return next non-throwing object or null
-     * @throws IOException in case of a stream error
-     */
-    private static Object tryNext(PGPObjectFactory factory) throws IOException {
-        try {
-            Object o = factory.nextObject();
-            return o;
-        } catch (RuntimeException e) {
-            return tryNext(factory);
-        }
-    }
-
-    /**
      * Determine the issuer key-id of a {@link PGPSignature}.
      * This method first inspects the {@link IssuerKeyID} subpacket of the signature and returns the key-id if present.
      * If not, it inspects the {@link org.bouncycastle.bcpg.sig.IssuerFingerprint} packet and retrieves the key-id from the fingerprint.
      *
-     * Otherwise it returns 0.
+     * Otherwise, it returns 0.
      * @param signature signature
      * @return signatures issuing key id
      */
@@ -319,5 +312,19 @@ public final class SignatureUtils {
             list.add(signature);
         }
         return list;
+    }
+
+    public static boolean wasIssuedBy(byte[] fingerprint, PGPSignature signature) {
+        if (fingerprint.length != 20) {
+            // Unknown fingerprint length
+            return false;
+        }
+        OpenPgpV4Fingerprint fp = new OpenPgpV4Fingerprint(fingerprint);
+        OpenPgpFingerprint issuerFp = SignatureSubpacketsUtil.getIssuerFingerprintAsOpenPgpFingerprint(signature);
+        if (issuerFp == null) {
+            return fp.getKeyId() == signature.getKeyID();
+        }
+
+        return fp.equals(issuerFp);
     }
 }

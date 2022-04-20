@@ -17,19 +17,20 @@ import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.util.io.Streams;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.CompressionAlgorithm;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
-import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.SubkeyIdentifier;
 import org.pgpainless.key.TestKeys;
 import org.pgpainless.key.util.KeyRingUtils;
+import org.pgpainless.util.TestAllImplementations;
 
 public class DecryptAndVerifyMessageTest {
 
     // Don't use StandardCharsets.UTF8 because of Android API level.
+    @SuppressWarnings("CharsetObjectCanBeUsed")
     private static final Charset UTF8 = Charset.forName("UTF-8");
 
     private PGPSecretKeyRing juliet;
@@ -41,10 +42,9 @@ public class DecryptAndVerifyMessageTest {
         romeo = TestKeys.getRomeoSecretKeyRing();
     }
 
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void decryptMessageAndVerifySignatureTest(ImplementationFactory implementationFactory) throws Exception {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void decryptMessageAndVerifySignatureTest() throws Exception {
         String encryptedMessage = TestKeys.MSG_SIGN_CRYPT_JULIET_JULIET;
 
         ConsumerOptions options = new ConsumerOptions()

@@ -22,11 +22,14 @@ import org.pgpainless.encryption_signing.EncryptionResult;
 import org.pgpainless.encryption_signing.EncryptionStream;
 import org.pgpainless.encryption_signing.ProducerOptions;
 import org.pgpainless.encryption_signing.SigningOptions;
+import org.pgpainless.exception.KeyException;
 import org.pgpainless.key.SubkeyIdentifier;
 import org.pgpainless.key.info.KeyRingInfo;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.util.ArmoredOutputStreamFactory;
-import sop.Ready;
+import sop.MicAlg;
+import sop.ReadyWithResult;
+import sop.SigningResult;
 import sop.enums.SignAs;
 import sop.exception.SOPGPException;
 import sop.operation.Sign;
@@ -53,24 +56,22 @@ public class SignImpl implements Sign {
     public Sign key(InputStream keyIn) throws SOPGPException.KeyIsProtected, SOPGPException.BadData, IOException {
         try {
             PGPSecretKeyRingCollection keys = PGPainless.readKeyRing().secretKeyRingCollection(keyIn);
-            if (keys.size() != 1) {
-                throw new SOPGPException.BadData(new AssertionError("Exactly one secret key at a time expected. Got " + keys.size()));
-            }
 
-            PGPSecretKeyRing key = keys.iterator().next();
-            KeyRingInfo info = new KeyRingInfo(key);
-            if (!info.isFullyDecrypted()) {
-                throw new SOPGPException.KeyIsProtected();
+            for (PGPSecretKeyRing key : keys) {
+                KeyRingInfo info = new KeyRingInfo(key);
+                if (!info.isFullyDecrypted()) {
+                    throw new SOPGPException.KeyIsProtected();
+                }
+                signingOptions.addDetachedSignature(SecretKeyRingProtector.unprotectedKeys(), key, modeToSigType(mode));
             }
-            signingOptions.addDetachedSignature(SecretKeyRingProtector.unprotectedKeys(), key, modeToSigType(mode));
-        } catch (PGPException e) {
+        } catch (PGPException | KeyException e) {
             throw new SOPGPException.BadData(e);
         }
         return this;
     }
 
     @Override
-    public Ready data(InputStream data) throws IOException {
+    public ReadyWithResult<SigningResult> data(InputStream data) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         try {
             EncryptionStream signingStream = PGPainless.encryptAndOrSign()
@@ -78,9 +79,9 @@ public class SignImpl implements Sign {
                     .withOptions(ProducerOptions.sign(signingOptions)
                             .setAsciiArmor(armor));
 
-            return new Ready() {
+            return new ReadyWithResult<SigningResult>() {
                 @Override
-                public void writeTo(OutputStream outputStream) throws IOException {
+                public SigningResult writeTo(OutputStream outputStream) throws IOException {
 
                     if (signingStream.isClosed()) {
                         throw new IllegalStateException("EncryptionStream is already closed.");
@@ -106,6 +107,10 @@ public class SignImpl implements Sign {
                     }
                     out.close();
                     outputStream.close(); // armor out does not close underlying stream
+
+                    return SigningResult.builder()
+                            .setMicAlg(micAlgFromSignatures(signatures))
+                            .build();
                 }
             };
 
@@ -113,6 +118,19 @@ public class SignImpl implements Sign {
             throw new RuntimeException(e);
         }
 
+    }
+
+    private MicAlg micAlgFromSignatures(Iterable<PGPSignature> signatures) {
+        int algorithmId = 0;
+        for (PGPSignature signature : signatures) {
+            int sigAlg = signature.getHashAlgorithm();
+            if (algorithmId == 0 || algorithmId == sigAlg) {
+                algorithmId = sigAlg;
+            } else {
+                return MicAlg.empty();
+            }
+        }
+        return algorithmId == 0 ? MicAlg.empty() : MicAlg.fromHashAlgorithmId(algorithmId);
     }
 
     private static DocumentSignatureType modeToSigType(SignAs mode) {

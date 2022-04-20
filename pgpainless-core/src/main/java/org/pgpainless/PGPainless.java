@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.Date;
 import javax.annotation.Nonnull;
 
+import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPKeyRing;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
@@ -67,11 +68,27 @@ public final class PGPainless {
     }
 
     /**
+     * Merge two copies of the same certificate (e.g. an old copy, and one retrieved from a key server) together.
+     *
+     * @param originalCopy local, older copy of the cert
+     * @param updatedCopy updated, newer copy of the cert
+     * @return merged certificate
+     * @throws PGPException in case of an error
+     */
+    public static PGPPublicKeyRing mergeCertificate(
+            @Nonnull PGPPublicKeyRing originalCopy,
+            @Nonnull PGPPublicKeyRing updatedCopy)
+            throws PGPException {
+        return PGPPublicKeyRing.join(originalCopy, updatedCopy);
+    }
+
+    /**
      * Wrap a key or certificate in ASCII armor.
      *
      * @param key key or certificate
      * @return ascii armored string
-     * @throws IOException
+     *
+     * @throws IOException in case of an error in the {@link org.bouncycastle.bcpg.ArmoredOutputStream}
      */
     public static String asciiArmor(@Nonnull PGPKeyRing key) throws IOException {
         if (key instanceof PGPSecretKeyRing) {
@@ -117,13 +134,25 @@ public final class PGPainless {
      * This method can be used to determine expiration dates, key flags and other information about a key.
      *
      * To evaluate a key at a given date (e.g. to determine if the key was allowed to create a certain signature)
-     * use {@link KeyRingInfo#KeyRingInfo(PGPKeyRing, Date)} instead.
+     * use {@link #inspectKeyRing(PGPKeyRing, Date)} instead.
      *
      * @param keyRing key ring
      * @return access object
      */
     public static KeyRingInfo inspectKeyRing(PGPKeyRing keyRing) {
         return new KeyRingInfo(keyRing);
+    }
+
+    /**
+     * Quickly access information about a {@link org.bouncycastle.openpgp.PGPPublicKeyRing} / {@link PGPSecretKeyRing}.
+     * This method can be used to determine expiration dates, key flags and other information about a key at a specific time.
+     *
+     * @param keyRing key ring
+     * @param inspectionDate date of inspection
+     * @return access object
+     */
+    public static KeyRingInfo inspectKeyRing(PGPKeyRing keyRing, Date inspectionDate) {
+        return new KeyRingInfo(keyRing, inspectionDate);
     }
 
     /**

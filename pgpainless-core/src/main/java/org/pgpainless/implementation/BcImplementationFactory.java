@@ -4,6 +4,7 @@
 
 package org.pgpainless.implementation;
 
+import java.io.InputStream;
 import java.security.KeyPair;
 import java.util.Date;
 
@@ -11,9 +12,12 @@ import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.params.AsymmetricKeyParameter;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPKeyPair;
+import org.bouncycastle.openpgp.PGPObjectFactory;
 import org.bouncycastle.openpgp.PGPPrivateKey;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSecretKey;
+import org.bouncycastle.openpgp.PGPSessionKey;
+import org.bouncycastle.openpgp.bc.BcPGPObjectFactory;
 import org.bouncycastle.openpgp.operator.KeyFingerPrintCalculator;
 import org.bouncycastle.openpgp.operator.PBEDataDecryptorFactory;
 import org.bouncycastle.openpgp.operator.PBEKeyEncryptionMethodGenerator;
@@ -25,6 +29,7 @@ import org.bouncycastle.openpgp.operator.PGPDataEncryptorBuilder;
 import org.bouncycastle.openpgp.operator.PGPDigestCalculator;
 import org.bouncycastle.openpgp.operator.PublicKeyDataDecryptorFactory;
 import org.bouncycastle.openpgp.operator.PublicKeyKeyEncryptionMethodGenerator;
+import org.bouncycastle.openpgp.operator.SessionKeyDataDecryptorFactory;
 import org.bouncycastle.openpgp.operator.bc.BcKeyFingerprintCalculator;
 import org.bouncycastle.openpgp.operator.bc.BcPBEDataDecryptorFactory;
 import org.bouncycastle.openpgp.operator.bc.BcPBEKeyEncryptionMethodGenerator;
@@ -38,6 +43,7 @@ import org.bouncycastle.openpgp.operator.bc.BcPGPKeyConverter;
 import org.bouncycastle.openpgp.operator.bc.BcPGPKeyPair;
 import org.bouncycastle.openpgp.operator.bc.BcPublicKeyDataDecryptorFactory;
 import org.bouncycastle.openpgp.operator.bc.BcPublicKeyKeyEncryptionMethodGenerator;
+import org.bouncycastle.openpgp.operator.bc.BcSessionKeyDataDecryptorFactory;
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPKeyPair;
 import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
@@ -52,7 +58,7 @@ public class BcImplementationFactory extends ImplementationFactory {
         int keyEncryptionAlgorithm = secretKey.getKeyEncryptionAlgorithm();
 
         if (secretKey.getS2K() == null) {
-            return getPBESecretKeyEncryptor(SymmetricKeyAlgorithm.fromId(keyEncryptionAlgorithm), passphrase);
+            return getPBESecretKeyEncryptor(SymmetricKeyAlgorithm.requireFromId(keyEncryptionAlgorithm), passphrase);
         }
 
         int hashAlgorithm = secretKey.getS2K().getHashAlgorithm();
@@ -135,6 +141,21 @@ public class BcImplementationFactory extends ImplementationFactory {
                 getPGPDigestCalculator(hashAlgorithm),
                 s2kCount)
                 .build(passphrase.getChars());
+    }
+
+    @Override
+    public SessionKeyDataDecryptorFactory provideSessionKeyDataDecryptorFactory(PGPSessionKey sessionKey) {
+        return new BcSessionKeyDataDecryptorFactory(sessionKey);
+    }
+
+    @Override
+    public PGPObjectFactory getPGPObjectFactory(byte[] bytes) {
+        return new BcPGPObjectFactory(bytes);
+    }
+
+    @Override
+    public PGPObjectFactory getPGPObjectFactory(InputStream inputStream) {
+        return new BcPGPObjectFactory(inputStream);
     }
 
     private AsymmetricCipherKeyPair jceToBcKeyPair(PublicKeyAlgorithm algorithm,

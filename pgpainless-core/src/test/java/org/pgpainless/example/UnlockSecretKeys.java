@@ -11,7 +11,6 @@ import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
-import org.pgpainless.exception.WrongPassphraseException;
 import org.pgpainless.key.OpenPgpV4Fingerprint;
 import org.pgpainless.key.TestKeys;
 import org.pgpainless.key.protection.CachingSecretKeyRingProtector;
@@ -34,9 +33,6 @@ public class UnlockSecretKeys {
 
     /**
      * This example demonstrates how to create a {@link SecretKeyRingProtector} for unprotected secret keys.
-     *
-     * @throws PGPException
-     * @throws IOException
      */
     @Test
     public void unlockUnprotectedKeys() throws PGPException, IOException {
@@ -51,17 +47,14 @@ public class UnlockSecretKeys {
     /**
      * This example demonstrates how to create a {@link SecretKeyRingProtector} using a single passphrase to unlock
      * all secret subkeys of a key.
-     *
-     * @throws PGPException
-     * @throws IOException
      */
     @Test
     public void unlockWholeKeyWithSamePassphrase() throws PGPException, IOException {
         PGPSecretKeyRing secretKey = TestKeys.getCryptieSecretKeyRing();
-        // Unlock all subkeys in the secret key with the same passphrase
-        SecretKeyRingProtector protector = SecretKeyRingProtector.unlockAllKeysWith(
-                Passphrase.fromPassword(TestKeys.CRYPTIE_PASSWORD), secretKey);
+        Passphrase passphrase = TestKeys.CRYPTIE_PASSPHRASE;
 
+        // Unlock all subkeys in the secret key with the same passphrase
+        SecretKeyRingProtector protector = SecretKeyRingProtector.unlockAnyKeyWith(passphrase);
 
         assertProtectorUnlocksAllSecretKeys(secretKey, protector);
     }
@@ -69,9 +62,6 @@ public class UnlockSecretKeys {
     /**
      * This example demonstrates how to create a {@link SecretKeyRingProtector} that uses different
      * passphrases per subkey to unlock the secret keys.
-     *
-     * @throws PGPException
-     * @throws IOException
      */
     @Test
     public void unlockWithPerSubkeyPassphrases() throws PGPException, IOException {
@@ -120,7 +110,7 @@ public class UnlockSecretKeys {
     }
 
     private void assertProtectorUnlocksAllSecretKeys(PGPSecretKeyRing secretKey, SecretKeyRingProtector protector)
-            throws WrongPassphraseException {
+            throws PGPException {
         for (PGPSecretKey key : secretKey) {
             UnlockSecretKey.unlockSecretKey(key, protector);
         }

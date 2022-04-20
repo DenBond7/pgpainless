@@ -46,6 +46,7 @@ import org.pgpainless.key.TestKeys;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnlockSecretKey;
 import org.pgpainless.policy.Policy;
+import org.pgpainless.signature.consumer.SignaturePicker;
 import org.pgpainless.signature.subpackets.SignatureSubpacketsUtil;
 
 public class SignatureSubpacketsUtilTest {
@@ -59,7 +60,8 @@ public class SignatureSubpacketsUtilTest {
                 .setExpirationDate(expiration, SecretKeyRingProtector.unprotectedKeys())
                 .done();
 
-        PGPSignature expirationSig = SignaturePicker.pickCurrentUserIdCertificationSignature(secretKeys, "Expire", Policy.getInstance(), new Date());
+        PGPSignature expirationSig = SignaturePicker.pickCurrentUserIdCertificationSignature(
+                secretKeys, "Expire", Policy.getInstance(), new Date());
         PGPPublicKey notTheRightKey = PGPainless.inspectKeyRing(secretKeys).getSigningSubkeys().get(0);
 
         assertThrows(IllegalArgumentException.class, () ->

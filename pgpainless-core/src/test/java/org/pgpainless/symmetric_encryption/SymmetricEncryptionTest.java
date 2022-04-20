@@ -17,8 +17,9 @@ import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
 import org.bouncycastle.util.io.Streams;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.pgpainless.util.TestAllImplementations;
 import org.pgpainless.PGPainless;
 import org.pgpainless.decryption_verification.ConsumerOptions;
 import org.pgpainless.decryption_verification.DecryptionStream;
@@ -27,7 +28,6 @@ import org.pgpainless.encryption_signing.EncryptionOptions;
 import org.pgpainless.encryption_signing.EncryptionStream;
 import org.pgpainless.encryption_signing.ProducerOptions;
 import org.pgpainless.exception.MissingDecryptionMethodException;
-import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.TestKeys;
 import org.pgpainless.key.protection.KeyRingProtectionSettings;
 import org.pgpainless.key.protection.PasswordBasedSecretKeyRingProtector;
@@ -40,10 +40,9 @@ import org.pgpainless.util.Passphrase;
  */
 public class SymmetricEncryptionTest {
 
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void encryptWithKeyAndPassphrase_DecryptWithKey(ImplementationFactory implementationFactory) throws IOException, PGPException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void encryptWithKeyAndPassphrase_DecryptWithKey() throws IOException, PGPException {
         byte[] plaintext = "This is a secret message".getBytes(StandardCharsets.UTF_8);
         ByteArrayInputStream plaintextIn = new ByteArrayInputStream(plaintext);
         PGPPublicKeyRing encryptionKey = TestKeys.getCryptiePublicKeyRing();
@@ -94,11 +93,9 @@ public class SymmetricEncryptionTest {
         assertArrayEquals(plaintext, decrypted.toByteArray());
     }
 
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void testMismatchPassphraseFails(ImplementationFactory implementationFactory) throws IOException, PGPException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
-
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void testMismatchPassphraseFails() throws IOException, PGPException {
         byte[] bytes = new byte[5000];
         new Random().nextBytes(bytes);
 

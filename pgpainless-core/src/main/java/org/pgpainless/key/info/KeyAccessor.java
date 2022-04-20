@@ -64,7 +64,7 @@ public abstract class KeyAccessor {
     }
 
     /**
-     * Address the key via a user-id (eg "Alice &lt;alice@wonderland.lit&gt;).
+     * Address the key via a user-id (e.g. "Alice &lt;alice@wonderland.lit&gt;").
      * In this case we are sourcing preferred algorithms from the user-id certification first.
      */
     public static class ViaUserId extends KeyAccessor {
@@ -110,15 +110,38 @@ public abstract class KeyAccessor {
 
         @Override
         public @Nonnull PGPSignature getSignatureWithPreferences() {
-            PGPSignature signature = info.getLatestDirectKeySelfSignature();
-            if (signature != null) {
-                return signature;
+            String primaryUserId = info.getPrimaryUserId();
+            // If the key is located by Key ID, the algorithm of the primary User ID of the key provides the
+            // preferred symmetric algorithm.
+            PGPSignature signature = info.getLatestUserIdCertification(primaryUserId);
+            if (signature == null) {
+                signature = info.getLatestDirectKeySelfSignature();
             }
-
-            signature = info.getLatestUserIdCertification(info.getPrimaryUserId());
             if (signature == null) {
                 throw new IllegalStateException("No valid signature found.");
             }
+            return signature;
+        }
+    }
+
+    public static class SubKey extends KeyAccessor {
+
+        public SubKey(KeyRingInfo info, SubkeyIdentifier key) {
+            super(info, key);
+        }
+
+        @Override
+        public @Nonnull PGPSignature getSignatureWithPreferences() {
+            PGPSignature signature;
+            if (key.getPrimaryKeyId() == key.getSubkeyId()) {
+                signature = info.getLatestDirectKeySelfSignature();
+                if (signature == null) {
+                    signature = info.getLatestUserIdCertification(info.getPrimaryUserId());
+                }
+            } else {
+                signature = info.getCurrentSubkeyBindingSignature(key.getSubkeyId());
+            }
+
             return signature;
         }
     }

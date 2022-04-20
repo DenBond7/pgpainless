@@ -6,7 +6,6 @@ package org.pgpainless.example;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -26,7 +25,6 @@ import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.EncryptionPurpose;
 import org.pgpainless.algorithm.KeyFlag;
 import org.pgpainless.exception.WrongPassphraseException;
-import org.pgpainless.key.OpenPgpFingerprint;
 import org.pgpainless.key.generation.KeySpec;
 import org.pgpainless.key.generation.type.KeyType;
 import org.pgpainless.key.generation.type.ecc.EllipticCurve;
@@ -50,7 +48,8 @@ public class ModifyKeys {
     private long signingSubkeyId;
 
     @BeforeEach
-    public void generateKey() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
+    public void generateKey()
+            throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
         secretKey = PGPainless.generateKeyRing()
                 .modernKeyRing(userId, originalPassphrase);
 
@@ -91,8 +90,6 @@ public class ModifyKeys {
 
     /**
      * This example demonstrates how to change the passphrase of a secret key and all its subkeys.
-     *
-     * @throws PGPException
      */
     @Test
     public void changePassphrase() throws PGPException {
@@ -113,8 +110,6 @@ public class ModifyKeys {
     /**
      * This example demonstrates how to change the passphrase of a single subkey in a key to a new passphrase.
      * Only the passphrase of the targeted key will be changed. All other keys remain untouched.
-     *
-     * @throws PGPException
      */
     @Test
     public void changeSingleSubkeyPassphrase() throws PGPException {
@@ -128,20 +123,22 @@ public class ModifyKeys {
 
         // encryption key can now only be unlocked using the new passphrase
         assertThrows(WrongPassphraseException.class, () ->
-                UnlockSecretKey.unlockSecretKey(secretKey.getSecretKey(encryptionSubkeyId), Passphrase.fromPassword(originalPassphrase)));
-        UnlockSecretKey.unlockSecretKey(secretKey.getSecretKey(encryptionSubkeyId), Passphrase.fromPassword("cryptP4ssphr4s3"));
+                UnlockSecretKey.unlockSecretKey(
+                        secretKey.getSecretKey(encryptionSubkeyId), Passphrase.fromPassword(originalPassphrase)));
+        UnlockSecretKey.unlockSecretKey(
+                secretKey.getSecretKey(encryptionSubkeyId), Passphrase.fromPassword("cryptP4ssphr4s3"));
         // primary key remains unchanged
-        UnlockSecretKey.unlockSecretKey(secretKey.getSecretKey(primaryKeyId), Passphrase.fromPassword(originalPassphrase));
+        UnlockSecretKey.unlockSecretKey(
+                secretKey.getSecretKey(primaryKeyId), Passphrase.fromPassword(originalPassphrase));
     }
 
     /**
      * This example demonstrates how to add an additional user-id to a key.
-     *
-     * @throws PGPException
      */
     @Test
     public void addUserId() throws PGPException {
-        SecretKeyRingProtector protector = SecretKeyRingProtector.unlockAllKeysWith(Passphrase.fromPassword(originalPassphrase), secretKey);
+        SecretKeyRingProtector protector =
+                SecretKeyRingProtector.unlockEachKeyWith(Passphrase.fromPassword(originalPassphrase), secretKey);
         secretKey = PGPainless.modifyKeyRing(secretKey)
                 .addUserId("additional@user.id", protector)
                 .done();
@@ -157,22 +154,19 @@ public class ModifyKeys {
      * Prerequisites are a {@link SecretKeyRingProtector} that is capable of unlocking the primary key of the existing key,
      * and a {@link Passphrase} for the new subkey.
      *
-     * There are two way to add a subkey into an existing key;
+     * There are two ways to add a subkey into an existing key;
      * Either the subkey gets generated on the fly (see below),
      * or the subkey already exists. In the latter case, the user has to provide
      * {@link org.bouncycastle.openpgp.PGPSignatureSubpacketVector PGPSignatureSubpacketVectors} for the binding signature
      * manually.
      *
      * Once the subkey is added, it can be decrypted using the provided subkey passphrase.
-     *
-     * @throws PGPException
-     * @throws InvalidAlgorithmParameterException
-     * @throws NoSuchAlgorithmException
      */
     @Test
-    public void addSubkey() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
+    public void addSubkey() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, IOException {
         // Protector for unlocking the existing secret key
-        SecretKeyRingProtector protector = SecretKeyRingProtector.unlockAllKeysWith(Passphrase.fromPassword(originalPassphrase), secretKey);
+        SecretKeyRingProtector protector =
+                SecretKeyRingProtector.unlockEachKeyWith(Passphrase.fromPassword(originalPassphrase), secretKey);
         Passphrase subkeyPassphrase = Passphrase.fromPassword("subk3yP4ssphr4s3");
         secretKey = PGPainless.modifyKeyRing(secretKey)
                 .addSubKey(
@@ -194,60 +188,33 @@ public class ModifyKeys {
     /**
      * This example demonstrates how to set a key expiration date.
      * The provided expiration date will be set on each user-id certification signature.
-     *
-     * @throws PGPException
      */
     @Test
     public void setKeyExpirationDate() throws PGPException {
         Date expirationDate = DateUtil.parseUTCDate("2030-06-24 12:44:56 UTC");
 
         SecretKeyRingProtector protector = SecretKeyRingProtector
-                .unlockAllKeysWith(Passphrase.fromPassword(originalPassphrase), secretKey);
+                .unlockEachKeyWith(Passphrase.fromPassword(originalPassphrase), secretKey);
         secretKey = PGPainless.modifyKeyRing(secretKey)
                 .setExpirationDate(expirationDate, protector)
                 .done();
 
 
         KeyRingInfo info = PGPainless.inspectKeyRing(secretKey);
-        assertEquals(DateUtil.formatUTCDate(expirationDate), DateUtil.formatUTCDate(info.getPrimaryKeyExpirationDate()));
-        assertEquals(DateUtil.formatUTCDate(expirationDate), DateUtil.formatUTCDate(info.getExpirationDateForUse(KeyFlag.ENCRYPT_COMMS)));
-        assertEquals(DateUtil.formatUTCDate(expirationDate), DateUtil.formatUTCDate(info.getExpirationDateForUse(KeyFlag.SIGN_DATA)));
-    }
-
-    /**
-     * This example demonstrates how to set an expiration date for single subkeys.
-     *
-     * @throws PGPException
-     */
-    @Test
-    public void setSubkeyExpirationDate() throws PGPException {
-        Date expirationDate = DateUtil.parseUTCDate("2032-01-13 22:30:01 UTC");
-        SecretKeyRingProtector protector = SecretKeyRingProtector
-                .unlockAllKeysWith(Passphrase.fromPassword(originalPassphrase), secretKey);
-
-        secretKey = PGPainless.modifyKeyRing(secretKey)
-                .setExpirationDate(
-                        OpenPgpFingerprint.of(secretKey.getPublicKey(encryptionSubkeyId)),
-                        expirationDate,
-                        protector
-                )
-                .done();
-
-
-        KeyRingInfo info = PGPainless.inspectKeyRing(secretKey);
-        assertNull(info.getPrimaryKeyExpirationDate());
-        assertNull(info.getExpirationDateForUse(KeyFlag.SIGN_DATA));
-        assertEquals(DateUtil.formatUTCDate(expirationDate), DateUtil.formatUTCDate(info.getExpirationDateForUse(KeyFlag.ENCRYPT_COMMS)));
+        assertEquals(DateUtil.formatUTCDate(expirationDate),
+                DateUtil.formatUTCDate(info.getPrimaryKeyExpirationDate()));
+        assertEquals(DateUtil.formatUTCDate(expirationDate),
+                DateUtil.formatUTCDate(info.getExpirationDateForUse(KeyFlag.ENCRYPT_COMMS)));
+        assertEquals(DateUtil.formatUTCDate(expirationDate),
+                DateUtil.formatUTCDate(info.getExpirationDateForUse(KeyFlag.SIGN_DATA)));
     }
 
     /**
      * This example demonstrates how to revoke a user-id on a key.
-     *
-     * @throws PGPException
      */
     @Test
     public void revokeUserId() throws PGPException {
-        SecretKeyRingProtector protector = SecretKeyRingProtector.unlockAllKeysWith(
+        SecretKeyRingProtector protector = SecretKeyRingProtector.unlockEachKeyWith(
                 Passphrase.fromPassword(originalPassphrase), secretKey);
         secretKey = PGPainless.modifyKeyRing(secretKey)
                 .addUserId("alcie@pgpainless.org", protector)

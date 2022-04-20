@@ -7,41 +7,53 @@ package org.pgpainless.key.generation;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import org.bouncycastle.openpgp.PGPSignatureSubpacketGenerator;
 import org.bouncycastle.openpgp.PGPSignatureSubpacketVector;
 import org.pgpainless.algorithm.KeyFlag;
 import org.pgpainless.key.generation.type.KeyType;
+import org.pgpainless.signature.subpackets.SignatureSubpackets;
+import org.pgpainless.signature.subpackets.SignatureSubpacketsHelper;
+
+import java.util.Date;
 
 public class KeySpec {
 
     private final KeyType keyType;
-    private final PGPSignatureSubpacketGenerator subpacketGenerator;
+    private final SignatureSubpackets subpacketGenerator;
     private final boolean inheritedSubPackets;
+    private final Date keyCreationDate;
 
     KeySpec(@Nonnull KeyType type,
-            @Nullable PGPSignatureSubpacketGenerator subpacketGenerator,
-            boolean inheritedSubPackets) {
+            @Nonnull SignatureSubpackets subpacketGenerator,
+            boolean inheritedSubPackets,
+            @Nullable Date keyCreationDate) {
         this.keyType = type;
         this.subpacketGenerator = subpacketGenerator;
         this.inheritedSubPackets = inheritedSubPackets;
+        this.keyCreationDate = keyCreationDate;
     }
 
     @Nonnull
-    KeyType getKeyType() {
+    public KeyType getKeyType() {
         return keyType;
     }
 
-    @Nullable
+    @Nonnull
     public PGPSignatureSubpacketVector getSubpackets() {
-        return subpacketGenerator != null ? subpacketGenerator.generate() : null;
+        return SignatureSubpacketsHelper.toVector(subpacketGenerator);
     }
 
-    PGPSignatureSubpacketGenerator getSubpacketGenerator() {
+    @Nonnull
+    public SignatureSubpackets getSubpacketGenerator() {
         return subpacketGenerator;
     }
 
     boolean isInheritedSubPackets() {
         return inheritedSubPackets;
+    }
+
+    @Nullable
+    public Date getKeyCreationDate() {
+        return keyCreationDate;
     }
 
     public static KeySpecBuilder getBuilder(KeyType type, KeyFlag flag, KeyFlag... flags) {

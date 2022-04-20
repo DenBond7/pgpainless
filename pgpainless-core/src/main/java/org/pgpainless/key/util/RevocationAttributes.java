@@ -4,16 +4,52 @@
 
 package org.pgpainless.key.util;
 
+import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class RevocationAttributes {
 
+    /**
+     * Reason for revocation.
+     * There are two kinds of reasons: hard and soft reason.
+     *
+     * Soft revocation reasons gracefully disable keys or user-ids.
+     * Softly revoked keys can no longer be used to encrypt data to or to generate signatures.
+     * Any signature made after a key has been soft revoked is deemed invalid.
+     * Any signature made before the key has been soft revoked stays valid.
+     * Soft revoked info can be re-certified at a later point.
+     *
+     * Hard revocation reasons on the other hand renders the key or user-id invalid immediately.
+     * Hard reasons are suitable to use if for example a key got compromised.
+     * Any signature made before or after a key has been hard revoked is no longer considered valid.
+     * Hard revoked information can also not be re-certified.
+     */
     public enum Reason {
+        /**
+         * The key or certification is being revoked without a reason.
+         * This is a HARD revocation reason and cannot be undone.
+         */
         NO_REASON((byte) 0),
+        /**
+         * The key was superseded by another key.
+         * This is a SOFT revocation reason and can be undone.
+         */
         KEY_SUPERSEDED((byte) 1),
+        /**
+         * The key has potentially been compromised.
+         * This is a HARD revocation reason and cannot be undone.
+         */
         KEY_COMPROMISED((byte) 2),
+        /**
+         * The key was retired and shall no longer be used.
+         * This is a SOFT revocation reason can can be undone.
+         */
         KEY_RETIRED((byte) 3),
+        /**
+         * The user-id is no longer valid.
+         * This is a SOFT revocation reason and can be undone.
+         */
         USER_ID_NO_LONGER_VALID((byte) 32),
         ;
 
@@ -24,6 +60,12 @@ public final class RevocationAttributes {
             }
         }
 
+        /**
+         * Decode a machine-readable reason code.
+         *
+         * @param code byte
+         * @return reason
+         */
         public static Reason fromCode(byte code) {
             Reason reason = MAP.get(code);
             if (reason == null) {
@@ -32,9 +74,30 @@ public final class RevocationAttributes {
             return reason;
         }
 
+        /**
+         * Return true if the {@link Reason} the provided code encodes is a hard revocation reason, false
+         * otherwise.
+         * Hard revocations cannot be undone, while keys or certifications with soft revocations can be
+         * re-certified by placing another signature on them.
+         *
+         * @param code reason code
+         * @return is hard
+         */
         public static boolean isHardRevocation(byte code) {
             Reason reason = MAP.get(code);
             return reason != KEY_SUPERSEDED && reason != KEY_RETIRED && reason != USER_ID_NO_LONGER_VALID;
+        }
+
+        /**
+         * Return true if the given {@link Reason} is a hard revocation, false otherwise.
+         * Hard revocations cannot be undone, while keys or certifications with soft revocations can be
+         * re-certified by placing another signature on them.
+         *
+         * @param reason reason
+         * @return is hard
+         */
+        public static boolean isHardRevocation(@Nonnull Reason reason) {
+            return isHardRevocation(reason.reasonCode);
         }
 
         private final byte reasonCode;
@@ -66,18 +129,38 @@ public final class RevocationAttributes {
         this.description = description;
     }
 
-    public Reason getReason() {
+    /**
+     * Return the machine-readable reason for revocation.
+     *
+     * @return reason
+     */
+    public @Nonnull Reason getReason() {
         return reason;
     }
 
-    public String getDescription() {
+    /**
+     * Return the human-readable description for the revocation reason.
+     * @return description
+     */
+    public @Nonnull String getDescription() {
         return description;
     }
 
+    /**
+     * Build a {@link RevocationAttributes} object suitable for key revocations.
+     * Key revocations are revocations for keys or subkeys.
+     *
+     * @return builder
+     */
     public static WithReason createKeyRevocation() {
         return new WithReason(RevocationType.KEY_REVOCATION);
     }
 
+    /**
+     * Build a {@link RevocationAttributes} object suitable for certification (e.g. user-id) revocations.
+     *
+     * @return builder
+     */
     public static WithReason createCertificateRevocation() {
         return new WithReason(RevocationType.CERT_REVOCATION);
     }
@@ -90,6 +173,16 @@ public final class RevocationAttributes {
             this.type = type;
         }
 
+        /**
+         * Set the machine-readable reason.
+         * Note that depending on whether this is a key-revocation or certification-revocation,
+         * only certain reason codes are valid.
+         * Invalid input will result in an {@link IllegalArgumentException} to be thrown.
+         *
+         * @param reason reason
+         * @throws IllegalArgumentException in case of an invalid revocation reason
+         * @return builder
+         */
         public WithDescription withReason(Reason reason) {
             throwIfReasonTypeMismatch(reason, type);
             return new WithDescription(reason);
@@ -120,8 +213,22 @@ public final class RevocationAttributes {
             this.reason = reason;
         }
 
-        public RevocationAttributes withDescription(String description) {
+        /**
+         * Set a human-readable description of the revocation reason.
+         *
+         * @param description description
+         * @return revocation attributes
+         */
+        public RevocationAttributes withDescription(@Nonnull String description) {
             return new RevocationAttributes(reason, description);
+        }
+
+        /**
+         * Set an empty human-readable description.
+         * @return revocation attributes
+         */
+        public RevocationAttributes withoutDescription() {
+            return withDescription("");
         }
     }
 }

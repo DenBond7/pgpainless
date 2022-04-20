@@ -15,6 +15,7 @@ public final class DateUtil {
 
     }
 
+    // Java's SimpleDateFormat is not thread-safe, therefore we return a new instance on every invocation.
     public static SimpleDateFormat getParser() {
         SimpleDateFormat parser = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z");
         parser.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -46,11 +47,23 @@ public final class DateUtil {
     }
 
     /**
-     * Return the current date "rounded" to UTC precision.
+     * Floor a date down to seconds precision.
+     * @param date date
+     * @return floored date
+     */
+    public static Date toSecondsPrecision(Date date) {
+        long millis = date.getTime();
+        long seconds = millis / 1000;
+        long floored = seconds * 1000;
+        return new Date(floored);
+    }
+
+    /**
+     * Return the current date "floored" to UTC precision.
      *
      * @return now
      */
     public static Date now() {
-        return parseUTCDate(formatUTCDate(new Date()));
+        return toSecondsPrecision(new Date());
     }
 }

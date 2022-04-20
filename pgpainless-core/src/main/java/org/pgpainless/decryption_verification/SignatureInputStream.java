@@ -4,7 +4,7 @@
 
 package org.pgpainless.decryption_verification;
 
-import static org.pgpainless.signature.SignatureValidator.signatureWasCreatedInBounds;
+import static org.pgpainless.signature.consumer.SignatureValidator.signatureWasCreatedInBounds;
 
 import java.io.FilterInputStream;
 import java.io.IOException;
@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import org.bouncycastle.openpgp.PGPObjectFactory;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
@@ -20,9 +21,9 @@ import org.bouncycastle.openpgp.PGPSignatureList;
 import org.pgpainless.PGPainless;
 import org.pgpainless.exception.SignatureValidationException;
 import org.pgpainless.policy.Policy;
-import org.pgpainless.signature.CertificateValidator;
-import org.pgpainless.signature.DetachedSignatureCheck;
-import org.pgpainless.signature.OnePassSignatureCheck;
+import org.pgpainless.signature.consumer.CertificateValidator;
+import org.pgpainless.signature.consumer.DetachedSignatureCheck;
+import org.pgpainless.signature.consumer.OnePassSignatureCheck;
 import org.pgpainless.signature.SignatureUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,7 +47,7 @@ public abstract class SignatureInputStream extends FilterInputStream {
 
         public VerifySignatures(
                 InputStream literalDataStream,
-                PGPObjectFactory objectFactory,
+                @Nullable PGPObjectFactory objectFactory,
                 List<OnePassSignatureCheck> opSignatures,
                 Map<Long, OnePassSignatureCheck> onePassSignaturesWithMissingCert,
                 List<DetachedSignatureCheck> detachedSignatures,
@@ -92,7 +93,10 @@ public abstract class SignatureInputStream extends FilterInputStream {
             return read;
         }
 
-        public void parseAndCombineSignatures() throws IOException {
+        public void parseAndCombineSignatures() {
+            if (objectFactory == null) {
+                return;
+            }
             // Parse signatures from message
             PGPSignatureList signatures;
             try {
@@ -113,7 +117,8 @@ public abstract class SignatureInputStream extends FilterInputStream {
                     check.setSignature(signature);
 
                     resultBuilder.addInvalidInbandSignature(new SignatureVerification(signature, null),
-                            new SignatureValidationException("Missing verification certificate " + Long.toHexString(signature.getKeyID())));
+                            new SignatureValidationException(
+                                    "Missing verification certificate " + Long.toHexString(signature.getKeyID())));
                 }
             }
         }
@@ -146,13 +151,16 @@ public abstract class SignatureInputStream extends FilterInputStream {
                 }
 
                 try {
-                    signatureWasCreatedInBounds(options.getVerifyNotBefore(), options.getVerifyNotAfter()).verify(opSignature.getSignature());
+                    signatureWasCreatedInBounds(options.getVerifyNotBefore(),
+                            options.getVerifyNotAfter()).verify(opSignature.getSignature());
                     CertificateValidator.validateCertificateAndVerifyOnePassSignature(opSignature, policy);
-                    resultBuilder.addVerifiedInbandSignature(new SignatureVerification(opSignature.getSignature(), opSignature.getSigningKey()));
+                    resultBuilder.addVerifiedInbandSignature(
+                            new SignatureVerification(opSignature.getSignature(), opSignature.getSigningKey()));
                 } catch (SignatureValidationException e) {
                     LOGGER.warn("One-pass-signature verification failed for signature made by key {}: {}",
                             opSignature.getSigningKey(), e.getMessage(), e);
-                    resultBuilder.addInvalidInbandSignature(new SignatureVerification(opSignature.getSignature(), opSignature.getSigningKey()), e);
+                    resultBuilder.addInvalidInbandSignature(
+                            new SignatureVerification(opSignature.getSignature(), opSignature.getSigningKey()), e);
                 }
             }
         }
@@ -161,13 +169,17 @@ public abstract class SignatureInputStream extends FilterInputStream {
             Policy policy = PGPainless.getPolicy();
             for (DetachedSignatureCheck s : detachedSignatures) {
                 try {
-                    signatureWasCreatedInBounds(options.getVerifyNotBefore(), options.getVerifyNotAfter()).verify(s.getSignature());
-                    CertificateValidator.validateCertificateAndVerifyInitializedSignature(s.getSignature(), (PGPPublicKeyRing) s.getSigningKeyRing(), policy);
-                    resultBuilder.addVerifiedDetachedSignature(new SignatureVerification(s.getSignature(), s.getSigningKeyIdentifier()));
+                    signatureWasCreatedInBounds(options.getVerifyNotBefore(),
+                            options.getVerifyNotAfter()).verify(s.getSignature());
+                    CertificateValidator.validateCertificateAndVerifyInitializedSignature(s.getSignature(),
+                            (PGPPublicKeyRing) s.getSigningKeyRing(), policy);
+                    resultBuilder.addVerifiedDetachedSignature(new SignatureVerification(s.getSignature(),
+                            s.getSigningKeyIdentifier()));
                 } catch (SignatureValidationException e) {
                     LOGGER.warn("One-pass-signature verification failed for signature made by key {}: {}",
                             s.getSigningKeyIdentifier(), e.getMessage(), e);
-                    resultBuilder.addInvalidDetachedSignature(new SignatureVerification(s.getSignature(), s.getSigningKeyIdentifier()), e);
+                    resultBuilder.addInvalidDetachedSignature(new SignatureVerification(s.getSignature(),
+                            s.getSigningKeyIdentifier()), e);
                 }
             }
         }

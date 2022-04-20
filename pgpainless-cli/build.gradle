@@ -32,7 +32,7 @@ dependencies {
     testImplementation "org.junit.jupiter:junit-jupiter-api:$junitVersion"
     testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junitVersion"
     // https://todd.ginsberg.com/post/testing-system-exit/
-    testImplementation 'com.ginsberg:junit5-system-exit:1.1.1'
+    testImplementation 'com.ginsberg:junit5-system-exit:1.1.2'
 
     // implementation "ch.qos.logback:logback-core:1.2.6"
     // We want logback logging in tests and in the app
@@ -40,10 +40,7 @@ dependencies {
     implementation "ch.qos.logback:logback-classic:$logbackVersion"
 
     implementation(project(":pgpainless-sop"))
-    implementation(project(":sop-java"))
-    implementation(project(":sop-java-picocli"))
-
-    implementation "info.picocli:picocli:$picocliVersion"
+    implementation "org.pgpainless:sop-java-picocli:$sopJavaVersion"
 
     // https://mvnrepository.com/artifact/com.google.code.findbugs/jsr305
     implementation group: 'com.google.code.findbugs', name: 'jsr305', version: '3.0.2'
@@ -52,6 +49,7 @@ dependencies {
 mainClassName = 'org.pgpainless.cli.PGPainlessCLI'
 
 jar {
+    duplicatesStrategy(DuplicatesStrategy.EXCLUDE)
     manifest {
         attributes 'Main-Class': "$mainClassName"
     }
@@ -74,4 +72,4 @@ run {
     }
 }
 
-tasks."jar".dependsOn(":pgpainless-core:assemble")
+tasks."jar".dependsOn(":pgpainless-core:assemble", ":pgpainless-sop:assemble")

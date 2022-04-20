@@ -46,9 +46,6 @@ public class Sign {
     /**
      * Demonstration of how to use the PGPainless API to sign some message using inband signatures.
      * The result is not human-readable, however the resulting text contains both the signed data and the signatures.
-     *
-     * @throws PGPException
-     * @throws IOException
      */
     @Test
     public void inbandSignedMessage() throws PGPException, IOException {
@@ -58,7 +55,7 @@ public class Sign {
         EncryptionStream signingStream = PGPainless.encryptAndOrSign()
                 .onOutputStream(signedOut)
                 .withOptions(ProducerOptions.sign(SigningOptions.get()
-                                .addInlineSignature(protector, secretKey, DocumentSignatureType.CANONICAL_TEXT_DOCUMENT))
+                                .addSignature(protector, secretKey))
                 );
 
         Streams.pipeAll(messageIn, signingStream);
@@ -75,9 +72,6 @@ public class Sign {
      * A detached signature can be distributed alongside the message/file itself.
      *
      * The message/file doesn't need to be altered for detached signature creation.
-     *
-     * @throws PGPException
-     * @throws IOException
      */
     @Test
     public void detachedSignedMessage() throws PGPException, IOException {
@@ -113,9 +107,6 @@ public class Sign {
      * Demonstration of how to sign a text message in a way that keeps the message content
      * human-readable by utilizing the OpenPGP Cleartext Signature Framework.
      * The resulting message contains the original (dash-escaped) message and the signatures.
-     *
-     * @throws PGPException
-     * @throws IOException
      */
     @Test
     public void cleartextSignedMessage() throws PGPException, IOException {

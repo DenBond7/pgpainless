@@ -5,13 +5,16 @@
 package org.pgpainless.cli.commands;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -40,8 +43,6 @@ public class SignVerifyTest {
 
     private static File tempDir;
     private static PrintStream originalSout;
-
-    private final String data = "If privacy is outlawed, only outlaws will have privacy.\n";
 
     @BeforeAll
     public static void prepare() throws IOException {
@@ -72,11 +73,15 @@ public class SignVerifyTest {
         aliceCertOut.close();
 
         // Write test data to disc
+        String data = "If privacy is outlawed, only outlaws will have privacy.\n";
         File dataFile = new File(tempDir, "data");
         assertTrue(dataFile.createNewFile());
         FileOutputStream dataOut = new FileOutputStream(dataFile);
         Streams.pipeAll(new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)), dataOut);
         dataOut.close();
+
+        // Define micalg output file
+        File micalgOut = new File(tempDir, "micalg");
 
         // Sign test data
         FileInputStream dataIn = new FileInputStream(dataFile);
@@ -85,7 +90,7 @@ public class SignVerifyTest {
         assertTrue(sigFile.createNewFile());
         FileOutputStream sigOut = new FileOutputStream(sigFile);
         System.setOut(new PrintStream(sigOut));
-        PGPainlessCLI.execute("sign", "--armor", aliceKeyFile.getAbsolutePath());
+        PGPainlessCLI.execute("sign", "--armor", "--micalg-out", micalgOut.getAbsolutePath(), aliceKeyFile.getAbsolutePath());
         sigOut.close();
 
         // verify test data signature
@@ -105,6 +110,15 @@ public class SignVerifyTest {
         OpenPgpV4Fingerprint signingKeyFingerprint = new OpenPgpV4Fingerprint(new KeyRingInfo(alicePub, new Date()).getSigningSubkeys().get(0));
         assertEquals(signingKeyFingerprint.toString(), split[1].trim());
         assertEquals(primaryKeyFingerprint.toString(), split[2].trim());
+
+        // Test micalg output
+        assertTrue(micalgOut.exists());
+        FileReader fileReader = new FileReader(micalgOut);
+        BufferedReader bufferedReader = new BufferedReader(fileReader);
+        String line = bufferedReader.readLine();
+        assertNull(bufferedReader.readLine());
+        bufferedReader.close();
+        assertEquals("pgp-sha512", line);
 
         System.setIn(originalIn);
     }

@@ -10,12 +10,12 @@ import java.util.Date;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.junit.JUtils;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pgpainless.PGPainless;
-import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.util.DateUtil;
+import org.pgpainless.util.TestAllImplementations;
 
 public class ChangeExpirationOnKeyWithDifferentSignatureTypesTest {
 
@@ -135,21 +135,19 @@ public class ChangeExpirationOnKeyWithDifferentSignatureTypesTest {
             "=GIQn\n" +
             "-----END PGP PRIVATE KEY BLOCK-----";
 
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void setExpirationDate_keyHasSigClass10(ImplementationFactory implementationFactory)
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void setExpirationDate_keyHasSigClass10()
             throws PGPException, IOException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
         PGPSecretKeyRing keys = PGPainless.readKeyRing().secretKeyRing(keyWithGenericCertification);
         SecretKeyRingProtector protector = SecretKeyRingProtector.unprotectedKeys();
         executeTestForKeys(keys, protector);
     }
 
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void setExpirationDate_keyHasSigClass12(ImplementationFactory implementationFactory)
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void setExpirationDate_keyHasSigClass12()
             throws PGPException, IOException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
         PGPSecretKeyRing keys = PGPainless.readKeyRing().secretKeyRing(keyWithCasualCertification);
         SecretKeyRingProtector protector = SecretKeyRingProtector.unprotectedKeys();
         executeTestForKeys(keys, protector);
@@ -159,7 +157,7 @@ public class ChangeExpirationOnKeyWithDifferentSignatureTypesTest {
             throws PGPException {
         Date expirationDate = new Date(new Date().getTime() + 1000 * 60 * 60 * 24 * 14);
         // round date for test stability
-        expirationDate = DateUtil.parseUTCDate(DateUtil.formatUTCDate(expirationDate));
+        expirationDate = DateUtil.toSecondsPrecision(expirationDate);
 
         PGPSecretKeyRing modded = PGPainless.modifyKeyRing(keys)
                 .setExpirationDate(expirationDate, protector)

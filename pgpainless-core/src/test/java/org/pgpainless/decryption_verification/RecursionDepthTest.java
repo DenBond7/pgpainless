@@ -14,10 +14,10 @@ import java.nio.charset.StandardCharsets;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.util.io.Streams;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pgpainless.PGPainless;
-import org.pgpainless.implementation.ImplementationFactory;
+import org.pgpainless.util.TestAllImplementations;
 
 public class RecursionDepthTest {
 
@@ -26,10 +26,10 @@ public class RecursionDepthTest {
      *
      * @see <a href="https://tests.sequoia-pgp.org/#Maximum_recursion_depth">Sequoia-PGP Test Suite</a>
      */
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void decryptionAbortsWhenMaximumRecursionDepthReachedTest(ImplementationFactory implementationFactory) throws IOException, PGPException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void decryptionAbortsWhenMaximumRecursionDepthReachedTest()
+            throws IOException {
         String key = "-----BEGIN PGP PRIVATE KEY BLOCK-----\n" +
                 "Comment: Bob's OpenPGP Transferable Secret Key\n" +
                 "\n" +

@@ -11,6 +11,7 @@ import java.util.Set;
 import javax.annotation.Nonnull;
 
 import org.bouncycastle.openpgp.PGPLiteralData;
+import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSignature;
 import org.pgpainless.algorithm.CompressionAlgorithm;
 import org.pgpainless.algorithm.StreamEncoding;
@@ -50,6 +51,8 @@ public final class EncryptionResult {
      * @return symmetric encryption algorithm
      *
      * @deprecated use {@link #getEncryptionAlgorithm()} instead.
+     *
+     * TODO: Remove in 1.2.X
      */
     @Deprecated
     public SymmetricKeyAlgorithm getSymmetricKeyAlgorithm() {
@@ -131,6 +134,25 @@ public final class EncryptionResult {
     }
 
     /**
+     * Returns true, if the message was encrypted for at least one subkey of the given certificate.
+     *
+     * @param certificate certificate
+     * @return true if encrypted for 1+ subkeys, false otherwise.
+     */
+    public boolean isEncryptedFor(PGPPublicKeyRing certificate) {
+        for (SubkeyIdentifier recipient : recipients) {
+            if (certificate.getPublicKey().getKeyID() != recipient.getPrimaryKeyId()) {
+                continue;
+            }
+
+            if (certificate.getPublicKey(recipient.getSubkeyId()) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Create a builder for the encryption result class.
      *
      * @return builder
@@ -145,7 +167,7 @@ public final class EncryptionResult {
         private CompressionAlgorithm compressionAlgorithm;
 
         private final MultiMap<SubkeyIdentifier, PGPSignature> detachedSignatures = new MultiMap<>();
-        private Set<SubkeyIdentifier> recipients = new HashSet<>();
+        private final Set<SubkeyIdentifier> recipients = new HashSet<>();
         private String fileName = "";
         private Date modificationDate = new Date(0L); // NOW
         private StreamEncoding encoding = StreamEncoding.BINARY;

@@ -7,6 +7,7 @@ package org.pgpainless.decryption_verification;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -21,7 +22,6 @@ import org.bouncycastle.openpgp.PGPOnePassSignatureList;
 import org.bouncycastle.openpgp.PGPPBEEncryptedData;
 import org.bouncycastle.openpgp.PGPPublicKeyEncryptedData;
 import org.bouncycastle.openpgp.PGPUtil;
-import org.bouncycastle.openpgp.operator.KeyFingerPrintCalculator;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.util.ArmorUtils;
 
@@ -75,11 +75,14 @@ public final class MessageInspector {
      *
      * @param message OpenPGP message
      * @return encryption info
-     * @throws PGPException
-     * @throws IOException
+     *
+     * @throws PGPException in case the message is broken
+     * @throws IOException in case of an IO error
      */
     public static EncryptionInfo determineEncryptionInfoForMessage(String message) throws PGPException, IOException {
-        return determineEncryptionInfoForMessage(new ByteArrayInputStream(message.getBytes("UTF-8")));
+        @SuppressWarnings("CharsetObjectCanBeUsed")
+        Charset charset = Charset.forName("UTF-8");
+        return determineEncryptionInfoForMessage(new ByteArrayInputStream(message.getBytes(charset)));
     }
 
     /**
@@ -88,8 +91,9 @@ public final class MessageInspector {
      *
      * @param dataIn openpgp message
      * @return encryption information
-     * @throws IOException
-     * @throws PGPException
+     *
+     * @throws IOException in case of an IO error
+     * @throws PGPException if the message is broken
      */
     public static EncryptionInfo determineEncryptionInfoForMessage(InputStream dataIn) throws IOException, PGPException {
         InputStream decoded = ArmorUtils.getDecoderStream(dataIn);
@@ -101,8 +105,7 @@ public final class MessageInspector {
     }
 
     private static void processMessage(InputStream dataIn, EncryptionInfo info) throws PGPException, IOException {
-        KeyFingerPrintCalculator calculator = ImplementationFactory.getInstance().getKeyFingerprintCalculator();
-        PGPObjectFactory objectFactory = new PGPObjectFactory(dataIn, calculator);
+        PGPObjectFactory objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(dataIn);
 
         Object next;
         while ((next = objectFactory.nextObject()) != null) {
@@ -131,7 +134,8 @@ public final class MessageInspector {
             if (next instanceof PGPCompressedData) {
                 PGPCompressedData compressed = (PGPCompressedData) next;
                 InputStream decompressed = compressed.getDataStream();
-                objectFactory = new PGPObjectFactory(PGPUtil.getDecoderStream(decompressed), calculator);
+                InputStream decoded = PGPUtil.getDecoderStream(decompressed);
+                objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(decoded);
             }
 
             if (next instanceof PGPLiteralData) {

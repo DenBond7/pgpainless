@@ -8,9 +8,11 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Arrays;
 
+import static org.pgpainless.util.BCUtil.constantTimeAreEqual;
+
 public class Passphrase {
 
-    private final Object lock = new Object();
+    public final Object lock = new Object();
 
     private final char[] chars;
     private boolean valid = true;
@@ -162,6 +164,7 @@ public class Passphrase {
             return false;
         }
         Passphrase other = (Passphrase) obj;
-        return Arrays.equals(getChars(), other.getChars());
+        return (getChars() == null && other.getChars() == null) ||
+                constantTimeAreEqual(getChars(), other.getChars());
     }
 }

@@ -21,14 +21,19 @@ import org.bouncycastle.openpgp.PGPSignatureGenerator;
 import org.bouncycastle.openpgp.operator.PGPDataEncryptorBuilder;
 import org.bouncycastle.openpgp.operator.PGPKeyEncryptionMethodGenerator;
 import org.pgpainless.algorithm.CompressionAlgorithm;
+import org.pgpainless.algorithm.StreamEncoding;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.SubkeyIdentifier;
+import org.pgpainless.util.ArmorUtils;
 import org.pgpainless.util.ArmoredOutputStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * OutputStream that produces an OpenPGP message. The message can be encrypted, signed, or both,
+ * depending on its configuration.
+ *
  * This class is based upon Jens Neuhalfen's Bouncy-GPG PGPEncryptingStream.
  * @see <a href="https://github.com/neuhalje/bouncy-gpg/blob/master/src/main/java/name/neuhalfen/projects/crypto/bouncycastle/openpgp/encrypting/PGPEncryptingStream.java">Source</a>
  */
@@ -46,6 +51,8 @@ public final class EncryptionStream extends OutputStream {
     private static final int BUFFER_SIZE = 1 << 9;
 
     OutputStream outermostStream;
+    OutputStream signatureLayerStream;
+
     private ArmoredOutputStream armorOutputStream = null;
     private OutputStream publicKeyEncryptedStream = null;
     private PGPCompressedDataGenerator compressedDataGenerator;
@@ -64,6 +71,8 @@ public final class EncryptionStream extends OutputStream {
         prepareCompression();
         prepareOnePassSignatures();
         prepareLiteralDataProcessing();
+        prepareSigningStream();
+        prepareInputEncoding();
     }
 
     private void prepareArmor() {
@@ -74,6 +83,14 @@ public final class EncryptionStream extends OutputStream {
 
         LOGGER.debug("Wrap encryption output in ASCII armor");
         armorOutputStream = ArmoredOutputStreamFactory.get(outermostStream);
+        if (options.hasComment()) {
+            String[] commentLines = options.getComment().split("\n");
+            for (String commentLine : commentLines) {
+            	if (!commentLine.trim().isEmpty()) {
+            		ArmorUtils.addCommentHeader(armorOutputStream, commentLine.trim());
+            	}
+            }
+        }
         outermostStream = armorOutputStream;
     }
 
@@ -121,6 +138,7 @@ public final class EncryptionStream extends OutputStream {
     }
 
     private void prepareOnePassSignatures() throws IOException, PGPException {
+        signatureLayerStream = outermostStream;
         SigningOptions signingOptions = options.getSigningOptions();
         if (signingOptions == null || signingOptions.getSigningMethods().isEmpty()) {
             // No singing options/methods -> no signing
@@ -143,16 +161,15 @@ public final class EncryptionStream extends OutputStream {
 
     private void prepareLiteralDataProcessing() throws IOException {
         if (options.isCleartextSigned()) {
+            // Begin cleartext with hash algorithm of first signing method
             SigningOptions.SigningMethod firstMethod = options.getSigningOptions().getSigningMethods().values().iterator().next();
             armorOutputStream.beginClearText(firstMethod.getHashAlgorithm().getAlgorithmId());
             return;
         }
+
         literalDataGenerator = new PGPLiteralDataGenerator();
-        literalDataStream = literalDataGenerator.open(outermostStream,
-                options.getEncoding().getCode(),
-                options.getFileName(),
-                options.getModificationDate(),
-                new byte[BUFFER_SIZE]);
+        literalDataStream = literalDataGenerator.open(outermostStream, options.getEncoding().getCode(),
+                options.getFileName(), options.getModificationDate(), new byte[BUFFER_SIZE]);
         outermostStream = literalDataStream;
 
         resultBuilder.setFileName(options.getFileName())
@@ -160,20 +177,19 @@ public final class EncryptionStream extends OutputStream {
                 .setFileEncoding(options.getEncoding());
     }
 
+    public void prepareSigningStream() {
+        outermostStream = new SignatureGenerationStream(outermostStream, options.getSigningOptions());
+    }
+
+    public void prepareInputEncoding() {
+        CRLFGeneratorStream crlfGeneratorStream = new CRLFGeneratorStream(outermostStream,
+                options.isApplyCRLFEncoding() ? StreamEncoding.UTF8 : StreamEncoding.BINARY);
+        outermostStream = crlfGeneratorStream;
+    }
+
     @Override
     public void write(int data) throws IOException {
         outermostStream.write(data);
-        SigningOptions signingOptions = options.getSigningOptions();
-        if (signingOptions == null || signingOptions.getSigningMethods().isEmpty()) {
-            return;
-        }
-
-        for (SubkeyIdentifier signingKey : signingOptions.getSigningMethods().keySet()) {
-            SigningOptions.SigningMethod signingMethod = signingOptions.getSigningMethods().get(signingKey);
-            PGPSignatureGenerator signatureGenerator = signingMethod.getSignatureGenerator();
-            byte asByte = (byte) (data & 0xff);
-            signatureGenerator.update(asByte);
-        }
     }
 
     @Override
@@ -185,15 +201,6 @@ public final class EncryptionStream extends OutputStream {
     @Override
     public void write(@Nonnull byte[] buffer, int off, int len) throws IOException {
         outermostStream.write(buffer, 0, len);
-        SigningOptions signingOptions = options.getSigningOptions();
-        if (signingOptions == null || signingOptions.getSigningMethods().isEmpty()) {
-            return;
-        }
-        for (SubkeyIdentifier signingKey : signingOptions.getSigningMethods().keySet()) {
-            SigningOptions.SigningMethod signingMethod = signingOptions.getSigningMethods().get(signingKey);
-            PGPSignatureGenerator signatureGenerator = signingMethod.getSignatureGenerator();
-            signatureGenerator.update(buffer, 0, len);
-        }
     }
 
     @Override
@@ -206,6 +213,8 @@ public final class EncryptionStream extends OutputStream {
         if (closed) {
             return;
         }
+
+        outermostStream.close();
 
         // Literal Data
         if (literalDataStream != null) {
@@ -256,10 +265,7 @@ public final class EncryptionStream extends OutputStream {
 
         // One-Pass-Signatures are bracketed. That means we have to append the signatures in reverse order
         //  compared to the one-pass-signature packets.
-        List<SubkeyIdentifier> signingKeys = new ArrayList<>();
-        for (SubkeyIdentifier signingKey : signingOptions.getSigningMethods().keySet()) {
-            signingKeys.add(signingKey);
-        }
+        List<SubkeyIdentifier> signingKeys = new ArrayList<>(signingOptions.getSigningMethods().keySet());
         for (int i = signingKeys.size() - 1; i >= 0; i--) {
             SubkeyIdentifier signingKey = signingKeys.get(i);
             SigningOptions.SigningMethod signingMethod = signingOptions.getSigningMethods().get(signingKey);
@@ -269,7 +275,7 @@ public final class EncryptionStream extends OutputStream {
                 resultBuilder.addDetachedSignature(signingKey, signature);
             }
             if (!signingMethod.isDetached() || options.isCleartextSigned()) {
-                signature.encode(outermostStream);
+                signature.encode(signatureLayerStream);
             }
         }
     }

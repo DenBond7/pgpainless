@@ -34,6 +34,12 @@ public interface KeyType {
     PublicKeyAlgorithm getAlgorithm();
 
     /**
+     * Return the strength of the key in bits.
+     * @return strength of the key in bits
+     */
+    int getBitStrength();
+
+    /**
      * Return an implementation of {@link AlgorithmParameterSpec} that can be used to generate the key.
      *
      * @return algorithm parameter spec
@@ -64,7 +70,7 @@ public interface KeyType {
      * Return true if the key that is generated from this type is able to carry the AUTHENTICATION key flag.
      * See {@link org.pgpainless.algorithm.KeyFlag#AUTHENTICATION}.
      *
-     * @return true if the key is able to be used for authentication purposes.
+     * @return true if the key can be used for authentication purposes.
      */
     default boolean canAuthenticate() {
         return canSign();

@@ -5,12 +5,11 @@
 package org.pgpainless.key.generation;
 
 import java.util.Arrays;
-import java.util.Iterator;
+import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import javax.annotation.Nonnull;
 
-import org.bouncycastle.openpgp.PGPSignatureSubpacketGenerator;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.AlgorithmSuite;
 import org.pgpainless.algorithm.CompressionAlgorithm;
@@ -19,17 +18,21 @@ import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.KeyFlag;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.key.generation.type.KeyType;
+import org.pgpainless.signature.subpackets.SelfSignatureSubpackets;
+import org.pgpainless.signature.subpackets.SignatureSubpackets;
+import org.pgpainless.signature.subpackets.SignatureSubpacketsUtil;
 import org.pgpainless.util.CollectionUtils;
 
 public class KeySpecBuilder implements KeySpecBuilderInterface {
 
     private final KeyType type;
     private final KeyFlag[] keyFlags;
-    private final PGPSignatureSubpacketGenerator hashedSubPackets = new PGPSignatureSubpacketGenerator();
+    private final SelfSignatureSubpackets hashedSubpackets = new SignatureSubpackets();
     private final AlgorithmSuite algorithmSuite = PGPainless.getPolicy().getKeyGenerationAlgorithmSuite();
     private Set<CompressionAlgorithm> preferredCompressionAlgorithms = algorithmSuite.getCompressionAlgorithms();
     private Set<HashAlgorithm> preferredHashAlgorithms = algorithmSuite.getHashAlgorithms();
     private Set<SymmetricKeyAlgorithm> preferredSymmetricAlgorithms = algorithmSuite.getSymmetricKeyAlgorithms();
+    private Date keyCreationDate;
 
     KeySpecBuilder(@Nonnull KeyType type, KeyFlag flag, KeyFlag... flags) {
         if (flag == null) {
@@ -39,89 +42,46 @@ public class KeySpecBuilder implements KeySpecBuilderInterface {
             throw new IllegalArgumentException("List of additional flags MUST NOT be null.");
         }
         flags = CollectionUtils.concat(flag, flags);
-        assureKeyCanCarryFlags(type, flags);
+        SignatureSubpacketsUtil.assureKeyCanCarryFlags(type, flags);
         this.type = type;
         this.keyFlags = flags;
     }
 
     @Override
-    public KeySpecBuilder overridePreferredCompressionAlgorithms(@Nonnull CompressionAlgorithm... compressionAlgorithms) {
+    public KeySpecBuilder overridePreferredCompressionAlgorithms(
+            @Nonnull CompressionAlgorithm... compressionAlgorithms) {
         this.preferredCompressionAlgorithms = new LinkedHashSet<>(Arrays.asList(compressionAlgorithms));
         return this;
     }
 
     @Override
-    public KeySpecBuilder overridePreferredHashAlgorithms(@Nonnull HashAlgorithm... preferredHashAlgorithms) {
+    public KeySpecBuilder overridePreferredHashAlgorithms(
+            @Nonnull HashAlgorithm... preferredHashAlgorithms) {
         this.preferredHashAlgorithms = new LinkedHashSet<>(Arrays.asList(preferredHashAlgorithms));
         return this;
     }
 
     @Override
-    public KeySpecBuilder overridePreferredSymmetricKeyAlgorithms(@Nonnull SymmetricKeyAlgorithm... preferredSymmetricKeyAlgorithms) {
+    public KeySpecBuilder overridePreferredSymmetricKeyAlgorithms(
+            @Nonnull SymmetricKeyAlgorithm... preferredSymmetricKeyAlgorithms) {
         this.preferredSymmetricAlgorithms = new LinkedHashSet<>(Arrays.asList(preferredSymmetricKeyAlgorithms));
         return this;
     }
 
+    @Override
+    public KeySpecBuilder setKeyCreationDate(@Nonnull Date creationDate) {
+        this.keyCreationDate = creationDate;
+        return this;
+    }
 
     @Override
     public KeySpec build() {
-        this.hashedSubPackets.setKeyFlags(false, KeyFlag.toBitmask(keyFlags));
-        this.hashedSubPackets.setPreferredCompressionAlgorithms(false, getPreferredCompressionAlgorithmIDs());
-        this.hashedSubPackets.setPreferredHashAlgorithms(false, getPreferredHashAlgorithmIDs());
-        this.hashedSubPackets.setPreferredSymmetricAlgorithms(false, getPreferredSymmetricKeyAlgorithmIDs());
-        this.hashedSubPackets.setFeature(false, Feature.MODIFICATION_DETECTION.getFeatureId());
+        this.hashedSubpackets.setKeyFlags(keyFlags);
+        this.hashedSubpackets.setPreferredCompressionAlgorithms(preferredCompressionAlgorithms);
+        this.hashedSubpackets.setPreferredHashAlgorithms(preferredHashAlgorithms);
+        this.hashedSubpackets.setPreferredSymmetricKeyAlgorithms(preferredSymmetricAlgorithms);
+        this.hashedSubpackets.setFeatures(Feature.MODIFICATION_DETECTION);
 
-        return new KeySpec(type, hashedSubPackets, false);
-    }
-
-    private int[] getPreferredCompressionAlgorithmIDs() {
-        int[] ids = new int[preferredCompressionAlgorithms.size()];
-        Iterator<CompressionAlgorithm> iterator = preferredCompressionAlgorithms.iterator();
-        for (int i = 0; i < ids.length; i++) {
-            ids[i] = iterator.next().getAlgorithmId();
-        }
-        return ids;
-    }
-
-    private int[] getPreferredHashAlgorithmIDs() {
-        int[] ids = new int[preferredHashAlgorithms.size()];
-        Iterator<HashAlgorithm> iterator = preferredHashAlgorithms.iterator();
-        for (int i = 0; i < ids.length; i++) {
-            ids[i] = iterator.next().getAlgorithmId();
-        }
-        return ids;
-    }
-
-    private int[] getPreferredSymmetricKeyAlgorithmIDs() {
-        int[] ids = new int[preferredSymmetricAlgorithms.size()];
-        Iterator<SymmetricKeyAlgorithm> iterator = preferredSymmetricAlgorithms.iterator();
-        for (int i = 0; i < ids.length; i++) {
-            ids[i] = iterator.next().getAlgorithmId();
-        }
-        return ids;
-    }
-
-    private static void assureKeyCanCarryFlags(KeyType type, KeyFlag... flags) {
-        final int mask = KeyFlag.toBitmask(flags);
-
-        if (!type.canCertify() && KeyFlag.hasKeyFlag(mask, KeyFlag.CERTIFY_OTHER)) {
-            throw new IllegalArgumentException("KeyType " + type.getName() + " cannot carry key flag CERTIFY_OTHER.");
-        }
-
-        if (!type.canSign() && KeyFlag.hasKeyFlag(mask, KeyFlag.SIGN_DATA)) {
-            throw new IllegalArgumentException("KeyType " + type.getName() + " cannot carry key flag SIGN_DATA.");
-        }
-
-        if (!type.canEncryptCommunication() && KeyFlag.hasKeyFlag(mask, KeyFlag.ENCRYPT_COMMS)) {
-            throw new IllegalArgumentException("KeyType " + type.getName() + " cannot carry key flag ENCRYPT_COMMS.");
-        }
-
-        if (!type.canEncryptStorage() && KeyFlag.hasKeyFlag(mask, KeyFlag.ENCRYPT_STORAGE)) {
-            throw new IllegalArgumentException("KeyType " + type.getName() + " cannot carry key flag ENCRYPT_STORAGE.");
-        }
-
-        if (!type.canAuthenticate() && KeyFlag.hasKeyFlag(mask, KeyFlag.AUTHENTICATION)) {
-            throw new IllegalArgumentException("KeyType " + type.getName() + " cannot carry key flag AUTHENTIACTION.");
-        }
+        return new KeySpec(type, (SignatureSubpackets) hashedSubpackets, false, keyCreationDate);
     }
 }

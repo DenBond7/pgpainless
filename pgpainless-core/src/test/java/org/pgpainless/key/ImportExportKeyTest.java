@@ -12,11 +12,11 @@ import java.io.IOException;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
-import org.bouncycastle.openpgp.operator.bc.BcKeyFingerprintCalculator;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.bouncycastle.openpgp.operator.KeyFingerPrintCalculator;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pgpainless.implementation.ImplementationFactory;
+import org.pgpainless.util.TestAllImplementations;
 
 public class ImportExportKeyTest {
 
@@ -24,23 +24,25 @@ public class ImportExportKeyTest {
      * Test the export and import of a key ring with sub keys.
      * @throws IOException in case of a IO error
      */
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void testExportImportPublicKeyRing(ImplementationFactory implementationFactory) throws IOException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void testExportImportPublicKeyRing() throws IOException {
         PGPPublicKeyRing publicKeys = TestKeys.getJulietPublicKeyRing();
 
-        BcKeyFingerprintCalculator calc = new BcKeyFingerprintCalculator();
+        KeyFingerPrintCalculator calc = ImplementationFactory.getInstance().getKeyFingerprintCalculator();
         byte[] bytes = publicKeys.getEncoded();
         PGPPublicKeyRing parsed = new PGPPublicKeyRing(bytes, calc);
         assertArrayEquals(publicKeys.getEncoded(), parsed.getEncoded());
     }
 
-    @Test
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
     public void testExportImportSecretKeyRing() throws IOException, PGPException {
         PGPSecretKeyRing secretKeys = TestKeys.getRomeoSecretKeyRing();
+
+        KeyFingerPrintCalculator calc = ImplementationFactory.getInstance().getKeyFingerprintCalculator();
         byte[] bytes = secretKeys.getEncoded();
-        PGPSecretKeyRing parsed = new PGPSecretKeyRing(bytes, new BcKeyFingerprintCalculator());
+        PGPSecretKeyRing parsed = new PGPSecretKeyRing(bytes, calc);
         assertArrayEquals(secretKeys.getEncoded(), parsed.getEncoded());
         assertEquals(secretKeys.getPublicKey().getKeyID(), parsed.getPublicKey().getKeyID());
     }

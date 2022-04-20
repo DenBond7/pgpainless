@@ -4,14 +4,17 @@
 
 package org.pgpainless.implementation;
 
+import java.io.InputStream;
 import java.security.KeyPair;
 import java.util.Date;
 
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPKeyPair;
+import org.bouncycastle.openpgp.PGPObjectFactory;
 import org.bouncycastle.openpgp.PGPPrivateKey;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSecretKey;
+import org.bouncycastle.openpgp.PGPSessionKey;
 import org.bouncycastle.openpgp.operator.KeyFingerPrintCalculator;
 import org.bouncycastle.openpgp.operator.PBEDataDecryptorFactory;
 import org.bouncycastle.openpgp.operator.PBEKeyEncryptionMethodGenerator;
@@ -24,6 +27,7 @@ import org.bouncycastle.openpgp.operator.PGPDigestCalculator;
 import org.bouncycastle.openpgp.operator.PGPDigestCalculatorProvider;
 import org.bouncycastle.openpgp.operator.PublicKeyDataDecryptorFactory;
 import org.bouncycastle.openpgp.operator.PublicKeyKeyEncryptionMethodGenerator;
+import org.bouncycastle.openpgp.operator.SessionKeyDataDecryptorFactory;
 import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
@@ -58,6 +62,10 @@ public abstract class ImplementationFactory {
                                                           Passphrase passphrase);
 
     public abstract PBESecretKeyDecryptor getPBESecretKeyDecryptor(Passphrase passphrase) throws PGPException;
+
+    public PGPDigestCalculator getV4FingerprintCalculator() throws PGPException {
+        return getPGPDigestCalculator(HashAlgorithm.SHA1);
+    }
 
     public PGPDigestCalculator getPGPDigestCalculator(HashAlgorithm algorithm) throws PGPException {
         return getPGPDigestCalculator(algorithm.getAlgorithmId());
@@ -98,6 +106,12 @@ public abstract class ImplementationFactory {
     public abstract PBESecretKeyEncryptor getPBESecretKeyEncryptor(SymmetricKeyAlgorithm encryptionAlgorithm,
                                                                    HashAlgorithm hashAlgorithm, int s2kCount,
                                                                    Passphrase passphrase) throws PGPException;
+
+    public abstract SessionKeyDataDecryptorFactory provideSessionKeyDataDecryptorFactory(PGPSessionKey sessionKey);
+
+    public abstract PGPObjectFactory getPGPObjectFactory(InputStream inputStream);
+
+    public abstract PGPObjectFactory getPGPObjectFactory(byte[] bytes);
 
     @Override
     public String toString() {

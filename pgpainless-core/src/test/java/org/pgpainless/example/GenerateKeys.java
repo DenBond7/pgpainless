@@ -30,7 +30,6 @@ import org.pgpainless.key.generation.type.ecc.EllipticCurve;
 import org.pgpainless.key.generation.type.eddsa.EdDSACurve;
 import org.pgpainless.key.generation.type.rsa.RsaLength;
 import org.pgpainless.key.info.KeyRingInfo;
-import org.pgpainless.key.util.KeyRingUtils;
 import org.pgpainless.key.util.UserId;
 import org.pgpainless.util.Passphrase;
 
@@ -55,13 +54,10 @@ public class GenerateKeys {
      * encryption subkey.
      *
      * This is the recommended way to generate OpenPGP keys with PGPainless.
-     *
-     * @throws PGPException
-     * @throws InvalidAlgorithmParameterException
-     * @throws NoSuchAlgorithmException
      */
     @Test
-    public void generateModernEcKey() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, IOException {
+    public void generateModernEcKey()
+            throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, IOException {
         // Define a primary user-id
         String userId = "gbaker@pgpainless.org";
         // Set a password to protect the secret key
@@ -70,10 +66,10 @@ public class GenerateKeys {
         PGPSecretKeyRing secretKey = PGPainless.generateKeyRing()
                 .modernKeyRing(userId, password);
         // Extract public key
-        PGPPublicKeyRing publicKey = KeyRingUtils.publicKeyRingFrom(secretKey);
+        PGPPublicKeyRing publicKey = PGPainless.extractCertificate(secretKey);
         // Encode the public key to an ASCII armored string ready for sharing
         String asciiArmoredPublicKey = PGPainless.asciiArmor(publicKey);
-
+        assertTrue(asciiArmoredPublicKey.startsWith("-----BEGIN PGP PUBLIC KEY BLOCK-----"));
 
         KeyRingInfo keyInfo = new KeyRingInfo(secretKey);
         assertEquals(3, keyInfo.getSecretKeys().size());
@@ -87,17 +83,14 @@ public class GenerateKeys {
     }
 
     /**
-     * This example demonstrates how to generate a simple OpenPGP key consisting of a 4096 bit RSA key.
+     * This example demonstrates how to generate a simple OpenPGP key consisting of a 4096-bit RSA key.
      * The RSA key is used for both signing and certifying, as well as encryption.
      *
      * This method is recommended if the application has to deal with legacy clients with poor algorithm support.
-     *
-     * @throws PGPException
-     * @throws InvalidAlgorithmParameterException
-     * @throws NoSuchAlgorithmException
      */
     @Test
-    public void generateSimpleRSAKey() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
+    public void generateSimpleRSAKey()
+            throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
         // Define a primary user-id
         String userId = "mpage@pgpainless.org";
         // Set a password to protect the secret key
@@ -105,7 +98,6 @@ public class GenerateKeys {
         // Generate the OpenPGP key
         PGPSecretKeyRing secretKey = PGPainless.generateKeyRing()
                 .simpleRsaKeyRing(userId, RsaLength._4096, password);
-
 
         KeyRingInfo keyInfo = new KeyRingInfo(secretKey);
         assertEquals(1, keyInfo.getSecretKeys().size());
@@ -115,17 +107,14 @@ public class GenerateKeys {
 
     /**
      * This example demonstrates how to generate a simple OpenPGP key based on elliptic curves.
-     * The key consists of an ECDSA primary key that is used both for certification of subkeys, as well as signing of data,
+     * The key consists of an ECDSA primary key that is used both for certification of subkeys, and signing of data,
      * and a single ECDH encryption subkey.
      *
      * This method is recommended if small keys and high performance are desired.
-     *
-     * @throws PGPException
-     * @throws InvalidAlgorithmParameterException
-     * @throws NoSuchAlgorithmException
      */
     @Test
-    public void generateSimpleECKey() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
+    public void generateSimpleECKey()
+            throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
         // Define a primary user-id
         String userId = "mhelms@pgpainless.org";
         // Set a password to protect the secret key
@@ -152,7 +141,7 @@ public class GenerateKeys {
      * {@link KeySpec} objects can best be obtained by using the {@link KeySpec#getBuilder(KeyType, KeyFlag, KeyFlag...)}
      * method and providing a {@link KeyType}.
      * There are a bunch of factory methods for different {@link KeyType} implementations present in {@link KeyType} itself
-     * (such as {@link KeyType#ECDH(EllipticCurve)}. {@link KeyFlag KeyFlags} determine
+     * (such as {@link KeyType#ECDH(EllipticCurve)}). {@link KeyFlag KeyFlags} determine
      * the use of the key, like encryption, signing data or certifying subkeys.
      *
      * If you so desire, you can now specify your own algorithm preferences.
@@ -166,7 +155,7 @@ public class GenerateKeys {
      * make sure that the primary key spec has the {@link KeyFlag} {@link KeyFlag#CERTIFY_OTHER} set, as this is a requirement
      * for primary keys.
      *
-     * Furthermore you have to set at least the primary user-id via
+     * Furthermore, you have to set at least the primary user-id via
      * {@link org.pgpainless.key.generation.KeyRingBuilder#addUserId(String)},
      * but you can also add additional user-ids.
      *
@@ -174,13 +163,10 @@ public class GenerateKeys {
      * {@link org.pgpainless.key.generation.KeyRingBuilder#setExpirationDate(Date)}.
      * Lastly you can decide whether to set a passphrase to protect the secret key using
      * {@link org.pgpainless.key.generation.KeyRingBuilder#setPassphrase(Passphrase)}.
-     *
-     * @throws PGPException
-     * @throws InvalidAlgorithmParameterException
-     * @throws NoSuchAlgorithmException
      */
     @Test
-    public void generateCustomOpenPGPKey() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
+    public void generateCustomOpenPGPKey()
+            throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
         // Instead of providing a string, we can assemble a user-id by using the user-id builder.
         // The example below corresponds to "Morgan Carpenter (Pride!) <mcarpenter@pgpainless.org>"
         UserId userId = UserId.newBuilder()
@@ -201,11 +187,11 @@ public class GenerateKeys {
                 .addSubkey(KeySpec.getBuilder(
                                 // We choose an ECDH key over the brainpoolp256r1 curve
                                 KeyType.ECDH(EllipticCurve._BRAINPOOLP256R1),
-                                // Our key can encrypt both communication data, as well as data at rest
+                                // Our key can encrypt both communication data, and data at rest
                                 KeyFlag.ENCRYPT_STORAGE, KeyFlag.ENCRYPT_COMMS
                         )
                         // Optionally: Configure the subkey with custom algorithm preferences
-                        //  Is is recommended though to go with PGPainless' defaults which can be found in the
+                        //  It is recommended though to go with PGPainless' defaults which can be found in the
                         //  AlgorithmSuite class.
                         .overridePreferredSymmetricKeyAlgorithms(SymmetricKeyAlgorithm.AES_256, SymmetricKeyAlgorithm.AES_192, SymmetricKeyAlgorithm.AES_128)
                         .overridePreferredHashAlgorithms(HashAlgorithm.SHA512, HashAlgorithm.SHA384, HashAlgorithm.SHA256)

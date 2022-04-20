@@ -9,20 +9,22 @@ SPDX-License-Identifier: Apache-2.0
 [![Travis (.com)](https://travis-ci.com/pgpainless/pgpainless.svg?branch=master)](https://travis-ci.com/pgpainless/pgpainless)
 [![Maven Central](https://badgen.net/maven/v/maven-central/org.pgpainless/pgpainless-core)](https://search.maven.org/artifact/org.pgpainless/pgpainless-core)
 [![Coverage Status](https://coveralls.io/repos/github/pgpainless/pgpainless/badge.svg?branch=master)](https://coveralls.io/github/pgpainless/pgpainless?branch=master)
-[![JavaDoc](https://badgen.net/badge/javadoc/yes/green)](https://pgpainless.org/releases/latest/javadoc/)
 [![Interoperability Test-Suite](https://badgen.net/badge/Sequoia%20Test%20Suite/%232/green)](https://tests.sequoia-pgp.org/)
 [![PGP](https://img.shields.io/badge/pgp-A027%20DB2F%203E1E%20118A-blue)](https://keyoxide.org/7F9116FEA90A5983936C7CFAA027DB2F3E1E118A)
 [![REUSE status](https://api.reuse.software/badge/github.com/pgpainless/pgpainless)](https://api.reuse.software/info/github.com/pgpainless/pgpainless)
+
+**PGPainless is an easy-to-use OpenPGP library for Java and Android applications**
+
 ## About
 
 PGPainless aims to make using OpenPGP in Java projects as simple as possible.
 It does so by introducing an intuitive Builder structure, which allows easy 
 setup of encryption/decryption operations, as well as straight forward key generation.
 
-PGPainless is based around the Bouncycastle java library and can be used on Android down to API level 10.
-It can be configured to either use the Java Cryptographic Engine (JCE), or Bouncycastles lightweight reimplementation.
+PGPainless is based around the Bouncy Castle java library and can be used on Android down to API level 10.
+It can be configured to either use the Java Cryptographic Engine (JCE), or Bouncy Castles lightweight reimplementation.
 
-While signature verification in Bouncycastle is limited to signature correctness, PGPainless goes much further.
+While signature verification in Bouncy Castle is limited to signature correctness, PGPainless goes much further.
 It also checks if signing subkeys are properly bound to their primary key, if keys are expired or revoked, as well as
 if keys are allowed to create signatures in the first place.
 
@@ -35,12 +37,25 @@ PGPainless currently [*scores second place* on Sequoia-PGPs Interoperability Tes
 >
 > -Tom @ FlowCrypt.com
 
+> Finally, testing irrefutably confirmed that the library removes many associated difficulties with PGP use in its provision of an approachable and uncomplicated API.
+> In this regard, Paul Schaub deserves the utmost praise.
+>
+> -Mario @ Cure53.de
+
+## Get Started
+
+The very easiest way to start using OpenPGP on Java/Kotlin based systems is to use an implementation of [sop-java](https://github.com/pgpainless/sop-java).
+`sop-java` defines a very stripped down API and is super easy to get started with.
+Luckily PGPainless provides an implementation for the `sop-java` interface definitions in the form of [pgpainless-sop](pgpainless-sop/README.md).
+
+If you need more flexibility, directly using `pgpainless-core` is the way to go.
+
 ## Features
 
 Most of PGPainless' features can be accessed directly from the `PGPainless` class.
 If you want to get started, this class is your friend :)
 
-For further details you should check out the [javadoc](https://pgpainless.org/releases/latest/javadoc/)!
+For further details you should check out the [javadoc](https://javadoc.io/doc/org.pgpainless/pgpainless-core)!
 
 ### Handle Keys
 Reading keys from ASCII armored strings or from binary files is easy:
@@ -94,7 +109,7 @@ There are some predefined key archetypes, but it is possible to fully customize 
                                         KeyFlag.ENCRYPT_COMMS, KeyFlag.ENCRYPT_STORAGE)
                 ).addUserId("Juliet <juliet@montague.lit>")
                 .addUserId("xmpp:juliet@capulet.lit")
-                .setPassphrase("romeo_oh_Romeo<3")
+                .setPassphrase(Passphrase.fromPassword("romeo_oh_Romeo<3"))
                 .build();
 ```
 
@@ -173,14 +188,14 @@ repositories {
 }
 
 dependencies {
-	implementation 'org.pgpainless:pgpainless-core:1.0.0-rc1'
+	implementation 'org.pgpainless:pgpainless-core:1.2.0'
 }
 ```
 
 ## About
 PGPainless is a by-product of my [Summer of Code 2018 project](https://blog.jabberhead.tk/summer-of-code-2018/)
 implementing OpenPGP support for the XMPP client library [Smack](https://github.com/igniterealtime/Smack).
-For that project I was in need of a simple to use OpenPGP library.
+For that project I was in need of a simple-to-use OpenPGP library.
 
 Originally I was going to use [Bouncy-GPG](https://github.com/neuhalje/bouncy-gpg) for my project,
 but ultimately I decided to create my own OpenPGP library which better fits my needs.
@@ -194,6 +209,23 @@ PGPainless is developed in - and accepts contributions from - the following plac
 
 * [Github](https://github.com/pgpainless/pgpainless)
 * [Codeberg](https://codeberg.org/PGPainless/pgpainless)
+
+We are using SemVer (MAJOR.MINOR.PATCH) versioning, although MINOR releases could contain breaking changes from time to time.
+
+If you want to contribute a bug fix, please check the `release/X.Y` branches first to see, what the oldest release is
+which contains the bug you are fixing. That way we can update older revisions of the library easily.
+
+### Branches
+* `release/X.Y` contains the state of the latest `X.Y.Z` PATCH release + next PATCH snapshot definition.
+* `master` contains the state of the latest MINOR release + some smaller changes that will make it into the next PATCH release.
+* `development` contains new features that will make it into the next MINOR release.
+
+#### Example:
+Latest release: 1.1.4
+* `release/1.0` contains the state of `1.0.5-SNAPSHOT`
+* `release/1.1` contains the state of `1.1.5-SNAPSHOT`
+* `master` contains the state `release/1.1` plus patch level changes that will make it into `1.1.5`.
+* `development` contains the state which will at some point become `1.2.0`.
 
 Please follow the [code of conduct](CODE_OF_CONDUCT.md) if you want to be part of the project.
 

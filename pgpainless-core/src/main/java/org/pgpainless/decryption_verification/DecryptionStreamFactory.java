@@ -14,8 +14,10 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import org.bouncycastle.bcpg.ArmoredInputStream;
 import org.bouncycastle.openpgp.PGPCompressedData;
@@ -33,35 +35,41 @@ import org.bouncycastle.openpgp.PGPPublicKeyEncryptedData;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.PGPSessionKey;
 import org.bouncycastle.openpgp.PGPSignature;
+import org.bouncycastle.openpgp.PGPSignatureList;
 import org.bouncycastle.openpgp.PGPUtil;
-import org.bouncycastle.openpgp.operator.KeyFingerPrintCalculator;
 import org.bouncycastle.openpgp.operator.PBEDataDecryptorFactory;
 import org.bouncycastle.openpgp.operator.PGPContentVerifierBuilderProvider;
 import org.bouncycastle.openpgp.operator.PublicKeyDataDecryptorFactory;
+import org.bouncycastle.openpgp.operator.SessionKeyDataDecryptorFactory;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.CompressionAlgorithm;
 import org.pgpainless.algorithm.EncryptionPurpose;
 import org.pgpainless.algorithm.StreamEncoding;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
+import org.pgpainless.decryption_verification.cleartext_signatures.ClearsignedMessageUtil;
+import org.pgpainless.decryption_verification.cleartext_signatures.MultiPassStrategy;
+import org.pgpainless.exception.FinalIOException;
 import org.pgpainless.exception.MessageNotIntegrityProtectedException;
 import org.pgpainless.exception.MissingDecryptionMethodException;
 import org.pgpainless.exception.MissingLiteralDataException;
 import org.pgpainless.exception.MissingPassphraseException;
 import org.pgpainless.exception.SignatureValidationException;
 import org.pgpainless.exception.UnacceptableAlgorithmException;
-import org.pgpainless.exception.WrongConsumingMethodException;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.SubkeyIdentifier;
 import org.pgpainless.key.info.KeyRingInfo;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnlockSecretKey;
-import org.pgpainless.signature.DetachedSignatureCheck;
-import org.pgpainless.signature.OnePassSignatureCheck;
 import org.pgpainless.signature.SignatureUtils;
+import org.pgpainless.signature.consumer.DetachedSignatureCheck;
+import org.pgpainless.signature.consumer.OnePassSignatureCheck;
+import org.pgpainless.util.ArmoredInputStreamFactory;
 import org.pgpainless.util.CRCingArmoredInputStreamWrapper;
 import org.pgpainless.util.PGPUtilWrapper;
 import org.pgpainless.util.Passphrase;
+import org.pgpainless.util.SessionKey;
 import org.pgpainless.util.Tuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,7 +78,11 @@ public final class DecryptionStreamFactory {
 
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DecryptionStreamFactory.class);
-    private static final int MAX_RECURSION_DEPTH = 16;
+    // Maximum nesting depth of packets (e.g. compression, encryption...)
+    private static final int MAX_PACKET_NESTING_DEPTH = 16;
+
+    // Buffer Size for BufferedInputStreams
+    public static int BUFFER_SIZE = 4096;
 
     private final ConsumerOptions options;
     private final OpenPgpMetadata.Builder resultBuilder = OpenPgpMetadata.getBuilder();
@@ -80,8 +92,6 @@ public final class DecryptionStreamFactory {
 
     private static final PGPContentVerifierBuilderProvider verifierBuilderProvider =
             ImplementationFactory.getInstance().getPGPContentVerifierBuilderProvider();
-    private static final KeyFingerPrintCalculator keyFingerprintCalculator =
-            ImplementationFactory.getInstance().getKeyFingerprintCalculator();
     private IntegrityProtectedInputStream integrityProtectedEncryptedInputStream;
 
 
@@ -89,7 +99,8 @@ public final class DecryptionStreamFactory {
                                           @Nonnull ConsumerOptions options)
             throws PGPException, IOException {
         DecryptionStreamFactory factory = new DecryptionStreamFactory(options);
-        return factory.parseOpenPGPDataAndCreateDecryptionStream(inputStream);
+        BufferedInputStream bufferedIn = new BufferedInputStream(inputStream, BUFFER_SIZE);
+        return factory.parseOpenPGPDataAndCreateDecryptionStream(bufferedIn);
     }
 
     public DecryptionStreamFactory(ConsumerOptions options) {
@@ -102,7 +113,8 @@ public final class DecryptionStreamFactory {
             long issuerKeyId = SignatureUtils.determineIssuerKeyId(signature);
             PGPPublicKeyRing signingKeyRing = findSignatureVerificationKeyRing(issuerKeyId);
             if (signingKeyRing == null) {
-                SignatureValidationException ex = new SignatureValidationException("Missing verification certificate " + Long.toHexString(issuerKeyId));
+                SignatureValidationException ex = new SignatureValidationException(
+                        "Missing verification certificate " + Long.toHexString(issuerKeyId));
                 resultBuilder.addInvalidDetachedSignature(new SignatureVerification(signature, null), ex);
                 continue;
             }
@@ -110,39 +122,47 @@ public final class DecryptionStreamFactory {
             SubkeyIdentifier signingKeyIdentifier = new SubkeyIdentifier(signingKeyRing, signingKey.getKeyID());
             try {
                 signature.init(verifierBuilderProvider, signingKey);
-                DetachedSignatureCheck detachedSignature = new DetachedSignatureCheck(signature, signingKeyRing, signingKeyIdentifier);
+                DetachedSignatureCheck detachedSignature =
+                        new DetachedSignatureCheck(signature, signingKeyRing, signingKeyIdentifier);
                 detachedSignatureChecks.add(detachedSignature);
             } catch (PGPException e) {
-                SignatureValidationException ex = new SignatureValidationException("Cannot verify detached signature made by " + signingKeyIdentifier + ".", e);
+                SignatureValidationException ex = new SignatureValidationException(
+                        "Cannot verify detached signature made by " + signingKeyIdentifier + ".", e);
                 resultBuilder.addInvalidDetachedSignature(new SignatureVerification(signature, signingKeyIdentifier), ex);
             }
         }
     }
 
-    private DecryptionStream parseOpenPGPDataAndCreateDecryptionStream(InputStream inputStream) throws IOException, PGPException {
-        // Make sure we handle armored and non-armored data properly
-        BufferedInputStream bufferedIn = new BufferedInputStream(inputStream, 512);
-        bufferedIn.mark(512);
-        InputStream decoderStream;
+    private DecryptionStream parseOpenPGPDataAndCreateDecryptionStream(BufferedInputStream bufferedIn)
+            throws IOException, PGPException {
+        InputStream pgpInStream;
+        InputStream outerDecodingStream;
         PGPObjectFactory objectFactory;
 
         try {
-            decoderStream = PGPUtilWrapper.getDecoderStream(bufferedIn);
-            decoderStream = CRCingArmoredInputStreamWrapper.possiblyWrap(decoderStream);
+            outerDecodingStream = PGPUtilWrapper.getDecoderStream(bufferedIn);
+            outerDecodingStream = CRCingArmoredInputStreamWrapper.possiblyWrap(outerDecodingStream);
 
-            if (decoderStream instanceof ArmoredInputStream) {
-                ArmoredInputStream armor = (ArmoredInputStream) decoderStream;
+            if (outerDecodingStream instanceof ArmoredInputStream) {
+                ArmoredInputStream armor = (ArmoredInputStream) outerDecodingStream;
 
+                // Cleartext Signed Message
+                // Throw a WrongConsumingMethodException to delegate preparation (extraction of signatures)
+                // to the CleartextSignatureProcessor which will call us again (see comment above)
                 if (armor.isClearText()) {
-                    throw new WrongConsumingMethodException("Message appears to be using the Cleartext Signature Framework. " +
-                            "Use PGPainless.verifyCleartextSignedMessage() to verify this message instead.");
+                    bufferedIn.reset();
+                    return parseCleartextSignedMessage(bufferedIn);
                 }
             }
 
-            objectFactory = new PGPObjectFactory(decoderStream, keyFingerprintCalculator);
+            objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(outerDecodingStream);
             // Parse OpenPGP message
-            inputStream = processPGPPackets(objectFactory, 1);
-        } catch (EOFException e) {
+            pgpInStream = processPGPPackets(objectFactory, 1);
+            return new DecryptionStream(pgpInStream,
+                    resultBuilder, integrityProtectedEncryptedInputStream,
+                    (outerDecodingStream instanceof ArmoredInputStream) ? outerDecodingStream : null);
+        } catch (EOFException | FinalIOException e) {
+            // Broken message or invalid decryption session key
             throw e;
         } catch (MissingLiteralDataException e) {
             // Not an OpenPGP message.
@@ -150,50 +170,84 @@ public final class DecryptionStreamFactory {
             //  to allow for detached signature verification.
             LOGGER.debug("The message appears to not be an OpenPGP message. This is probably data signed with detached signatures?");
             bufferedIn.reset();
-            decoderStream = bufferedIn;
-            objectFactory = new PGPObjectFactory(decoderStream, keyFingerprintCalculator);
-            inputStream = wrapInVerifySignatureStream(bufferedIn, objectFactory);
+            outerDecodingStream = bufferedIn;
+            objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(outerDecodingStream);
+            pgpInStream = wrapInVerifySignatureStream(bufferedIn, objectFactory);
         } catch (IOException e) {
             if (e.getMessage().contains("invalid armor") || e.getMessage().contains("invalid header encountered")) {
                 // We falsely assumed the data to be armored.
                 LOGGER.debug("The message is apparently not armored.");
                 bufferedIn.reset();
-                decoderStream = bufferedIn;
-                objectFactory = new PGPObjectFactory(decoderStream, keyFingerprintCalculator);
-                inputStream = wrapInVerifySignatureStream(bufferedIn, objectFactory);
+                outerDecodingStream = CRCingArmoredInputStreamWrapper.possiblyWrap(bufferedIn);
+                pgpInStream = wrapInVerifySignatureStream(outerDecodingStream, null);
             } else {
-                throw e;
+                throw new FinalIOException(e);
             }
         }
 
-        return new DecryptionStream(inputStream, resultBuilder, integrityProtectedEncryptedInputStream,
-                (decoderStream instanceof ArmoredInputStream) ? decoderStream : null);
+        return new DecryptionStream(pgpInStream, resultBuilder, integrityProtectedEncryptedInputStream,
+                (outerDecodingStream instanceof ArmoredInputStream) ? outerDecodingStream : null);
     }
 
-    private InputStream wrapInVerifySignatureStream(InputStream bufferedIn, PGPObjectFactory objectFactory) {
+    private DecryptionStream parseCleartextSignedMessage(BufferedInputStream in)
+            throws IOException, PGPException {
+        resultBuilder.setCompressionAlgorithm(CompressionAlgorithm.UNCOMPRESSED)
+                .setFileEncoding(StreamEncoding.TEXT);
+
+        ArmoredInputStream armorIn = ArmoredInputStreamFactory.get(in);
+
+        MultiPassStrategy multiPassStrategy = options.getMultiPassStrategy();
+        PGPSignatureList signatures = ClearsignedMessageUtil.detachSignaturesFromInbandClearsignedMessage(armorIn, multiPassStrategy.getMessageOutputStream());
+
+        for (PGPSignature signature : signatures) {
+            options.addVerificationOfDetachedSignature(signature);
+        }
+
+        initializeDetachedSignatures(options.getDetachedSignatures());
+
+        InputStream verifyIn = wrapInVerifySignatureStream(multiPassStrategy.getMessageInputStream(), null);
+        return new DecryptionStream(verifyIn, resultBuilder, integrityProtectedEncryptedInputStream,
+                null);
+    }
+
+    private InputStream wrapInVerifySignatureStream(InputStream bufferedIn, @Nullable PGPObjectFactory objectFactory) {
         return new SignatureInputStream.VerifySignatures(
                 bufferedIn, objectFactory, onePassSignatureChecks,
                 onePassSignaturesWithMissingCert, detachedSignatureChecks, options,
                 resultBuilder);
     }
 
-    private InputStream processPGPPackets(@Nonnull PGPObjectFactory objectFactory, int depth) throws IOException, PGPException {
-        if (depth >= MAX_RECURSION_DEPTH) {
-            throw new PGPException("Maximum recursion depth of packages exceeded.");
+    private InputStream processPGPPackets(@Nonnull PGPObjectFactory objectFactory, int depth)
+            throws IOException, PGPException {
+        if (depth >= MAX_PACKET_NESTING_DEPTH) {
+            throw new PGPException("Maximum depth of nested packages exceeded.");
         }
         Object nextPgpObject;
-        while ((nextPgpObject = objectFactory.nextObject()) != null) {
-            if (nextPgpObject instanceof PGPEncryptedDataList) {
-                return processPGPEncryptedDataList((PGPEncryptedDataList) nextPgpObject, depth);
+        try {
+            while ((nextPgpObject = objectFactory.nextObject()) != null) {
+                if (nextPgpObject instanceof PGPEncryptedDataList) {
+                    return processPGPEncryptedDataList((PGPEncryptedDataList) nextPgpObject, depth);
+                }
+                if (nextPgpObject instanceof PGPCompressedData) {
+                    return processPGPCompressedData((PGPCompressedData) nextPgpObject, depth);
+                }
+                if (nextPgpObject instanceof PGPOnePassSignatureList) {
+                    return processOnePassSignatureList(objectFactory, (PGPOnePassSignatureList) nextPgpObject, depth);
+                }
+                if (nextPgpObject instanceof PGPLiteralData) {
+                    return processPGPLiteralData(objectFactory, (PGPLiteralData) nextPgpObject, depth);
+                }
             }
-            if (nextPgpObject instanceof PGPCompressedData) {
-                return processPGPCompressedData((PGPCompressedData) nextPgpObject, depth);
+        } catch (FinalIOException e) {
+            throw e;
+        } catch (IOException e) {
+            if (depth == 1 && e.getMessage().contains("invalid armor")) {
+                throw e;
             }
-            if (nextPgpObject instanceof PGPOnePassSignatureList) {
-                return processOnePassSignatureList(objectFactory, (PGPOnePassSignatureList) nextPgpObject, depth);
-            }
-            if (nextPgpObject instanceof PGPLiteralData) {
-                return processPGPLiteralData(objectFactory, (PGPLiteralData) nextPgpObject, depth);
+            if (depth == 1 && e.getMessage().contains("unknown object in stream:")) {
+                throw new MissingLiteralDataException("No Literal Data Packet found.");
+            } else {
+                throw new FinalIOException(e);
             }
         }
 
@@ -203,39 +257,95 @@ public final class DecryptionStreamFactory {
     private InputStream processPGPEncryptedDataList(PGPEncryptedDataList pgpEncryptedDataList, int depth)
             throws PGPException, IOException {
         LOGGER.debug("Depth {}: Encountered PGPEncryptedDataList", depth);
+
+        SessionKey sessionKey = options.getSessionKey();
+        if (sessionKey != null) {
+            integrityProtectedEncryptedInputStream = decryptWithProvidedSessionKey(pgpEncryptedDataList, sessionKey);
+            InputStream decodedDataStream = PGPUtil.getDecoderStream(integrityProtectedEncryptedInputStream);
+            PGPObjectFactory factory = ImplementationFactory.getInstance().getPGPObjectFactory(decodedDataStream);
+            return processPGPPackets(factory, ++depth);
+        }
+
         InputStream decryptedDataStream = decryptSessionKey(pgpEncryptedDataList);
         InputStream decodedDataStream = PGPUtil.getDecoderStream(decryptedDataStream);
-        PGPObjectFactory factory = new PGPObjectFactory(decodedDataStream, keyFingerprintCalculator);
+        PGPObjectFactory factory = ImplementationFactory.getInstance().getPGPObjectFactory(decodedDataStream);
         return processPGPPackets(factory, ++depth);
+    }
+
+    private IntegrityProtectedInputStream decryptWithProvidedSessionKey(
+            PGPEncryptedDataList pgpEncryptedDataList,
+            SessionKey sessionKey)
+            throws PGPException {
+        PGPSessionKey pgpSessionKey = new PGPSessionKey(sessionKey.getAlgorithm().getAlgorithmId(), sessionKey.getKey());
+        SessionKeyDataDecryptorFactory decryptorFactory =
+                ImplementationFactory.getInstance().provideSessionKeyDataDecryptorFactory(pgpSessionKey);
+        InputStream decryptedDataStream = null;
+        PGPEncryptedData encryptedData = null;
+        for (PGPEncryptedData pgpEncryptedData : pgpEncryptedDataList) {
+            encryptedData = pgpEncryptedData;
+            if (!options.isIgnoreMDCErrors() && !encryptedData.isIntegrityProtected()) {
+                throw new MessageNotIntegrityProtectedException();
+            }
+
+            if (encryptedData instanceof PGPPBEEncryptedData) {
+                PGPPBEEncryptedData pbeEncrypted = (PGPPBEEncryptedData) encryptedData;
+                decryptedDataStream = pbeEncrypted.getDataStream(decryptorFactory);
+                break;
+            } else if (encryptedData instanceof PGPPublicKeyEncryptedData) {
+                PGPPublicKeyEncryptedData pkEncrypted = (PGPPublicKeyEncryptedData) encryptedData;
+                decryptedDataStream = pkEncrypted.getDataStream(decryptorFactory);
+                break;
+            }
+        }
+
+        if (decryptedDataStream == null) {
+            throw new PGPException("No valid PGP data encountered.");
+        }
+
+        resultBuilder.setSessionKey(sessionKey);
+        throwIfAlgorithmIsRejected(sessionKey.getAlgorithm());
+        integrityProtectedEncryptedInputStream =
+                new IntegrityProtectedInputStream(decryptedDataStream, encryptedData, options);
+        return integrityProtectedEncryptedInputStream;
     }
 
     private InputStream processPGPCompressedData(PGPCompressedData pgpCompressedData, int depth)
             throws PGPException, IOException {
-        CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm.fromId(pgpCompressedData.getAlgorithm());
-        LOGGER.debug("Depth {}: Encountered PGPCompressedData: {}", depth, compressionAlgorithm);
-        resultBuilder.setCompressionAlgorithm(compressionAlgorithm);
+        try {
+            CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm.requireFromId(pgpCompressedData.getAlgorithm());
+            LOGGER.debug("Depth {}: Encountered PGPCompressedData: {}", depth, compressionAlgorithm);
+            resultBuilder.setCompressionAlgorithm(compressionAlgorithm);
+        } catch (NoSuchElementException e) {
+            throw new PGPException("Unknown compression algorithm encountered.", e);
+        }
 
         InputStream inflatedDataStream = pgpCompressedData.getDataStream();
         InputStream decodedDataStream = PGPUtil.getDecoderStream(inflatedDataStream);
-        PGPObjectFactory objectFactory = new PGPObjectFactory(decodedDataStream, keyFingerprintCalculator);
+        PGPObjectFactory objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(decodedDataStream);
 
         return processPGPPackets(objectFactory, ++depth);
     }
 
-    private InputStream processOnePassSignatureList(@Nonnull PGPObjectFactory objectFactory, PGPOnePassSignatureList onePassSignatures, int depth)
+    private InputStream processOnePassSignatureList(
+            @Nonnull PGPObjectFactory objectFactory,
+            PGPOnePassSignatureList onePassSignatures,
+            int depth)
             throws PGPException, IOException {
         LOGGER.debug("Depth {}: Encountered PGPOnePassSignatureList of size {}", depth, onePassSignatures.size());
         initOnePassSignatures(onePassSignatures);
         return processPGPPackets(objectFactory, depth);
     }
 
-    private InputStream processPGPLiteralData(@Nonnull PGPObjectFactory objectFactory, PGPLiteralData pgpLiteralData, int depth) throws IOException {
+    private InputStream processPGPLiteralData(
+            @Nonnull PGPObjectFactory objectFactory,
+            PGPLiteralData pgpLiteralData,
+            int depth) {
         LOGGER.debug("Depth {}: Found PGPLiteralData", depth);
         InputStream literalDataInputStream = pgpLiteralData.getInputStream();
 
         resultBuilder.setFileName(pgpLiteralData.getFileName())
                 .setModificationDate(pgpLiteralData.getModificationTime())
-                .setFileEncoding(StreamEncoding.fromCode(pgpLiteralData.getFormat()));
+                .setFileEncoding(StreamEncoding.requireFromCode(pgpLiteralData.getFormat()));
 
         if (onePassSignatureChecks.isEmpty() && onePassSignaturesWithMissingCert.isEmpty()) {
             LOGGER.debug("No OnePassSignatures found -> We are done");
@@ -287,12 +397,14 @@ public final class DecryptionStreamFactory {
                 try {
                     InputStream decryptedDataStream = pbeEncryptedData.getDataStream(passphraseDecryptor);
 
-                    SymmetricKeyAlgorithm symmetricKeyAlgorithm = SymmetricKeyAlgorithm.fromId(
-                            pbeEncryptedData.getSymmetricAlgorithm(passphraseDecryptor));
-                    throwIfAlgorithmIsRejected(symmetricKeyAlgorithm);
-                    resultBuilder.setSymmetricKeyAlgorithm(symmetricKeyAlgorithm);
+                    PGPSessionKey pgpSessionKey = pbeEncryptedData.getSessionKey(passphraseDecryptor);
+                    SessionKey sessionKey = new SessionKey(pgpSessionKey);
+                    resultBuilder.setSessionKey(sessionKey);
 
-                    integrityProtectedEncryptedInputStream = new IntegrityProtectedInputStream(decryptedDataStream, pbeEncryptedData, options);
+                    throwIfAlgorithmIsRejected(sessionKey.getAlgorithm());
+
+                    integrityProtectedEncryptedInputStream =
+                            new IntegrityProtectedInputStream(decryptedDataStream, pbeEncryptedData, options);
 
                     return integrityProtectedEncryptedInputStream;
                 } catch (PGPException e) {
@@ -325,7 +437,8 @@ public final class DecryptionStreamFactory {
                             continue;
                         }
 
-                        privateKey = tryPublicKeyDecryption(secretKeys, secretKey, publicKeyEncryptedData, postponedDueToMissingPassphrase, true);
+                        privateKey = tryPublicKeyDecryption(secretKeys, secretKey, publicKeyEncryptedData,
+                                postponedDueToMissingPassphrase, true);
                     }
                 }
             }
@@ -340,8 +453,24 @@ public final class DecryptionStreamFactory {
                     continue;
                 }
 
-                PGPSecretKey secretKey = secretKeys.getSecretKey(keyId);
-                privateKey = tryPublicKeyDecryption(secretKeys, secretKey, publicKeyEncryptedData, postponedDueToMissingPassphrase, true);
+                // Make sure that the recipient key is encryption capable and non-expired
+                KeyRingInfo info = new KeyRingInfo(secretKeys);
+                List<PGPPublicKey> encryptionSubkeys = info.getEncryptionSubkeys(EncryptionPurpose.ANY);
+
+                PGPSecretKey secretKey = null;
+                for (PGPPublicKey pubkey : encryptionSubkeys) {
+                    if (pubkey.getKeyID() == keyId) {
+                        secretKey = secretKeys.getSecretKey(keyId);
+                        break;
+                    }
+                }
+
+                if (secretKey == null) {
+                    LOGGER.debug("Key " + Long.toHexString(keyId) + " is not valid or not capable for decryption.");
+                } else {
+                    privateKey = tryPublicKeyDecryption(secretKeys, secretKey, publicKeyEncryptedData,
+                            postponedDueToMissingPassphrase, true);
+                }
             }
             if (privateKey == null) {
                 continue;
@@ -372,7 +501,8 @@ public final class DecryptionStreamFactory {
                     PGPSecretKeyRing secretKeys = findDecryptionKeyRing(keyId.getKeyId());
                     PGPSecretKey secretKey = secretKeys.getSecretKey(keyId.getSubkeyId());
 
-                    PGPPrivateKey privateKey = tryPublicKeyDecryption(secretKeys, secretKey, publicKeyEncryptedData, postponedDueToMissingPassphrase, false);
+                    PGPPrivateKey privateKey = tryPublicKeyDecryption(secretKeys, secretKey, publicKeyEncryptedData,
+                            postponedDueToMissingPassphrase, false);
                     if (privateKey == null) {
                         continue;
                     }
@@ -447,29 +577,36 @@ public final class DecryptionStreamFactory {
         PublicKeyDataDecryptorFactory dataDecryptor = ImplementationFactory.getInstance()
                 .getPublicKeyDataDecryptorFactory(decryptionKey);
 
-        SymmetricKeyAlgorithm symmetricKeyAlgorithm = SymmetricKeyAlgorithm
-                .fromId(encryptedSessionKey.getSymmetricAlgorithm(dataDecryptor));
+        PGPSessionKey pgpSessionKey = encryptedSessionKey.getSessionKey(dataDecryptor);
+        SessionKey sessionKey = new SessionKey(pgpSessionKey);
+        resultBuilder.setSessionKey(sessionKey);
+
+        SymmetricKeyAlgorithm symmetricKeyAlgorithm = sessionKey.getAlgorithm();
         if (symmetricKeyAlgorithm == SymmetricKeyAlgorithm.NULL) {
             LOGGER.debug("Message is unencrypted");
         } else {
             LOGGER.debug("Message is encrypted using {}", symmetricKeyAlgorithm);
         }
         throwIfAlgorithmIsRejected(symmetricKeyAlgorithm);
-        resultBuilder.setSymmetricKeyAlgorithm(symmetricKeyAlgorithm);
 
-        integrityProtectedEncryptedInputStream = new IntegrityProtectedInputStream(encryptedSessionKey.getDataStream(dataDecryptor), encryptedSessionKey, options);
+        integrityProtectedEncryptedInputStream = new IntegrityProtectedInputStream(
+                encryptedSessionKey.getDataStream(dataDecryptor), encryptedSessionKey, options);
         return integrityProtectedEncryptedInputStream;
     }
 
-    private void throwIfAlgorithmIsRejected(SymmetricKeyAlgorithm algorithm) throws UnacceptableAlgorithmException {
+    private void throwIfAlgorithmIsRejected(SymmetricKeyAlgorithm algorithm)
+            throws UnacceptableAlgorithmException {
         if (!PGPainless.getPolicy().getSymmetricKeyDecryptionAlgorithmPolicy().isAcceptable(algorithm)) {
             throw new UnacceptableAlgorithmException("Data is "
-                    + (algorithm == SymmetricKeyAlgorithm.NULL ? "unencrypted" : "encrypted with symmetric algorithm " + algorithm) + " which is not acceptable as per PGPainless' policy.\n" +
+                    + (algorithm == SymmetricKeyAlgorithm.NULL ?
+                    "unencrypted" :
+                    "encrypted with symmetric algorithm " + algorithm) + " which is not acceptable as per PGPainless' policy.\n" +
                     "To mark this algorithm as acceptable, use PGPainless.getPolicy().setSymmetricKeyDecryptionAlgorithmPolicy().");
         }
     }
 
-    private void initOnePassSignatures(@Nonnull PGPOnePassSignatureList onePassSignatureList) throws PGPException {
+    private void initOnePassSignatures(@Nonnull PGPOnePassSignatureList onePassSignatureList)
+            throws PGPException {
         Iterator<PGPOnePassSignature> iterator = onePassSignatureList.iterator();
         if (!iterator.hasNext()) {
             throw new PGPException("Verification failed - No OnePassSignatures found");
@@ -478,14 +615,16 @@ public final class DecryptionStreamFactory {
         processOnePassSignatures(iterator);
     }
 
-    private void processOnePassSignatures(Iterator<PGPOnePassSignature> signatures) throws PGPException {
+    private void processOnePassSignatures(Iterator<PGPOnePassSignature> signatures)
+            throws PGPException {
         while (signatures.hasNext()) {
             PGPOnePassSignature signature = signatures.next();
             processOnePassSignature(signature);
         }
     }
 
-    private void processOnePassSignature(PGPOnePassSignature signature) throws PGPException {
+    private void processOnePassSignature(PGPOnePassSignature signature)
+            throws PGPException {
         final long keyId = signature.getKeyID();
 
         LOGGER.debug("Encountered OnePassSignature from {}", Long.toHexString(keyId));

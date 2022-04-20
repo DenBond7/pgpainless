@@ -17,12 +17,11 @@ import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.KeyFlag;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
-import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.generation.type.KeyType;
 import org.pgpainless.key.generation.type.ecc.EllipticCurve;
 import org.pgpainless.key.generation.type.eddsa.EdDSACurve;
@@ -30,16 +29,15 @@ import org.pgpainless.key.generation.type.rsa.RsaLength;
 import org.pgpainless.key.generation.type.xdh.XDHSpec;
 import org.pgpainless.key.info.KeyInfo;
 import org.pgpainless.key.util.UserId;
-import org.pgpainless.util.BCUtil;
 import org.pgpainless.util.Passphrase;
+import org.pgpainless.util.TestAllImplementations;
 
 public class BrainpoolKeyGenerationTest {
 
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void generateEcKeysTest(ImplementationFactory implementationFactory)
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void generateEcKeysTest()
             throws InvalidAlgorithmParameterException, NoSuchAlgorithmException, PGPException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
 
         for (EllipticCurve curve : EllipticCurve.values()) {
             PGPSecretKeyRing secretKeys = generateKey(
@@ -65,11 +63,10 @@ public class BrainpoolKeyGenerationTest {
         }
     }
 
-    @ParameterizedTest
-    @MethodSource("org.pgpainless.util.TestImplementationFactoryProvider#provideImplementationFactories")
-    public void generateEdDSAKeyTest(ImplementationFactory implementationFactory)
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void generateEdDSAKeyTest()
             throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
-        ImplementationFactory.setFactoryImplementation(implementationFactory);
 
         PGPSecretKeyRing secretKeys = PGPainless.buildKeyRing()
                 .setPrimaryKey(KeySpec.getBuilder(
@@ -98,22 +95,22 @@ public class BrainpoolKeyGenerationTest {
         PGPSecretKey ecdsaPrim = iterator.next();
         KeyInfo ecdsaInfo = new KeyInfo(ecdsaPrim);
         assertEquals(EllipticCurve._BRAINPOOLP384R1.getName(), ecdsaInfo.getCurveName());
-        assertEquals(384, BCUtil.getBitStrength(ecdsaPrim.getPublicKey()));
+        assertEquals(384, ecdsaPrim.getPublicKey().getBitStrength());
 
         PGPSecretKey eddsaSub = iterator.next();
         KeyInfo eddsaInfo = new KeyInfo(eddsaSub);
         assertEquals(EdDSACurve._Ed25519.getName(), eddsaInfo.getCurveName());
-        assertEquals(256, BCUtil.getBitStrength(eddsaSub.getPublicKey()));
+        assertEquals(256, eddsaSub.getPublicKey().getBitStrength());
 
         PGPSecretKey xdhSub = iterator.next();
         KeyInfo xdhInfo = new KeyInfo(xdhSub);
         assertEquals(XDHSpec._X25519.getCurveName(), xdhInfo.getCurveName());
-        assertEquals(256, BCUtil.getBitStrength(xdhSub.getPublicKey()));
+        assertEquals(256, xdhSub.getPublicKey().getBitStrength());
 
         PGPSecretKey rsaSub = iterator.next();
         KeyInfo rsaInfo = new KeyInfo(rsaSub);
         assertThrows(IllegalArgumentException.class, rsaInfo::getCurveName, "RSA is not a curve-based encryption system");
-        assertEquals(3072, BCUtil.getBitStrength(rsaSub.getPublicKey()));
+        assertEquals(3072, rsaSub.getPublicKey().getBitStrength());
     }
 
     public PGPSecretKeyRing generateKey(KeySpec primaryKey, KeySpec subKey, String userId) throws InvalidAlgorithmParameterException, NoSuchAlgorithmException, PGPException {

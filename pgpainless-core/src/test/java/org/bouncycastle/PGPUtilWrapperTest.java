@@ -18,15 +18,19 @@ import java.util.Date;
 import org.bouncycastle.openpgp.PGPLiteralData;
 import org.bouncycastle.openpgp.PGPLiteralDataGenerator;
 import org.bouncycastle.openpgp.PGPObjectFactory;
-import org.bouncycastle.openpgp.bc.BcPGPObjectFactory;
 import org.bouncycastle.util.io.Streams;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.pgpainless.implementation.ImplementationFactory;
+import org.pgpainless.util.TestAllImplementations;
 import org.pgpainless.util.PGPUtilWrapper;
 
 public class PGPUtilWrapperTest {
 
-    @Test
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
     public void testGetDecoderStream() throws IOException {
+
         ByteArrayInputStream msg = new ByteArrayInputStream("Foo\nBar".getBytes(StandardCharsets.UTF_8));
         PGPLiteralDataGenerator literalDataGenerator = new PGPLiteralDataGenerator();
 
@@ -36,7 +40,7 @@ public class PGPUtilWrapperTest {
         literalDataGenerator.close();
 
         InputStream in = new ByteArrayInputStream(out.toByteArray());
-        PGPObjectFactory objectFactory = new BcPGPObjectFactory(in);
+        PGPObjectFactory objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(in);
         PGPLiteralData literalData = (PGPLiteralData) objectFactory.nextObject();
         InputStream litIn = literalData.getDataStream();
         BufferedInputStream bufIn = new BufferedInputStream(litIn);

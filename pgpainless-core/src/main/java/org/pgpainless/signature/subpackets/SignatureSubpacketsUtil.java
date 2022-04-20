@@ -10,7 +10,7 @@ import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.bouncycastle.bcpg.sig.Exportable;
@@ -36,15 +36,16 @@ import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSignature;
 import org.bouncycastle.openpgp.PGPSignatureList;
 import org.bouncycastle.openpgp.PGPSignatureSubpacketVector;
-import org.bouncycastle.util.encoders.Hex;
 import org.pgpainless.algorithm.CompressionAlgorithm;
 import org.pgpainless.algorithm.Feature;
 import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.KeyFlag;
+import org.pgpainless.algorithm.PublicKeyAlgorithm;
 import org.pgpainless.algorithm.SignatureSubpacket;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.key.OpenPgpFingerprint;
 import org.pgpainless.key.OpenPgpV4Fingerprint;
+import org.pgpainless.key.generation.type.KeyType;
 import org.pgpainless.signature.SignatureUtils;
 
 /**
@@ -86,7 +87,7 @@ public final class SignatureSubpacketsUtil {
 
         OpenPgpFingerprint fingerprint = null;
         if (subpacket.getKeyVersion() == 4) {
-            fingerprint = new OpenPgpV4Fingerprint(Hex.encode(subpacket.getFingerprint()));
+            fingerprint = new OpenPgpV4Fingerprint(subpacket.getFingerprint());
         }
 
         return fingerprint;
@@ -155,7 +156,7 @@ public final class SignatureSubpacketsUtil {
     }
 
     /**
-     * Return the signatures expiration time as a date.
+     * Return the signatures' expiration time as a date.
      * The expiration date is computed by adding the expiration time to the signature creation date.
      * If the signature has no expiration time subpacket, or the expiration time is set to '0', this message returns null.
      *
@@ -192,14 +193,34 @@ public final class SignatureSubpacketsUtil {
      * @return key expiration time as date
      */
     public static Date getKeyExpirationTimeAsDate(PGPSignature signature, PGPPublicKey signingKey) {
+        if (signature.getKeyID() != signingKey.getKeyID()) {
+            throw new IllegalArgumentException("Provided key (" + Long.toHexString(signingKey.getKeyID()) + ") did not create the signature (" + Long.toHexString(signature.getKeyID()) + ")");
+        }
         KeyExpirationTime subpacket = getKeyExpirationTime(signature);
         if (subpacket == null) {
             return null;
         }
-        if (signature.getKeyID() != signingKey.getKeyID()) {
-            throw new IllegalArgumentException("Provided key (" + Long.toHexString(signingKey.getKeyID()) + ") did not create the signature (" + Long.toHexString(signature.getKeyID()) + ")");
-        }
+
         return SignatureUtils.datePlusSeconds(signingKey.getCreationTime(), subpacket.getTime());
+    }
+
+    /**
+     * Calculate the duration in seconds until the key expires after creation.
+     *
+     * @param expirationDate new expiration date
+     * @param creationDate key creation time
+     * @return lifetime of the key in seconds
+     */
+    public static long getKeyLifetimeInSeconds(@Nullable Date expirationDate, @Nonnull Date creationDate) {
+        long secondsToExpire = 0; // 0 means "no expiration"
+        if (expirationDate != null) {
+            if (creationDate.after(expirationDate)) {
+                throw new IllegalArgumentException("Key MUST NOT expire before being created. " +
+                        "(creation: " + creationDate + ", expiration: " + expirationDate + ")");
+            }
+            secondsToExpire = (expirationDate.getTime() - creationDate.getTime()) / 1000;
+        }
+        return secondsToExpire;
     }
 
     /**
@@ -236,7 +257,10 @@ public final class SignatureSubpacketsUtil {
         PreferredAlgorithms preferences = getPreferredSymmetricAlgorithms(signature);
         if (preferences != null) {
             for (int code : preferences.getPreferences()) {
-                algorithms.add(SymmetricKeyAlgorithm.fromId(code));
+                SymmetricKeyAlgorithm algorithm = SymmetricKeyAlgorithm.fromId(code);
+                if (algorithm != null) {
+                    algorithms.add(algorithm);
+                }
             }
         }
         return algorithms;
@@ -265,7 +289,10 @@ public final class SignatureSubpacketsUtil {
         PreferredAlgorithms preferences = getPreferredHashAlgorithms(signature);
         if (preferences != null) {
             for (int code : preferences.getPreferences()) {
-                algorithms.add(HashAlgorithm.fromId(code));
+                HashAlgorithm algorithm = HashAlgorithm.fromId(code);
+                if (algorithm != null) {
+                    algorithms.add(algorithm);
+                }
             }
         }
         return algorithms;
@@ -294,7 +321,10 @@ public final class SignatureSubpacketsUtil {
         PreferredAlgorithms preferences = getPreferredCompressionAlgorithms(signature);
         if (preferences != null) {
             for (int code : preferences.getPreferences()) {
-                algorithms.add(CompressionAlgorithm.fromId(code));
+                CompressionAlgorithm algorithm = CompressionAlgorithm.fromId(code);
+                if (algorithm != null) {
+                    algorithms.add(algorithm);
+                }
             }
         }
         return algorithms;
@@ -408,7 +438,7 @@ public final class SignatureSubpacketsUtil {
     /**
      * Return the notation data subpackets from the signatures unhashed area.
      *
-     * @param signature signture
+     * @param signature signature
      * @return unhashed notations
      */
     public static List<NotationData> getUnhashedNotationData(PGPSignature signature) {
@@ -476,6 +506,8 @@ public final class SignatureSubpacketsUtil {
      *
      * @param signature signature
      * @return embedded signature
+     *
+     * @throws PGPException in case the embedded signatures cannot be parsed
      */
     public static PGPSignatureList getEmbeddedSignature(PGPSignature signature) throws PGPException {
         PGPSignatureList hashed = signature.getHashedSubPackets().getEmbeddedSignatures();
@@ -546,7 +578,7 @@ public final class SignatureSubpacketsUtil {
     }
 
     /**
-     * Return the last occurence of a subpacket type in the given signature subpacket vector.
+     * Return the last occurrence of a subpacket type in the given signature subpacket vector.
      *
      * @param vector subpacket vector (hashed/unhashed)
      * @param type subpacket type
@@ -554,10 +586,76 @@ public final class SignatureSubpacketsUtil {
      * @return last occurrence of the subpacket in the vector
      */
     public static <P extends org.bouncycastle.bcpg.SignatureSubpacket> P getSignatureSubpacket(PGPSignatureSubpacketVector vector, SignatureSubpacket type) {
+        if (vector == null) {
+            // Almost never happens, but may be caused by broken signatures.
+            return null;
+        }
         org.bouncycastle.bcpg.SignatureSubpacket[] allPackets = vector.getSubpackets(type.getCode());
         if (allPackets.length == 0) {
             return null;
         }
-        return (P) allPackets[allPackets.length - 1]; // return last
+
+        org.bouncycastle.bcpg.SignatureSubpacket last = allPackets[allPackets.length - 1];
+        return (P) last;
+    }
+
+    /**
+     * Make sure that the given key type can carry the given key flags.
+     *
+     * @param type key type
+     * @param flags key flags
+     */
+    public static void assureKeyCanCarryFlags(KeyType type, KeyFlag... flags) {
+        final int mask = KeyFlag.toBitmask(flags);
+
+        if (!type.canCertify() && KeyFlag.hasKeyFlag(mask, KeyFlag.CERTIFY_OTHER)) {
+            throw new IllegalArgumentException("KeyType " + type.getName() + " cannot carry key flag CERTIFY_OTHER.");
+        }
+
+        if (!type.canSign() && KeyFlag.hasKeyFlag(mask, KeyFlag.SIGN_DATA)) {
+            throw new IllegalArgumentException("KeyType " + type.getName() + " cannot carry key flag SIGN_DATA.");
+        }
+
+        if (!type.canEncryptCommunication() && KeyFlag.hasKeyFlag(mask, KeyFlag.ENCRYPT_COMMS)) {
+            throw new IllegalArgumentException("KeyType " + type.getName() + " cannot carry key flag ENCRYPT_COMMS.");
+        }
+
+        if (!type.canEncryptStorage() && KeyFlag.hasKeyFlag(mask, KeyFlag.ENCRYPT_STORAGE)) {
+            throw new IllegalArgumentException("KeyType " + type.getName() + " cannot carry key flag ENCRYPT_STORAGE.");
+        }
+
+        if (!type.canAuthenticate() && KeyFlag.hasKeyFlag(mask, KeyFlag.AUTHENTICATION)) {
+            throw new IllegalArgumentException("KeyType " + type.getName() + " cannot carry key flag AUTHENTICATION.");
+        }
+    }
+
+    /**
+     * Make sure that a key of the given {@link PublicKeyAlgorithm} is able to carry the given key flags.
+     *
+     * @param algorithm key algorithm
+     * @param flags key flags
+     */
+    public static void assureKeyCanCarryFlags(PublicKeyAlgorithm algorithm, KeyFlag... flags) {
+        final int mask = KeyFlag.toBitmask(flags);
+
+        if (!algorithm.isSigningCapable() && KeyFlag.hasKeyFlag(mask, KeyFlag.CERTIFY_OTHER)) {
+            throw new IllegalArgumentException("Algorithm " + algorithm + " cannot be used with key flag CERTIFY_OTHER.");
+        }
+
+        if (!algorithm.isSigningCapable() && KeyFlag.hasKeyFlag(mask, KeyFlag.SIGN_DATA)) {
+            throw new IllegalArgumentException("Algorithm " + algorithm + " cannot be used with key flag SIGN_DATA.");
+        }
+
+        if (!algorithm.isEncryptionCapable() && KeyFlag.hasKeyFlag(mask, KeyFlag.ENCRYPT_COMMS)) {
+            throw new IllegalArgumentException("Algorithm " + algorithm + " cannot be used with key flag ENCRYPT_COMMS.");
+        }
+
+        if (!algorithm.isEncryptionCapable() && KeyFlag.hasKeyFlag(mask, KeyFlag.ENCRYPT_STORAGE)) {
+            throw new IllegalArgumentException("Algorithm " + algorithm + " cannot be used with key flag ENCRYPT_STORAGE.");
+        }
+
+        if (!algorithm.isSigningCapable() && KeyFlag.hasKeyFlag(mask, KeyFlag.AUTHENTICATION)) {
+            throw new IllegalArgumentException("Algorithm " + algorithm + " cannot be used with key flag AUTHENTICATION.");
+        }
     }
 }

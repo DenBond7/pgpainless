@@ -23,6 +23,9 @@ import org.pgpainless.util.Passphrase;
  * Implementation of the {@link SecretKeyRingProtector} which holds a map of key ids and their passwords.
  * In case the needed passphrase is not contained in the map, the {@code missingPassphraseCallback} will be consulted,
  * and the passphrase is added to the map.
+ *
+ * If you need to unlock multiple {@link PGPKeyRing PGPKeyRings}, it is advised to use a separate
+ * {@link CachingSecretKeyRingProtector} instance for each ring.
  */
 public class CachingSecretKeyRingProtector implements SecretKeyRingProtector, SecretKeyPassphraseProvider {
 
@@ -52,25 +55,80 @@ public class CachingSecretKeyRingProtector implements SecretKeyRingProtector, Se
 
     /**
      * Add a passphrase to the cache.
+     * If the cache already contains a passphrase for the given key-id, a {@link IllegalArgumentException} is thrown.
+     * The reason for this is to prevent accidental override of passphrases when dealing with multiple key rings
+     * containing a key with the same key-id but different passphrases.
+     *
+     * If you can ensure that there will be no key-id clash, and you want to replace the passphrase, you can use
+     * {@link #replacePassphrase(Long, Passphrase)} to replace the passphrase.
      *
      * @param keyId id of the key
      * @param passphrase passphrase
      */
-    public void addPassphrase(@Nonnull Long keyId, @Nullable Passphrase passphrase) {
+    public void addPassphrase(@Nonnull Long keyId, @Nonnull Passphrase passphrase) {
+        if (this.cache.containsKey(keyId)) {
+            throw new IllegalArgumentException("The cache already holds a passphrase for ID " + Long.toHexString(keyId) + ".\n" +
+                    "If you want to replace the passphrase, use replacePassphrase(Long, Passphrase) instead.");
+        }
+        this.cache.put(keyId, passphrase);
+    }
+
+    /**
+     * Replace the passphrase for the given key-id in the cache.
+     *
+     * @param keyId keyId
+     * @param passphrase passphrase
+     */
+    public void replacePassphrase(@Nonnull Long keyId, @Nonnull Passphrase passphrase) {
         this.cache.put(keyId, passphrase);
     }
 
     /**
      * Remember the given passphrase for all keys in the given key ring.
+     * If for the key-id of any key on the key ring the cache already contains a passphrase, a
+     * {@link IllegalArgumentException} is thrown before any changes are committed to the cache.
+     * This is to prevent accidental passphrase override when dealing with multiple key rings containing
+     * keys with conflicting key-ids.
+     *
+     * If you can ensure that there will be no key-id clashes, and you want to replace the passphrases for the key ring,
+     * use {@link #replacePassphrase(PGPKeyRing, Passphrase)} instead.
+     *
+     * If you need to unlock multiple {@link PGPKeyRing PGPKeyRings}, it is advised to use a separate
+     * {@link CachingSecretKeyRingProtector} instance for each ring.
      *
      * @param keyRing key ring
      * @param passphrase passphrase
      */
-    public void addPassphrase(@Nonnull PGPKeyRing keyRing, @Nullable Passphrase passphrase) {
+    public void addPassphrase(@Nonnull PGPKeyRing keyRing, @Nonnull Passphrase passphrase) {
         Iterator<PGPPublicKey> keys = keyRing.getPublicKeys();
+        // check for existing passphrases before doing anything
+        while (keys.hasNext()) {
+            long keyId = keys.next().getKeyID();
+            if (cache.containsKey(keyId)) {
+                throw new IllegalArgumentException("The cache already holds a passphrase for ID " + Long.toHexString(keyId) + ".\n" +
+                        "If you want to replace the passphrase, use replacePassphrase(PGPKeyRing, Passphrase) instead.");
+            }
+        }
+
+        // only then insert
+        keys = keyRing.getPublicKeys();
         while (keys.hasNext()) {
             PGPPublicKey publicKey = keys.next();
             addPassphrase(publicKey, passphrase);
+        }
+    }
+
+    /**
+     * Replace the cached passphrases for all keys in the key ring with the provided passphrase.
+     *
+     * @param keyRing key ring
+     * @param passphrase passphrase
+     */
+    public void replacePassphrase(@Nonnull PGPKeyRing keyRing, @Nonnull Passphrase passphrase) {
+        Iterator<PGPPublicKey> keys = keyRing.getPublicKeys();
+        while (keys.hasNext()) {
+            PGPPublicKey publicKey = keys.next();
+            replacePassphrase(publicKey.getKeyID(), passphrase);
         }
     }
 
@@ -80,11 +138,11 @@ public class CachingSecretKeyRingProtector implements SecretKeyRingProtector, Se
      * @param key key
      * @param passphrase passphrase
      */
-    public void addPassphrase(@Nonnull PGPPublicKey key, @Nullable Passphrase passphrase) {
+    public void addPassphrase(@Nonnull PGPPublicKey key, @Nonnull Passphrase passphrase) {
         addPassphrase(key.getKeyID(), passphrase);
     }
 
-    public void addPassphrase(@Nonnull OpenPgpFingerprint fingerprint, @Nullable Passphrase passphrase) {
+    public void addPassphrase(@Nonnull OpenPgpFingerprint fingerprint, @Nonnull Passphrase passphrase) {
         addPassphrase(fingerprint.getKeyId(), passphrase);
     }
 
@@ -95,9 +153,10 @@ public class CachingSecretKeyRingProtector implements SecretKeyRingProtector, Se
      * @param keyId id of the key
      */
     public void forgetPassphrase(@Nonnull Long keyId) {
-        Passphrase passphrase = cache.get(keyId);
-        passphrase.clear();
-        cache.remove(keyId);
+        Passphrase passphrase = cache.remove(keyId);
+        if (passphrase != null) {
+            passphrase.clear();
+        }
     }
 
     /**
@@ -140,12 +199,13 @@ public class CachingSecretKeyRingProtector implements SecretKeyRingProtector, Se
 
     @Override
     public boolean hasPassphrase(Long keyId) {
-        return cache.containsKey(keyId);
+        Passphrase passphrase = cache.get(keyId);
+        return passphrase != null && passphrase.isValid();
     }
 
     @Override
     public boolean hasPassphraseFor(Long keyId) {
-        return cache.containsKey(keyId);
+        return hasPassphrase(keyId);
     }
 
     @Override

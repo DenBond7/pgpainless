@@ -21,14 +21,24 @@ import org.bouncycastle.openpgp.PGPCompressedData;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPLiteralData;
 import org.bouncycastle.openpgp.PGPObjectFactory;
+import org.bouncycastle.openpgp.PGPPublicKey;
+import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPUtil;
-import org.bouncycastle.openpgp.bc.BcPGPObjectFactory;
 import org.bouncycastle.util.io.Streams;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestTemplate;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.HashAlgorithm;
+import org.pgpainless.algorithm.KeyFlag;
+import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.TestKeys;
+import org.pgpainless.key.generation.KeySpec;
+import org.pgpainless.key.generation.type.ecc.EllipticCurve;
+import org.pgpainless.key.generation.type.ecc.ecdsa.ECDSA;
 
 public class ArmorUtilsTest {
 
@@ -70,7 +80,7 @@ public class ArmorUtilsTest {
         assertEquals(HashAlgorithm.SHA512, hashes.get(0));
 
         // Comment
-        List<String> commentHeader = ArmorUtils.getCommendHeaderValues(armorIn);
+        List<String> commentHeader = ArmorUtils.getCommentHeaderValues(armorIn);
         assertEquals(2, commentHeader.size());
         assertEquals("This is a comment", commentHeader.get(0));
         assertEquals("This is another comment", commentHeader.get(1));
@@ -143,6 +153,73 @@ public class ArmorUtilsTest {
     }
 
     @Test
+    public void testMultipleIdentitiesInHeader() throws Exception {
+        PGPSecretKeyRing secretKeyRing = PGPainless.buildKeyRing()
+                .setPrimaryKey(KeySpec.getBuilder(ECDSA.fromCurve(EllipticCurve._P256), KeyFlag.SIGN_DATA, KeyFlag.CERTIFY_OTHER))
+                .addUserId("Juliet <juliet@montague.lit>")
+                .addUserId("xmpp:juliet@capulet.lit")
+                .setPassphrase(Passphrase.fromPassword("test"))
+                .build();
+        PGPPublicKey publicKey = secretKeyRing.getPublicKey();
+        PGPPublicKeyRing publicKeyRing = PGPainless.readKeyRing().publicKeyRing(publicKey.getEncoded());
+        String armored = PGPainless.asciiArmor(publicKeyRing);
+        Assertions.assertTrue(armored.contains("Comment: Juliet <juliet@montague.lit>"));
+        Assertions.assertTrue(armored.contains("Comment: 1 further identity"));
+    }
+
+    @Test
+    public void testEvenMoreIdentitiesInHeader() throws Exception {
+        PGPSecretKeyRing secretKeyRing = PGPainless.buildKeyRing()
+                .setPrimaryKey(KeySpec.getBuilder(ECDSA.fromCurve(EllipticCurve._P256), KeyFlag.SIGN_DATA, KeyFlag.CERTIFY_OTHER))
+                .addUserId("Juliet <juliet@montague.lit>")
+                .addUserId("xmpp:juliet@capulet.lit")
+                .addUserId("Juliet Montague <j@montague.lit>")
+                .setPassphrase(Passphrase.fromPassword("test"))
+                .build();
+        PGPPublicKey publicKey = secretKeyRing.getPublicKey();
+        PGPPublicKeyRing publicKeyRing = PGPainless.readKeyRing().publicKeyRing(publicKey.getEncoded());
+        String armored = PGPainless.asciiArmor(publicKeyRing);
+        Assertions.assertTrue(armored.contains("Comment: Juliet <juliet@montague.lit>"));
+        Assertions.assertTrue(armored.contains("Comment: 2 further identities"));
+    }
+
+
+    @Test
+    public void testSingleIdentityInHeader() throws Exception {
+        PGPSecretKeyRing secretKeyRing = PGPainless.buildKeyRing()
+                .setPrimaryKey(KeySpec.getBuilder(ECDSA.fromCurve(EllipticCurve._P256), KeyFlag.SIGN_DATA, KeyFlag.CERTIFY_OTHER))
+                .addUserId("Juliet <juliet@montague.lit>")
+                .setPassphrase(Passphrase.fromPassword("test"))
+                .build();
+        PGPPublicKey publicKey = secretKeyRing.getPublicKey();
+        PGPPublicKeyRing publicKeyRing = PGPainless.readKeyRing().publicKeyRing(publicKey.getEncoded());
+        String armored = PGPainless.asciiArmor(publicKeyRing);
+        Assertions.assertTrue(armored.contains("Comment: Juliet <juliet@montague.lit>"));
+        Assertions.assertFalse(armored.contains("Comment: 1 total identities"));
+    }
+
+    @Test
+    public void testWithoutIdentityInHeader() throws Exception {
+        final String CERT = "-----BEGIN PGP PUBLIC KEY BLOCK-----\n" +
+                "\n" +
+                "xsBNBGIgzE0BCACwxaYg6bpmp0POq1T6yalGE9XaL2IG9d9khDBweZ63s3Pu1pHB\n" +
+                "JtmjgN7Tx3ts6hLzQm3YKYA6zu1MXQ8k2vqtdtGUpZPp18Pbars7yUDqh8QIdFjO\n" +
+                "GeE+c8So0MQgTgoBuyZiSmslwp1WO78ozf/0rCayFdy73dPUntuLE6c2ZKO8nw/g\n" +
+                "uyk2ozsqLN/TBpgbuJUyMedJtXV10DdT9QxH/66LmdjFKXTkc74qI8YAm/pmJeOh\n" +
+                "36qZ5ehAgz9MthPQINnZKpnqidqkGFvjwVFlCMlVSmNCNJmpgGDH3gvkklZHzGsf\n" +
+                "dfzQswd/BQjPsFH9cK+QFYMG6q2zrvM0X9mdABEBAAE=\n" +
+                "=njg8\n" +
+                "-----END PGP PUBLIC KEY BLOCK-----\n";
+
+        PGPPublicKeyRing publicKeys = PGPainless.readKeyRing().publicKeyRing(CERT);
+        PGPPublicKey publicKey = publicKeys.getPublicKey();
+        PGPPublicKeyRing publicKeyRing = PGPainless.readKeyRing().publicKeyRing(publicKey.getEncoded());
+        String armored = PGPainless.asciiArmor(publicKeyRing);
+        Assertions.assertFalse(armored.contains("Comment: 0 total identities"));
+    }
+
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
     public void decodeExampleTest() throws IOException, PGPException {
         String armored = "-----BEGIN PGP MESSAGE-----\n" +
                 "Version: OpenPrivacy 0.99\n" +
@@ -152,9 +229,10 @@ public class ArmorUtilsTest {
                 "=njUN\n" +
                 "-----END PGP MESSAGE-----";
         InputStream inputStream = PGPUtil.getDecoderStream(new ByteArrayInputStream(armored.getBytes(StandardCharsets.UTF_8)));
-        PGPObjectFactory factory = new BcPGPObjectFactory(inputStream);
+
+        PGPObjectFactory factory = ImplementationFactory.getInstance().getPGPObjectFactory(inputStream);
         PGPCompressedData compressed = (PGPCompressedData) factory.nextObject();
-        factory = new BcPGPObjectFactory(compressed.getDataStream());
+        factory = ImplementationFactory.getInstance().getPGPObjectFactory(compressed.getDataStream());
         PGPLiteralData literal = (PGPLiteralData) factory.nextObject();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         assertEquals("_CONSOLE", literal.getFileName());

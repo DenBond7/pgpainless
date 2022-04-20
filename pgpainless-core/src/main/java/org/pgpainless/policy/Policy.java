@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 import javax.annotation.Nonnull;
 
@@ -41,6 +42,25 @@ public final class Policy {
     private final NotationRegistry notationRegistry = new NotationRegistry();
 
     private AlgorithmSuite keyGenerationAlgorithmSuite = AlgorithmSuite.getDefaultAlgorithmSuite();
+
+    // Signers User-ID is soon to be deprecated.
+    private SignerUserIdValidationLevel signerUserIdValidationLevel = SignerUserIdValidationLevel.DISABLED;
+
+    public enum SignerUserIdValidationLevel {
+        /**
+         * PGPainless will verify {@link org.bouncycastle.bcpg.sig.SignerUserID} subpackets in signatures strictly.
+         * This means, that signatures with Signer's User-ID subpackets containing a value that does not match the signer key's
+         * user-id exactly, will be rejected.
+         * E.g. Signer's user-id "alice@pgpainless.org", User-ID: "Alice &lt;alice@pgpainless.org&gt;" does not
+         * match exactly and is therefore rejected.
+         */
+        STRICT,
+
+        /**
+         * PGPainless will ignore {@link org.bouncycastle.bcpg.sig.SignerUserID} subpackets on signature.
+         */
+        DISABLED
+    }
 
     Policy() {
     }
@@ -213,8 +233,13 @@ public final class Policy {
          * @return true if algorithm is acceptable, false otherwise
          */
         public boolean isAcceptable(int algorithmId) {
-            SymmetricKeyAlgorithm algorithm = SymmetricKeyAlgorithm.fromId(algorithmId);
-            return isAcceptable(algorithm);
+            try {
+                SymmetricKeyAlgorithm algorithm = SymmetricKeyAlgorithm.requireFromId(algorithmId);
+                return isAcceptable(algorithm);
+            } catch (NoSuchElementException e) {
+                // Unknown algorithm is not acceptable
+                return false;
+            }
         }
 
         /**
@@ -224,11 +249,10 @@ public final class Policy {
          */
         public static SymmetricKeyAlgorithmPolicy defaultSymmetricKeyEncryptionAlgorithmPolicy() {
             return new SymmetricKeyAlgorithmPolicy(SymmetricKeyAlgorithm.AES_256, Arrays.asList(
-                    // Reject: Unencrypted, IDEA, TripleDES, CAST5
+                    // Reject: Unencrypted, IDEA, TripleDES, CAST5, Blowfish
                     SymmetricKeyAlgorithm.AES_256,
                     SymmetricKeyAlgorithm.AES_192,
                     SymmetricKeyAlgorithm.AES_128,
-                    SymmetricKeyAlgorithm.BLOWFISH,
                     SymmetricKeyAlgorithm.TWOFISH,
                     SymmetricKeyAlgorithm.CAMELLIA_256,
                     SymmetricKeyAlgorithm.CAMELLIA_192,
@@ -243,12 +267,11 @@ public final class Policy {
          */
         public static SymmetricKeyAlgorithmPolicy defaultSymmetricKeyDecryptionAlgorithmPolicy() {
             return new SymmetricKeyAlgorithmPolicy(SymmetricKeyAlgorithm.AES_256, Arrays.asList(
-                    // Reject: Unencrypted, IDEA, TripleDES
+                    // Reject: Unencrypted, IDEA, TripleDES, Blowfish
                     SymmetricKeyAlgorithm.CAST5,
                     SymmetricKeyAlgorithm.AES_256,
                     SymmetricKeyAlgorithm.AES_192,
                     SymmetricKeyAlgorithm.AES_128,
-                    SymmetricKeyAlgorithm.BLOWFISH,
                     SymmetricKeyAlgorithm.TWOFISH,
                     SymmetricKeyAlgorithm.CAMELLIA_256,
                     SymmetricKeyAlgorithm.CAMELLIA_192,
@@ -296,7 +319,7 @@ public final class Policy {
         }
 
         /**
-         * Return true if the the given hash algorithm is acceptable by this policy.
+         * Return true if the given hash algorithm is acceptable by this policy.
          *
          * @param hashAlgorithm hash algorithm
          * @return true if the hash algorithm is acceptable, false otherwise
@@ -306,14 +329,19 @@ public final class Policy {
         }
 
         /**
-         * Return true if the the given hash algorithm is acceptable by this policy.
+         * Return true if the given hash algorithm is acceptable by this policy.
          *
          * @param algorithmId hash algorithm
          * @return true if the hash algorithm is acceptable, false otherwise
          */
         public boolean isAcceptable(int algorithmId) {
-            HashAlgorithm algorithm = HashAlgorithm.fromId(algorithmId);
-            return isAcceptable(algorithm);
+            try {
+                HashAlgorithm algorithm = HashAlgorithm.requireFromId(algorithmId);
+                return isAcceptable(algorithm);
+            } catch (NoSuchElementException e) {
+                // Unknown algorithm is not acceptable
+                return false;
+            }
         }
 
         /**
@@ -365,7 +393,13 @@ public final class Policy {
         }
 
         public boolean isAcceptable(int compressionAlgorithmTag) {
-            return isAcceptable(CompressionAlgorithm.fromId(compressionAlgorithmTag));
+            try {
+                CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm.requireFromId(compressionAlgorithmTag);
+                return isAcceptable(compressionAlgorithm);
+            } catch (NoSuchElementException e) {
+                // Unknown algorithm is not acceptable
+                return false;
+            }
         }
 
         public boolean isAcceptable(CompressionAlgorithm compressionAlgorithm) {
@@ -391,7 +425,13 @@ public final class Policy {
         }
 
         public boolean isAcceptable(int algorithmId, int bitStrength) {
-            return isAcceptable(PublicKeyAlgorithm.fromId(algorithmId), bitStrength);
+            try {
+                PublicKeyAlgorithm algorithm = PublicKeyAlgorithm.requireFromId(algorithmId);
+                return isAcceptable(algorithm, bitStrength);
+            } catch (NoSuchElementException e) {
+                // Unknown algorithm is not acceptable
+                return false;
+            }
         }
 
         public boolean isAcceptable(PublicKeyAlgorithm algorithm, int bitStrength) {
@@ -469,5 +509,30 @@ public final class Policy {
      */
     public void setKeyGenerationAlgorithmSuite(@Nonnull AlgorithmSuite algorithmSuite) {
         this.keyGenerationAlgorithmSuite = algorithmSuite;
+    }
+
+    /**
+     * Return the level of validation PGPainless shall do on {@link org.bouncycastle.bcpg.sig.SignerUserID} subpackets.
+     * By default, this value is {@link SignerUserIdValidationLevel#DISABLED}.
+     *
+     * @return the level of validation
+     */
+    public SignerUserIdValidationLevel getSignerUserIdValidationLevel() {
+        return signerUserIdValidationLevel;
+    }
+
+    /**
+     * Specify, how {@link org.bouncycastle.bcpg.sig.SignerUserID} subpackets on signatures shall be validated.
+     *
+     * @param signerUserIdValidationLevel level of verification PGPainless shall do on
+     * {@link org.bouncycastle.bcpg.sig.SignerUserID} subpackets.
+     * @return policy instance
+     */
+    public Policy setSignerUserIdValidationLevel(SignerUserIdValidationLevel signerUserIdValidationLevel) {
+        if (signerUserIdValidationLevel == null) {
+            throw new NullPointerException("SignerUserIdValidationLevel cannot be null.");
+        }
+        this.signerUserIdValidationLevel = signerUserIdValidationLevel;
+        return this;
     }
 }
