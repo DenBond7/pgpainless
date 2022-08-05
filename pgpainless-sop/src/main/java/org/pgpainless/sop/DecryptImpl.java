@@ -7,6 +7,7 @@ package org.pgpainless.sop;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -15,16 +16,15 @@ import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
-import org.bouncycastle.openpgp.PGPSignature;
 import org.bouncycastle.util.io.Streams;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.decryption_verification.ConsumerOptions;
 import org.pgpainless.decryption_verification.DecryptionStream;
 import org.pgpainless.decryption_verification.OpenPgpMetadata;
-import org.pgpainless.key.SubkeyIdentifier;
-import org.pgpainless.key.info.KeyRingInfo;
-import org.pgpainless.key.protection.SecretKeyRingProtector;
+import org.pgpainless.decryption_verification.SignatureVerification;
+import org.pgpainless.exception.MissingDecryptionMethodException;
+import org.pgpainless.exception.WrongPassphraseException;
 import org.pgpainless.util.Passphrase;
 import sop.DecryptionResult;
 import sop.ReadyWithResult;
@@ -36,6 +36,7 @@ import sop.operation.Decrypt;
 public class DecryptImpl implements Decrypt {
 
     private final ConsumerOptions consumerOptions = new ConsumerOptions();
+    private final MatchMakingSecretKeyRingProtector protector = new MatchMakingSecretKeyRingProtector();
 
     @Override
     public DecryptImpl verifyNotBefore(Date timestamp) throws SOPGPException.UnsupportedOption {
@@ -95,22 +96,24 @@ public class DecryptImpl implements Decrypt {
     }
 
     @Override
-    public DecryptImpl withKey(InputStream keyIn) throws SOPGPException.KeyIsProtected, SOPGPException.BadData, SOPGPException.UnsupportedAsymmetricAlgo {
+    public DecryptImpl withKey(InputStream keyIn) throws SOPGPException.BadData, SOPGPException.UnsupportedAsymmetricAlgo {
         try {
-            PGPSecretKeyRingCollection secretKeys = PGPainless.readKeyRing()
+            PGPSecretKeyRingCollection secretKeyCollection = PGPainless.readKeyRing()
                     .secretKeyRingCollection(keyIn);
-
-            for (PGPSecretKeyRing secretKey : secretKeys) {
-                KeyRingInfo info = new KeyRingInfo(secretKey);
-                if (!info.isFullyDecrypted()) {
-                    throw new SOPGPException.KeyIsProtected();
-                }
+            for (PGPSecretKeyRing key : secretKeyCollection) {
+                protector.addSecretKey(key);
+                consumerOptions.addDecryptionKey(key, protector);
             }
-
-            consumerOptions.addDecryptionKeys(secretKeys, SecretKeyRingProtector.unprotectedKeys());
         } catch (IOException | PGPException e) {
             throw new SOPGPException.BadData(e);
         }
+        return this;
+    }
+
+    @Override
+    public Decrypt withKeyPassword(byte[] password) {
+        String string = new String(password, Charset.forName("UTF8"));
+        protector.addPassphrase(Passphrase.fromPassword(string));
         return this;
     }
 
@@ -128,8 +131,15 @@ public class DecryptImpl implements Decrypt {
             decryptionStream = PGPainless.decryptAndOrVerify()
                     .onInputStream(ciphertext)
                     .withOptions(consumerOptions);
+        } catch (MissingDecryptionMethodException e) {
+            throw new SOPGPException.CannotDecrypt();
+        } catch (WrongPassphraseException e) {
+            throw new SOPGPException.KeyIsProtected();
         } catch (PGPException | IOException e) {
             throw new SOPGPException.BadData(e);
+        } finally {
+            // Forget passphrases after decryption
+            protector.clear();
         }
 
         return new ReadyWithResult<DecryptionResult>() {
@@ -139,19 +149,13 @@ public class DecryptImpl implements Decrypt {
                 decryptionStream.close();
                 OpenPgpMetadata metadata = decryptionStream.getResult();
 
-                List<Verification> verificationList = new ArrayList<>();
-                for (SubkeyIdentifier verifiedSigningKey : metadata.getVerifiedSignatures().keySet()) {
-                    PGPSignature signature = metadata.getVerifiedSignatures().get(verifiedSigningKey);
-                    verificationList.add(new Verification(
-                            signature.getCreationTime(),
-                            verifiedSigningKey.getSubkeyFingerprint().toString(),
-                            verifiedSigningKey.getPrimaryKeyFingerprint().toString()));
+                if (!metadata.isEncrypted()) {
+                    throw new SOPGPException.BadData("Data is not encrypted.");
                 }
 
-                if (!consumerOptions.getCertificates().isEmpty()) {
-                    if (verificationList.isEmpty()) {
-                        throw new SOPGPException.NoSignature();
-                    }
+                List<Verification> verificationList = new ArrayList<>();
+                for (SignatureVerification signatureVerification : metadata.getVerifiedInbandSignatures()) {
+                    verificationList.add(map(signatureVerification));
                 }
 
                 SessionKey sessionKey = null;
@@ -166,5 +170,11 @@ public class DecryptImpl implements Decrypt {
                 return new DecryptionResult(sessionKey, verificationList);
             }
         };
+    }
+
+    private Verification map(SignatureVerification sigVerification) {
+        return new Verification(sigVerification.getSignature().getCreationTime(),
+                sigVerification.getSigningKey().getSubkeyFingerprint().toString(),
+                sigVerification.getSigningKey().getPrimaryKeyFingerprint().toString());
     }
 }

@@ -6,12 +6,13 @@ SPDX-License-Identifier: Apache-2.0
 
 # PGPainless - Use OpenPGP Painlessly!
 
-[![Travis (.com)](https://travis-ci.com/pgpainless/pgpainless.svg?branch=master)](https://travis-ci.com/pgpainless/pgpainless)
+[![Build Status](https://github.com/pgpainless/pgpainless/actions/workflows/gradle_push.yml/badge.svg)](https://github.com/pgpainless/pgpainless/actions/workflows/gradle_push.yml)
 [![Maven Central](https://badgen.net/maven/v/maven-central/org.pgpainless/pgpainless-core)](https://search.maven.org/artifact/org.pgpainless/pgpainless-core)
-[![Coverage Status](https://coveralls.io/repos/github/pgpainless/pgpainless/badge.svg?branch=master)](https://coveralls.io/github/pgpainless/pgpainless?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/pgpainless/pgpainless/badge.svg?branch=main)](https://coveralls.io/github/pgpainless/pgpainless?branch=main)
 [![Interoperability Test-Suite](https://badgen.net/badge/Sequoia%20Test%20Suite/%232/green)](https://tests.sequoia-pgp.org/)
 [![PGP](https://img.shields.io/badge/pgp-A027%20DB2F%203E1E%20118A-blue)](https://keyoxide.org/7F9116FEA90A5983936C7CFAA027DB2F3E1E118A)
 [![REUSE status](https://api.reuse.software/badge/github.com/pgpainless/pgpainless)](https://api.reuse.software/info/github.com/pgpainless/pgpainless)
+[![Documentation Status](https://readthedocs.org/projects/pgpainless/badge/?version=latest)](https://pgpainless.readthedocs.io/en/latest/?badge=latest)
 
 **PGPainless is an easy-to-use OpenPGP library for Java and Android applications**
 
@@ -188,23 +189,17 @@ repositories {
 }
 
 dependencies {
-	implementation 'org.pgpainless:pgpainless-core:1.2.0'
+	implementation 'org.pgpainless:pgpainless-core:1.3.4'
 }
 ```
 
-## About
-PGPainless is a by-product of my [Summer of Code 2018 project](https://blog.jabberhead.tk/summer-of-code-2018/)
-implementing OpenPGP support for the XMPP client library [Smack](https://github.com/igniterealtime/Smack).
-For that project I was in need of a simple-to-use OpenPGP library.
-
-Originally I was going to use [Bouncy-GPG](https://github.com/neuhalje/bouncy-gpg) for my project,
-but ultimately I decided to create my own OpenPGP library which better fits my needs.
-
-However, PGPainless was heavily influenced by Bouncy-GPG.
-
-To reach out to the development team, feel free to send a mail: info@pgpainless.org
+## Professional Support
+Do you need a custom feature? Are you unsure of what's the best way to integrate PGPainless into your product?
+We offer paid professional services. Don't hesitate to send an inquiry to [info@pgpainless.org](mailto:info@pgpainless.org).
 
 ## Development
+Join the projects IRC channel [**#pgpainless**](ircs://irc.oftc.net:6697/#pgpainless) on OFTC if you have any questions!
+
 PGPainless is developed in - and accepts contributions from - the following places:
 
 * [Github](https://github.com/pgpainless/pgpainless)
@@ -231,5 +226,13 @@ Please follow the [code of conduct](CODE_OF_CONDUCT.md) if you want to be part o
 
 ## Acknowledgements
 Development on PGPainless is generously sponsored by [FlowCrypt.com](https://flowcrypt.com). Thank you very very very much!
+[![FlowCrypt Logo](https://blog.jabberhead.tk/wp-content/uploads/2022/05/flowcrypt-logo.svg)](https://flowcrypt.com)
 
-Continuous Integration is kindly provided by [Travis-CI.com](https://travis-ci.com/).
+Parts of PGPainless development ([project page](https://nlnet.nl/project/PGPainless/)) will be funded by [NGI Assure](https://nlnet.nl/assure/) through [NLNet](https://nlnet.nl).  
+NGI Assure is made possible with financial support from the [European Commission](https://ec.europa.eu/)'s [Next Generation Internet](https://ngi.eu/) programme, under the aegis of [DG Communications Networks, Content and Technology](https://ec.europa.eu/info/departments/communications-networks-content-and-technology_en).
+[![NGI Assure Logo](https://blog.jabberhead.tk/wp-content/uploads/2022/05/NGIAssure_tag.svg)](https://nlnet.nl/assure/)
+
+Big thank you also to those who decided to support the work by donating!  
+Notably @msfjarvis
+
+You make my day!

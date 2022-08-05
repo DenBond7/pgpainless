@@ -67,6 +67,17 @@ public abstract class OpenPgpFingerprint implements CharSequence, Comparable<Ope
         throw new IllegalArgumentException("Fingerprint does not appear to match any known fingerprint patterns.");
     }
 
+    /**
+     * Parse a binary OpenPGP fingerprint into an {@link OpenPgpFingerprint} object.
+     *
+     * @param binaryFingerprint binary representation of the fingerprint
+     * @return parsed fingerprint
+     */
+    public static OpenPgpFingerprint parseFromBinary(byte[] binaryFingerprint) {
+        String hex = Hex.toHexString(binaryFingerprint).toUpperCase();
+        return parse(hex);
+    }
+
     public OpenPgpFingerprint(String fingerprint) {
         String fp = fingerprint.replace(" ", "").trim().toUpperCase();
         if (!isValid(fp)) {

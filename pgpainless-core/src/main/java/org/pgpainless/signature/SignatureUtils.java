@@ -9,9 +9,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import javax.annotation.Nonnull;
 
 import org.bouncycastle.bcpg.sig.IssuerKeyID;
 import org.bouncycastle.bcpg.sig.KeyExpirationTime;
@@ -27,13 +30,13 @@ import org.bouncycastle.openpgp.PGPSignatureGenerator;
 import org.bouncycastle.openpgp.PGPSignatureList;
 import org.bouncycastle.openpgp.operator.PGPContentSignerBuilder;
 import org.bouncycastle.util.encoders.Hex;
+import org.bouncycastle.util.io.Streams;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.SignatureType;
 import org.pgpainless.algorithm.negotiation.HashAlgorithmNegotiator;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.OpenPgpFingerprint;
-import org.pgpainless.key.OpenPgpV4Fingerprint;
 import org.pgpainless.key.util.OpenPgpKeyAttributeUtil;
 import org.pgpainless.key.util.RevocationAttributes;
 import org.pgpainless.signature.subpackets.SignatureSubpacketsUtil;
@@ -232,7 +235,7 @@ public final class SignatureUtils {
 
     /**
      * Read and return {@link PGPSignature PGPSignatures}.
-     * This method can deal with signatures that may be armored, compressed and may contain marker packets.
+     * This method can deal with signatures that may be binary, armored and may contain marker packets.
      *
      * @param inputStream input stream
      * @param maxIterations number of loop iterations until reading is aborted
@@ -248,9 +251,14 @@ public final class SignatureUtils {
         int i = 0;
         Object nextObject;
         while (i++ < maxIterations && (nextObject = objectFactory.nextObject()) != null) {
+
+            // Since signatures are indistinguishable from randomness, there is no point in having them compressed,
+            //  except for an attacker who is trying to exploit flaws in the decompression algorithm.
+            //  Therefore, we ignore compressed data packets without attempting decompression.
             if (nextObject instanceof PGPCompressedData) {
                 PGPCompressedData compressedData = (PGPCompressedData) nextObject;
-                objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(compressedData.getDataStream());
+                // getInputStream() does not do decompression, contrary to getDataStream().
+                Streams.drain(compressedData.getInputStream()); // Skip packet without decompressing
             }
 
             if (nextObject instanceof PGPSignatureList) {
@@ -315,16 +323,48 @@ public final class SignatureUtils {
     }
 
     public static boolean wasIssuedBy(byte[] fingerprint, PGPSignature signature) {
-        if (fingerprint.length != 20) {
+        try {
+            OpenPgpFingerprint fp = OpenPgpFingerprint.parseFromBinary(fingerprint);
+            OpenPgpFingerprint issuerFp = SignatureSubpacketsUtil.getIssuerFingerprintAsOpenPgpFingerprint(signature);
+            if (issuerFp == null) {
+                return fp.getKeyId() == signature.getKeyID();
+            }
+            return fp.equals(issuerFp);
+        } catch (IllegalArgumentException e) {
             // Unknown fingerprint length
             return false;
         }
-        OpenPgpV4Fingerprint fp = new OpenPgpV4Fingerprint(fingerprint);
-        OpenPgpFingerprint issuerFp = SignatureSubpacketsUtil.getIssuerFingerprintAsOpenPgpFingerprint(signature);
-        if (issuerFp == null) {
-            return fp.getKeyId() == signature.getKeyID();
+    }
+
+    /**
+     * Extract all signatures from the given <pre>key</pre> which were issued by <pre>issuerKeyId</pre>
+     * over <pre>userId</pre>.
+     *
+     * @param key public key
+     * @param userId user-id
+     * @param issuerKeyId issuer key-id
+     * @return (potentially empty) list of signatures
+     */
+    public static @Nonnull List<PGPSignature> getSignaturesOverUserIdBy(
+            @Nonnull PGPPublicKey key,
+            @Nonnull String userId,
+            long issuerKeyId) {
+        List<PGPSignature> signaturesByKeyId = new ArrayList<>();
+        Iterator<PGPSignature> userIdSignatures = key.getSignaturesForID(userId);
+
+        // getSignaturesForID() is nullable for some reason -.-
+        if (userIdSignatures == null) {
+            return signaturesByKeyId;
         }
 
-        return fp.equals(issuerFp);
+        // filter for signatures by key-id
+        while (userIdSignatures.hasNext()) {
+            PGPSignature signature = userIdSignatures.next();
+            if (signature.getKeyID() == issuerKeyId) {
+                signaturesByKeyId.add(signature);
+            }
+        }
+
+        return Collections.unmodifiableList(signaturesByKeyId);
     }
 }

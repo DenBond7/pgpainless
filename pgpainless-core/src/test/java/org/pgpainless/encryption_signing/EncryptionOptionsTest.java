@@ -117,6 +117,14 @@ public class EncryptionOptionsTest {
     }
 
     @Test
+    public void testAddEmptyRecipientsFails() {
+        EncryptionOptions options = new EncryptionOptions();
+        assertThrows(IllegalArgumentException.class, () -> options.addRecipients(Collections.emptyList()));
+        assertThrows(IllegalArgumentException.class, () -> options.addRecipients(Collections.emptyList(),
+                encryptionCapableKeys -> encryptionCapableKeys));
+    }
+
+    @Test
     public void testAddEmptyPassphraseFails() {
         EncryptionOptions options = new EncryptionOptions();
         assertThrows(IllegalArgumentException.class, () ->
@@ -159,7 +167,7 @@ public class EncryptionOptionsTest {
     @Test
     public void testAddRecipients_PGPPublicKeyRingCollection() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, IOException {
         PGPPublicKeyRing secondKeyRing = KeyRingUtils.publicKeyRingFrom(
-                PGPainless.generateKeyRing().modernKeyRing("other@pgpainless.org", null));
+                PGPainless.generateKeyRing().modernKeyRing("other@pgpainless.org"));
 
         PGPPublicKeyRingCollection collection = new PGPPublicKeyRingCollection(
                 Arrays.asList(publicKeys, secondKeyRing));

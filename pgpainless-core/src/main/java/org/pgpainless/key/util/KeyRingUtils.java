@@ -26,7 +26,6 @@ import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
 import org.bouncycastle.openpgp.PGPSignature;
 import org.bouncycastle.openpgp.PGPUserAttributeSubpacketVector;
 import org.pgpainless.PGPainless;
-import org.pgpainless.exception.NotYetImplementedException;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnlockSecretKey;
@@ -160,6 +159,25 @@ public final class KeyRingUtils {
         }
         PGPPublicKeyRing publicKeyRing = new PGPPublicKeyRing(publicKeyList);
         return publicKeyRing;
+    }
+
+    /**
+     * Extract {@link PGPPublicKeyRing PGPPublicKeyRings} from all {@link PGPSecretKeyRing PGPSecretKeyRings} in
+     * the given {@link PGPSecretKeyRingCollection} and return them as a {@link PGPPublicKeyRingCollection}.
+     *
+     * @param secretKeyRings secret key ring collection
+     * @return public key ring collection
+     * @throws PGPException TODO: remove
+     * @throws IOException TODO: remove
+     */
+    @Nonnull
+    public static PGPPublicKeyRingCollection publicKeyRingCollectionFrom(@Nonnull PGPSecretKeyRingCollection secretKeyRings)
+            throws PGPException, IOException {
+        List<PGPPublicKeyRing> certificates = new ArrayList<>();
+        for (PGPSecretKeyRing secretKey : secretKeyRings) {
+            certificates.add(PGPainless.extractCertificate(secretKey));
+        }
+        return new PGPPublicKeyRingCollection(certificates);
     }
 
     /**
@@ -354,8 +372,6 @@ public final class KeyRingUtils {
     /**
      * Inject a {@link PGPPublicKey} into the given key ring.
      *
-     * Note: Right now this method is broken and will throw a {@link NotYetImplementedException}.
-     *
      * @param keyRing key ring
      * @param publicKey public key
      * @param <T> either {@link PGPPublicKeyRing} or {@link PGPSecretKeyRing}
@@ -449,8 +465,13 @@ public final class KeyRingUtils {
      */
     @Nonnull
     public static PGPSecretKeyRing stripSecretKey(@Nonnull PGPSecretKeyRing secretKeys,
-                                                   long secretKeyId)
+                                                  long secretKeyId)
             throws IOException, PGPException {
+
+        if (secretKeys.getPublicKey().getKeyID() == secretKeyId) {
+            throw new IllegalArgumentException("Bouncy Castle currently cannot deal with stripped secret primary keys.");
+        }
+
         if (secretKeys.getSecretKey(secretKeyId) == null) {
             throw new NoSuchElementException("PGPSecretKeyRing does not contain secret key " + Long.toHexString(secretKeyId));
         }
