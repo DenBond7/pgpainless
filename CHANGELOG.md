@@ -5,6 +5,115 @@ SPDX-License-Identifier: CC0-1.0
 
 # PGPainless Changelog
 
+## 1.3.7
+- Bugfix: Fix signature verification when `DecryptionStream` is drained byte-by-byte using `read()` call
+- Add `KeyRingUtils.injectCertification(keys, certification)`
+- Add `PGPainless.asciiArmor(key, outputStream)`
+- Add `PGPainless.asciiArmor(signature)`
+
+## 1.3.6
+- Remove deprecated methods
+  - `ArmorUtils.createArmoredOutputStreamFor()` -> use `ArmorUtils.toAsciiArmoredStream()` instead
+  - `EncryptionResult.getSymmetricKeyAlgorithm()` -> use `EncryptionResult.getEncryptionAlgorithm()` instead
+- Add `KeyRingInfo.getRevocationState()`
+  - Better way to determine whether a key is revoked
+- Add `SigningOptions.addDetachedSignature(protector, key)` shortcut method
+- Add `EncryptionOptions.get()`, `ConsumerOptions.get()` factory methods
+- Add support for generating keys without user-id (only using `PGPainless.buildKeyRing()` for now)
+- Switch to `SHA256` as default `S2K` hash algorithm for secret key protection
+- Allow to set custom reference time when modifying secret keys
+- Add diagnostic test to explore system PRNG performance
+
+## 1.3.5
+- Add `KeyRingInfo.isCapableOfSigning()`
+- Add `KeyRingReader.readKeyRing(*)` methods that can take both secret- and public keys
+- Add manpages
+  - Add script to generate manpages from sop-java-picocli
+- Build website from main branch
+
+## 1.3.4
+- Fix `KeyRingInfo.isUsableForEncryption()`, `KeyRingInfo.isUsableForSigning()` not detecting revoked primary keys
+- Bump `sop-java` and `sop-java-picocli` to `4.0.1`
+  - Fixes help text strings being resolved properly while allowing to override executable name
+
+## 1.3.3
+- Improve test compatibility against older JUnit versions
+- Fix tests that read from jar-embedded resources (thanks @jcharaoui)
+- `pgpainless-cli help`: Fix i18n strings
+
+## 1.3.2
+- Add `KeyRingInfo(Policy)` constructor
+- Delete unused `KeyRingValidator` class
+- Add `PGPainless.certify()` API
+  - `certify().userIdOnCertificate()` can be used to certify other users User-IDs
+  - `certify().certificate()` can be used to create direct-key signatures on other users keys
+- We now have a [User Guide!](https://pgpainless.rtfd.io/)
+- Fixed build script
+  - `pgpainless-cli`s `gradle build` task no longer builds fat jar
+  - Fat jars are now built by dedicated shadow plugin
+- Fix third-party assigned user-ids on keys to accidentally get picked up as primary user-id
+- Add `KeyRingUtils.publicKeyRingCollectionFrom(PGPSecretKeyRingCollection)`
+- Add `SecretKeyRingEditor.replaceUserId(oldUid, newUid, protector)`
+- Prevent adding `SymmetricKeyAlgorithm.NULL` (unencrypted) as encryption algo preference when generating keys
+
+## 1.3.1
+- Fix reproducibility of builds by setting fixed file permissions in archive task
+- Improve encryption performance by buffering streams
+- Fix `OpenPgpMetadata.isEncrypted()` to also return true for symmetrically encrypted messages
+- SOP changes
+  - decrypt: Do not throw `NoSignatures` if no signatures found
+  - decrypt: Throw `BadData` when ciphertext is not encrypted
+
+## 1.3.0
+- Add `RevokedKeyException`
+- `KeyRingUtils.stripSecretKey()`: Disallow stripping of primary secret key
+- Remove support for reading compressed detached signatures
+- Add `PGPainless.generateKeyRing().modernKeyRing(userId)` shortcut method without passphrase
+- Add `CollectionUtils.addAll(Iterator, Collection)`
+- Add `SignatureUtils.getSignaturesForUserIdBy(key, userId, keyId)`
+- Add `OpenPgpFingerprint.parseFromBinary(bytes)`
+- `SignatureUtils.wasIssuedBy()`: Add support for V5 fingerprints
+- Prevent integer overflows when setting expiration dates
+- SOP: Properly throw `KeyCannotDecrypt` exception
+- Fix performance issues of encrypt and sign operations by using buffering
+- Fix performance issues of armor and dearmor operations
+- Bump dependency `sop-java` to `4.0.0`
+- Add support for SOP specification version 04
+  - Implement `inline-sign`
+  - Implement `inline-verify`
+  - Rename `DetachInbandSignatureAndMessageImpl` to `InlineDetachImpl`
+  - Rename `SignImpl` to `DetachedSignImpl`
+  - Rename `VerifyImpl` to `DetachedVerifyImpl`
+  - Add support for `--with-key-password` option in `GenerateKeyImpl`, `DetachedSignImpl`, `DecryptImpl`, `EncryptImpl`.
+  - `InlineDetachImpl` now supports 3 different message types:
+    - Messages using Cleartext Signature Framework
+    - OpenPGP messages using OnePassSignatures
+    - OpenPGP messages without OnePassSignatures
+- Introduce `OpenPgpMetadata.isCleartextSigned()`
+
+## 1.2.2
+- `EncryptionOptions.addRecipients(collection)`: Disallow empty collections to prevent misuse from resulting in unencrypted messages
+- Deprecate default policy factory methods in favor of policy factory methods with expressive names
+- Another fix for OpenPGP data detection
+  - We now inspect the first packet of the data stream to figure out, whether it is plausible OpenPGP data, without exhausting the stream
+
+## 1.2.1
+- Bump `sop-java` dependency to `1.2.3`
+- Bump `slf4j` dependency to `1.7.36`
+- Bump `logback` dependency to `1.2.11`
+- Add experimental support for creating signatures over pre-calculated `MessageDigest` objects.
+  - `BcHashContextSigner.signHashContext()` can be used to create OpenPGP signatures over manually hashed data.  
+    This allows applications to do the hashing themselves.
+- Harden detection of binary/ascii armored/non-OpenPGP data
+- Add `ConsumerOptions.forceNonOpenPgpData()` to force PGPainless to handle data as non-OpenPGP data
+  - This is a workaround for when PGPainless accidentally mistakes non-OpenPGP data for binary OpenPGP data
+- Implement "smart" hash algorithm policies, which take the 'usage-date' for algorithms into account
+  - This allows for fine-grained signature hash algorithm policing with usage termination dates
+- Switch to smart signature hash algorithm policies by default
+  - PGPainless now accepts SHA-1 signatures if they were made before 2013-02-01
+  - We also now accept RIPEMD160 signatures if they were made before 2013-02-01
+  - We further accept MD5 signatures made prior to 1997-02-01
+ 
 
 ## 1.2.0
 - Improve exception hierarchy for key-related exceptions

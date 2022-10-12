@@ -49,6 +49,7 @@ import org.pgpainless.key.generation.type.eddsa.EdDSACurve;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnprotectedKeysProtector;
 import org.pgpainless.key.util.KeyRingUtils;
+import org.pgpainless.key.util.RevocationAttributes;
 import org.pgpainless.key.util.UserId;
 import org.pgpainless.util.DateUtil;
 import org.pgpainless.util.Passphrase;
@@ -105,7 +106,12 @@ public class KeyRingInfoTest {
         assertNull(sInfo.getRevocationDate());
         assertNull(pInfo.getRevocationDate());
         Date revocationDate = DateUtil.now();
-        PGPSecretKeyRing revoked = PGPainless.modifyKeyRing(secretKeys).revoke(new UnprotectedKeysProtector()).done();
+        PGPSecretKeyRing revoked = PGPainless.modifyKeyRing(secretKeys).revoke(
+                new UnprotectedKeysProtector(),
+                RevocationAttributes.createKeyRevocation()
+                        .withReason(RevocationAttributes.Reason.KEY_RETIRED)
+                        .withoutDescription()
+        ).done();
         KeyRingInfo rInfo = PGPainless.inspectKeyRing(revoked);
         assertNotNull(rInfo.getRevocationDate());
         assertEquals(revocationDate.getTime(), rInfo.getRevocationDate().getTime(), 5);
@@ -515,7 +521,7 @@ public class KeyRingInfoTest {
 
     @Test
     public void getSecretKeyTest() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
-        PGPSecretKeyRing secretKeys = PGPainless.generateKeyRing().modernKeyRing("Alice", null);
+        PGPSecretKeyRing secretKeys = PGPainless.generateKeyRing().modernKeyRing("Alice");
         KeyRingInfo info = PGPainless.inspectKeyRing(secretKeys);
 
         OpenPgpV4Fingerprint primaryKeyFingerprint = new OpenPgpV4Fingerprint(secretKeys);
@@ -704,6 +710,8 @@ public class KeyRingInfoTest {
 
     @Test
     public void getEmailsTest() throws IOException {
+        // NOTE: The User-ID Format for the ID "Alice Anderson <alice@email.tld> [Primary Mail Address]" is incorrect.
+        // TODO: Fix?
         String KEY = "-----BEGIN PGP PRIVATE KEY BLOCK-----\n" +
                 "Version: PGPainless\n" +
                 "Comment: B4A8 9FE8 9D59 31E6 BCF7  DC2F 6BA1 2CC7 9A08 8D73\n" +

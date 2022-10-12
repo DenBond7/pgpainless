@@ -42,7 +42,7 @@ public class VerifyWithMissingPublicKeyCallback {
 
     @Test
     public void testMissingPublicKeyCallback() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, IOException {
-        PGPSecretKeyRing signingSecKeys = PGPainless.generateKeyRing().modernKeyRing("alice", null);
+        PGPSecretKeyRing signingSecKeys = PGPainless.generateKeyRing().modernKeyRing("alice");
         PGPPublicKey signingKey = new KeyRingInfo(signingSecKeys).getSigningSubkeys().get(0);
         PGPPublicKeyRing signingPubKeys = KeyRingUtils.publicKeyRingFrom(signingSecKeys);
         PGPPublicKeyRing unrelatedKeys = TestKeys.getJulietPublicKeyRing();
@@ -66,7 +66,7 @@ public class VerifyWithMissingPublicKeyCallback {
                             @Nullable
                             @Override
                             public PGPPublicKeyRing onMissingPublicKeyEncountered(@Nonnull Long keyId) {
-                                assertEquals(signingKey.getKeyID(), keyId, "Signing key-ID mismatch.");
+                                assertEquals(signingKey.getKeyID(), (long) keyId, "Signing key-ID mismatch.");
                                 return signingPubKeys;
                             }
                         }));

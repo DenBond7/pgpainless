@@ -36,6 +36,7 @@ public class ConsumerOptions {
 
 
     private boolean ignoreMDCErrors = false;
+    private boolean forceNonOpenPgpData = false;
 
     private Date verifyNotBefore = null;
     private Date verifyNotAfter = new Date();
@@ -53,6 +54,10 @@ public class ConsumerOptions {
     private MissingKeyPassphraseStrategy missingKeyPassphraseStrategy = MissingKeyPassphraseStrategy.INTERACTIVE;
 
     private MultiPassStrategy multiPassStrategy = new InMemoryMultiPassStrategy();
+
+    public static ConsumerOptions get() {
+        return new ConsumerOptions();
+    }
 
     /**
      * Consider signatures on the message made before the given timestamp invalid.
@@ -294,6 +299,21 @@ public class ConsumerOptions {
      */
     boolean isIgnoreMDCErrors() {
         return ignoreMDCErrors;
+    }
+
+    /**
+     * Force PGPainless to handle the data provided by the {@link InputStream} as non-OpenPGP data.
+     * This workaround might come in handy if PGPainless accidentally mistakes the data for binary OpenPGP data.
+     *
+     * @return options
+     */
+    public ConsumerOptions forceNonOpenPgpData() {
+        this.forceNonOpenPgpData = true;
+        return this;
+    }
+
+    boolean isForceNonOpenPgpData() {
+        return forceNonOpenPgpData;
     }
 
     /**

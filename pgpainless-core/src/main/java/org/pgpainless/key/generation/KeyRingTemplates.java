@@ -58,7 +58,7 @@ public final class KeyRingTemplates {
      */
     public PGPSecretKeyRing simpleRsaKeyRing(@Nonnull String userId, @Nonnull RsaLength length)
             throws InvalidAlgorithmParameterException, NoSuchAlgorithmException, PGPException {
-        return simpleRsaKeyRing(userId, length, null);
+        return simpleRsaKeyRing(userId, length, Passphrase.emptyPassphrase());
     }
 
     /**
@@ -96,13 +96,19 @@ public final class KeyRingTemplates {
      */
     public PGPSecretKeyRing simpleRsaKeyRing(@Nonnull String userId, @Nonnull RsaLength length, String password)
             throws PGPException, NoSuchAlgorithmException, InvalidAlgorithmParameterException {
+        Passphrase passphrase = Passphrase.emptyPassphrase();
+        if (!isNullOrEmpty(password)) {
+            passphrase = Passphrase.fromPassword(password);
+        }
+        return simpleRsaKeyRing(userId, length, passphrase);
+    }
+
+    public PGPSecretKeyRing simpleRsaKeyRing(@Nonnull String userId, @Nonnull RsaLength length, @Nonnull Passphrase passphrase)
+            throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
         KeyRingBuilder builder = PGPainless.buildKeyRing()
                 .setPrimaryKey(KeySpec.getBuilder(KeyType.RSA(length), KeyFlag.CERTIFY_OTHER, KeyFlag.SIGN_DATA, KeyFlag.ENCRYPT_COMMS))
-                .addUserId(userId);
-
-        if (!isNullOrEmpty(password)) {
-            builder.setPassphrase(Passphrase.fromPassword(password));
-        }
+                .addUserId(userId)
+                .setPassphrase(passphrase);
         return builder.build();
     }
 
@@ -139,7 +145,7 @@ public final class KeyRingTemplates {
      */
     public PGPSecretKeyRing simpleEcKeyRing(@Nonnull String userId)
             throws InvalidAlgorithmParameterException, NoSuchAlgorithmException, PGPException {
-        return simpleEcKeyRing(userId, null);
+        return simpleEcKeyRing(userId, Passphrase.emptyPassphrase());
     }
 
     /**
@@ -177,15 +183,36 @@ public final class KeyRingTemplates {
      */
     public PGPSecretKeyRing simpleEcKeyRing(@Nonnull String userId, String password)
             throws PGPException, NoSuchAlgorithmException, InvalidAlgorithmParameterException {
+        Passphrase passphrase = Passphrase.emptyPassphrase();
+        if (!isNullOrEmpty(password)) {
+            passphrase = Passphrase.fromPassword(password);
+        }
+        return simpleEcKeyRing(userId, passphrase);
+    }
+
+    public PGPSecretKeyRing simpleEcKeyRing(@Nonnull String userId, @Nonnull Passphrase passphrase)
+            throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
         KeyRingBuilder builder = PGPainless.buildKeyRing()
                 .setPrimaryKey(KeySpec.getBuilder(KeyType.EDDSA(EdDSACurve._Ed25519), KeyFlag.CERTIFY_OTHER, KeyFlag.SIGN_DATA))
                 .addSubkey(KeySpec.getBuilder(KeyType.XDH(XDHSpec._X25519), KeyFlag.ENCRYPT_STORAGE, KeyFlag.ENCRYPT_COMMS))
-                .addUserId(userId);
-
-        if (!isNullOrEmpty(password)) {
-            builder.setPassphrase(Passphrase.fromPassword(password));
-        }
+                .addUserId(userId)
+                .setPassphrase(passphrase);
         return builder.build();
+    }
+
+    /**
+     * Generate a modern PGP key ring consisting of an ed25519 EdDSA primary key which is used to certify
+     * an X25519 XDH encryption subkey and an ed25519 EdDSA signing key.
+     *
+     * @param userId primary user id
+     * @return key ring
+     *
+     * @throws InvalidAlgorithmParameterException in case of invalid key generation parameters
+     * @throws NoSuchAlgorithmException in case of missing algorithm implementation in the crypto provider
+     * @throws PGPException in case of an OpenPGP related error
+     */
+    public PGPSecretKeyRing modernKeyRing(String userId) throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
+        return modernKeyRing(userId, (Passphrase) null);
     }
 
     /**
@@ -202,13 +229,19 @@ public final class KeyRingTemplates {
      */
     public PGPSecretKeyRing modernKeyRing(String userId, String password)
             throws InvalidAlgorithmParameterException, NoSuchAlgorithmException, PGPException {
+        Passphrase passphrase = (password != null ? Passphrase.fromPassword(password) : null);
+        return modernKeyRing(userId, passphrase);
+    }
+
+    public PGPSecretKeyRing modernKeyRing(String userId, Passphrase passphrase)
+            throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
         KeyRingBuilder builder = PGPainless.buildKeyRing()
                 .setPrimaryKey(KeySpec.getBuilder(KeyType.EDDSA(EdDSACurve._Ed25519), KeyFlag.CERTIFY_OTHER))
                 .addSubkey(KeySpec.getBuilder(KeyType.XDH(XDHSpec._X25519), KeyFlag.ENCRYPT_STORAGE, KeyFlag.ENCRYPT_COMMS))
                 .addSubkey(KeySpec.getBuilder(KeyType.EDDSA(EdDSACurve._Ed25519), KeyFlag.SIGN_DATA))
                 .addUserId(userId);
-        if (!isNullOrEmpty(password)) {
-            builder.setPassphrase(Passphrase.fromPassword(password));
+        if (passphrase != null && !passphrase.isEmpty()) {
+            builder.setPassphrase(passphrase);
         }
         return builder.build();
     }

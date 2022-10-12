@@ -6,7 +6,9 @@ package org.pgpainless.policy;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -18,6 +20,7 @@ import org.pgpainless.algorithm.CompressionAlgorithm;
 import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
+import org.pgpainless.util.DateUtil;
 import org.pgpainless.util.NotationRegistry;
 
 /**
@@ -28,17 +31,17 @@ public final class Policy {
     private static Policy INSTANCE;
 
     private HashAlgorithmPolicy signatureHashAlgorithmPolicy =
-            HashAlgorithmPolicy.defaultSignatureAlgorithmPolicy();
+            HashAlgorithmPolicy.smartSignatureHashAlgorithmPolicy();
     private HashAlgorithmPolicy revocationSignatureHashAlgorithmPolicy =
-            HashAlgorithmPolicy.defaultRevocationSignatureHashAlgorithmPolicy();
+            HashAlgorithmPolicy.smartSignatureHashAlgorithmPolicy();
     private SymmetricKeyAlgorithmPolicy symmetricKeyEncryptionAlgorithmPolicy =
-            SymmetricKeyAlgorithmPolicy.defaultSymmetricKeyEncryptionAlgorithmPolicy();
+            SymmetricKeyAlgorithmPolicy.symmetricKeyEncryptionPolicy2022();
     private SymmetricKeyAlgorithmPolicy symmetricKeyDecryptionAlgorithmPolicy =
-            SymmetricKeyAlgorithmPolicy.defaultSymmetricKeyDecryptionAlgorithmPolicy();
+            SymmetricKeyAlgorithmPolicy.symmetricKeyDecryptionPolicy2022();
     private CompressionAlgorithmPolicy compressionAlgorithmPolicy =
-            CompressionAlgorithmPolicy.defaultCompressionAlgorithmPolicy();
+            CompressionAlgorithmPolicy.anyCompressionAlgorithmPolicy();
     private PublicKeyAlgorithmPolicy publicKeyAlgorithmPolicy =
-            PublicKeyAlgorithmPolicy.defaultPublicKeyAlgorithmPolicy();
+            PublicKeyAlgorithmPolicy.bsi2021PublicKeyAlgorithmPolicy();
     private final NotationRegistry notationRegistry = new NotationRegistry();
 
     private AlgorithmSuite keyGenerationAlgorithmSuite = AlgorithmSuite.getDefaultAlgorithmSuite();
@@ -246,8 +249,20 @@ public final class Policy {
          * The default symmetric encryption algorithm policy of PGPainless.
          *
          * @return default symmetric encryption algorithm policy
+         * @deprecated not expressive - will be removed in a future release
          */
+        @Deprecated
         public static SymmetricKeyAlgorithmPolicy defaultSymmetricKeyEncryptionAlgorithmPolicy() {
+            return symmetricKeyEncryptionPolicy2022();
+        }
+
+        /**
+         * Policy for symmetric encryption algorithms in the context of message production (encryption).
+         * This suite contains algorithms that are deemed safe to use in 2022.
+         *
+         * @return 2022 symmetric key encryption algorithm policy
+         */
+        public static SymmetricKeyAlgorithmPolicy symmetricKeyEncryptionPolicy2022() {
             return new SymmetricKeyAlgorithmPolicy(SymmetricKeyAlgorithm.AES_256, Arrays.asList(
                     // Reject: Unencrypted, IDEA, TripleDES, CAST5, Blowfish
                     SymmetricKeyAlgorithm.AES_256,
@@ -264,8 +279,20 @@ public final class Policy {
          * The default symmetric decryption algorithm policy of PGPainless.
          *
          * @return default symmetric decryption algorithm policy
+         * @deprecated not expressive - will be removed in a future update
          */
+        @Deprecated
         public static SymmetricKeyAlgorithmPolicy defaultSymmetricKeyDecryptionAlgorithmPolicy() {
+            return symmetricKeyDecryptionPolicy2022();
+        }
+
+        /**
+         * Policy for symmetric key encryption algorithms in the context of message consumption (decryption).
+         * This suite contains algorithms that are deemed safe to use in 2022.
+         *
+         * @return 2022 symmetric key decryption algorithm policy
+         */
+        public static SymmetricKeyAlgorithmPolicy symmetricKeyDecryptionPolicy2022() {
             return new SymmetricKeyAlgorithmPolicy(SymmetricKeyAlgorithm.AES_256, Arrays.asList(
                     // Reject: Unencrypted, IDEA, TripleDES, Blowfish
                     SymmetricKeyAlgorithm.CAST5,
@@ -301,11 +328,39 @@ public final class Policy {
     public static final class HashAlgorithmPolicy {
 
         private final HashAlgorithm defaultHashAlgorithm;
-        private final List<HashAlgorithm> acceptableHashAlgorithms;
+        private final Map<HashAlgorithm, Date> acceptableHashAlgorithmsAndTerminationDates;
 
-        public HashAlgorithmPolicy(HashAlgorithm defaultHashAlgorithm, List<HashAlgorithm> acceptableHashAlgorithms) {
+        /**
+         * Create a {@link HashAlgorithmPolicy} which accepts all {@link HashAlgorithm HashAlgorithms} from the
+         * given map, if the queried usage date is BEFORE the respective termination date.
+         * A termination date value of <pre>null</pre> means no termination, resulting in the algorithm being
+         * acceptable, regardless of usage date.
+         *
+         * @param defaultHashAlgorithm default hash algorithm
+         * @param algorithmTerminationDates map of acceptable algorithms and their termination dates
+         */
+        public HashAlgorithmPolicy(@Nonnull HashAlgorithm defaultHashAlgorithm, @Nonnull Map<HashAlgorithm, Date> algorithmTerminationDates) {
             this.defaultHashAlgorithm = defaultHashAlgorithm;
-            this.acceptableHashAlgorithms = Collections.unmodifiableList(acceptableHashAlgorithms);
+            this.acceptableHashAlgorithmsAndTerminationDates = algorithmTerminationDates;
+        }
+
+        /**
+         * Create a {@link HashAlgorithmPolicy} which accepts all {@link HashAlgorithm HashAlgorithms} listed in
+         * the given list, regardless of usage date.
+         *
+         * @param defaultHashAlgorithm default hash algorithm (e.g. used as fallback if negotiation fails)
+         * @param acceptableHashAlgorithms list of acceptable hash algorithms
+         */
+        public HashAlgorithmPolicy(@Nonnull HashAlgorithm defaultHashAlgorithm, @Nonnull List<HashAlgorithm> acceptableHashAlgorithms) {
+            this(defaultHashAlgorithm, Collections.unmodifiableMap(listToMap(acceptableHashAlgorithms)));
+        }
+
+        private static Map<HashAlgorithm, Date> listToMap(@Nonnull List<HashAlgorithm> algorithms) {
+            Map<HashAlgorithm, Date> algorithmsAndTerminationDates = new HashMap<>();
+            for (HashAlgorithm algorithm : algorithms) {
+                algorithmsAndTerminationDates.put(algorithm, null);
+            }
+            return algorithmsAndTerminationDates;
         }
 
         /**
@@ -319,17 +374,17 @@ public final class Policy {
         }
 
         /**
-         * Return true if the given hash algorithm is acceptable by this policy.
+         * Return true if the given hash algorithm is currently acceptable by this policy.
          *
          * @param hashAlgorithm hash algorithm
          * @return true if the hash algorithm is acceptable, false otherwise
          */
-        public boolean isAcceptable(HashAlgorithm hashAlgorithm) {
-            return acceptableHashAlgorithms.contains(hashAlgorithm);
+        public boolean isAcceptable(@Nonnull HashAlgorithm hashAlgorithm) {
+            return isAcceptable(hashAlgorithm, new Date());
         }
 
         /**
-         * Return true if the given hash algorithm is acceptable by this policy.
+         * Return true if the given hash algorithm is currently acceptable by this policy.
          *
          * @param algorithmId hash algorithm
          * @return true if the hash algorithm is acceptable, false otherwise
@@ -345,13 +400,85 @@ public final class Policy {
         }
 
         /**
+         * Return true, if the given algorithm is acceptable for the given usage date.
+         *
+         * @param hashAlgorithm algorithm
+         * @param usageDate usage date (e.g. signature creation time)
+         *
+         * @return acceptance
+         */
+        public boolean isAcceptable(@Nonnull HashAlgorithm hashAlgorithm, @Nonnull Date usageDate) {
+            if (!acceptableHashAlgorithmsAndTerminationDates.containsKey(hashAlgorithm)) {
+                return false;
+            }
+
+            // Check termination date
+            Date terminationDate = acceptableHashAlgorithmsAndTerminationDates.get(hashAlgorithm);
+            if (terminationDate == null) {
+                return true;
+            }
+
+            // Reject if usage date is past termination date
+            return terminationDate.after(usageDate);
+        }
+
+        public boolean isAcceptable(int algorithmId, @Nonnull Date usageDate) {
+            try {
+                HashAlgorithm algorithm = HashAlgorithm.requireFromId(algorithmId);
+                return isAcceptable(algorithm, usageDate);
+            } catch (NoSuchElementException e) {
+                // Unknown algorithm is not acceptable
+                return false;
+            }
+        }
+
+        /**
          * The default signature hash algorithm policy of PGPainless.
          * Note that this policy is only used for non-revocation signatures.
          * For revocation signatures {@link #defaultRevocationSignatureHashAlgorithmPolicy()} is used instead.
          *
          * @return default signature hash algorithm policy
+         * @deprecated not expressive - will be removed in an upcoming release
          */
+        @Deprecated
         public static HashAlgorithmPolicy defaultSignatureAlgorithmPolicy() {
+            return smartSignatureHashAlgorithmPolicy();
+        }
+
+        /**
+         * {@link HashAlgorithmPolicy} which takes the date of the algorithm usage into consideration.
+         * If the policy has a termination date for a given algorithm, and the usage date is after that termination
+         * date, the algorithm is rejected.
+         *
+         * This policy is inspired by Sequoia-PGP's collision resistant algorithm policy.
+         *
+         * @see <a href="https://gitlab.com/sequoia-pgp/sequoia/-/blob/main/openpgp/src/policy.rs#L604">Sequoia-PGP's Collision Resistant Algorithm Policy</a>
+         *
+         * @return smart signature algorithm policy
+         */
+        public static HashAlgorithmPolicy smartSignatureHashAlgorithmPolicy() {
+            Map<HashAlgorithm, Date> algorithmDateMap = new HashMap<>();
+
+            algorithmDateMap.put(HashAlgorithm.MD5, DateUtil.parseUTCDate("1997-02-01 00:00:00 UTC"));
+            algorithmDateMap.put(HashAlgorithm.SHA1, DateUtil.parseUTCDate("2013-02-01 00:00:00 UTC"));
+            algorithmDateMap.put(HashAlgorithm.RIPEMD160, DateUtil.parseUTCDate("2013-02-01 00:00:00 UTC"));
+            algorithmDateMap.put(HashAlgorithm.SHA224, null);
+            algorithmDateMap.put(HashAlgorithm.SHA256, null);
+            algorithmDateMap.put(HashAlgorithm.SHA384, null);
+            algorithmDateMap.put(HashAlgorithm.SHA512, null);
+
+            return new HashAlgorithmPolicy(HashAlgorithm.SHA512, algorithmDateMap);
+        }
+
+        /**
+         * {@link HashAlgorithmPolicy} which only accepts signatures made using algorithms which are acceptable
+         * according to 2022 standards.
+         *
+         * Particularly this policy only accepts algorithms from the SHA2 family.
+         *
+         * @return static signature algorithm policy
+         */
+        public static HashAlgorithmPolicy static2022SignatureHashAlgorithmPolicy() {
             return new HashAlgorithmPolicy(HashAlgorithm.SHA512, Arrays.asList(
                     HashAlgorithm.SHA224,
                     HashAlgorithm.SHA256,
@@ -364,8 +491,19 @@ public final class Policy {
          * The default revocation signature hash algorithm policy of PGPainless.
          *
          * @return default revocation signature hash algorithm policy
+         * @deprecated not expressive - will be removed in an upcoming release
          */
+        @Deprecated
         public static HashAlgorithmPolicy defaultRevocationSignatureHashAlgorithmPolicy() {
+            return smartSignatureHashAlgorithmPolicy();
+        }
+
+        /**
+         * Hash algorithm policy for revocation signatures, which accepts SHA1 and SHA2 algorithms, as well as RIPEMD160.
+         *
+         * @return static revocation signature hash algorithm policy
+         */
+        public static HashAlgorithmPolicy static2022RevocationSignatureHashAlgorithmPolicy() {
             return new HashAlgorithmPolicy(HashAlgorithm.SHA512, Arrays.asList(
                     HashAlgorithm.RIPEMD160,
                     HashAlgorithm.SHA1,
@@ -406,7 +544,25 @@ public final class Policy {
             return acceptableCompressionAlgorithms.contains(compressionAlgorithm);
         }
 
+        /**
+         * Default {@link CompressionAlgorithmPolicy} of PGPainless.
+         * The default compression algorithm policy accepts any compression algorithm.
+         *
+         * @return default algorithm policy
+         * @deprecated not expressive - might be removed in a future release
+         */
+        @Deprecated
         public static CompressionAlgorithmPolicy defaultCompressionAlgorithmPolicy() {
+            return anyCompressionAlgorithmPolicy();
+        }
+
+        /**
+         * Policy that accepts any known compression algorithm and offers {@link CompressionAlgorithm#ZIP} as
+         * default algorithm.
+         *
+         * @return compression algorithm policy
+         */
+        public static CompressionAlgorithmPolicy anyCompressionAlgorithmPolicy() {
             return new CompressionAlgorithmPolicy(CompressionAlgorithm.ZIP, Arrays.asList(
                     CompressionAlgorithm.UNCOMPRESSED,
                     CompressionAlgorithm.ZIP,
@@ -447,16 +603,26 @@ public final class Policy {
          * Return PGPainless' default public key algorithm policy.
          * This policy is based upon recommendations made by the German Federal Office for Information Security (BSI).
          *
+         * @return default algorithm policy
+         * @deprecated not expressive - might be removed in a future release
+         */
+        @Deprecated
+        public static PublicKeyAlgorithmPolicy defaultPublicKeyAlgorithmPolicy() {
+            return bsi2021PublicKeyAlgorithmPolicy();
+        }
+
+        /**
+         * This policy is based upon recommendations made by the German Federal Office for Information Security (BSI).
+         *
          * Basically this policy requires keys based on elliptic curves to have a bit strength of at least 250,
          * and keys based on prime number factorization / discrete logarithm problems to have a strength of at least 2000 bits.
          *
-         * @see <a href="https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/Publications/TechGuidelines/TG02102/BSI-TR-02102-1.pdf">
-         *     BSI - Technical Guideline - Cryptographic Mechanisms: Recommendations and Key Lengths (2021-01)</a>
+         * @see <a href="https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/Publications/TechGuidelines/TG02102/BSI-TR-02102-1.pdf">BSI - Technical Guideline - Cryptographic Mechanisms: Recommendations and Key Lengths (2021-01)</a>
          * @see <a href="https://www.keylength.com/">BlueKrypt | Cryptographic Key Length Recommendation</a>
          *
          * @return default algorithm policy
          */
-        public static PublicKeyAlgorithmPolicy defaultPublicKeyAlgorithmPolicy() {
+        public static PublicKeyAlgorithmPolicy bsi2021PublicKeyAlgorithmPolicy() {
             Map<PublicKeyAlgorithm, Integer> minimalBitStrengths = new EnumMap<>(PublicKeyAlgorithm.class);
             // §5.4.1
             minimalBitStrengths.put(PublicKeyAlgorithm.RSA_GENERAL, 2000);

@@ -212,9 +212,7 @@ public class SignatureSubpackets
 
     @Override
     public SignatureSubpackets setSignatureExpirationTime(boolean isCritical, long seconds) {
-        if (seconds < 0) {
-            throw new IllegalArgumentException("Expiration time cannot be negative.");
-        }
+        enforceBounds(seconds);
         return setSignatureExpirationTime(new SignatureExpirationTime(isCritical, seconds));
     }
 
@@ -285,10 +283,24 @@ public class SignatureSubpackets
 
     @Override
     public SignatureSubpackets setKeyExpirationTime(boolean isCritical, long secondsFromCreationToExpiration) {
-        if (secondsFromCreationToExpiration < 0) {
-            throw new IllegalArgumentException("Seconds from key creation to expiration cannot be less than 0.");
-        }
+        enforceBounds(secondsFromCreationToExpiration);
         return setKeyExpirationTime(new KeyExpirationTime(isCritical, secondsFromCreationToExpiration));
+    }
+
+    /**
+     * Enforce that <pre>secondsFromCreationToExpiration</pre> is within bounds of an unsigned 32bit number.
+     * Values less than 0 are illegal, as well as values greater 0xffffffff.
+     *
+     * @param secondsFromCreationToExpiration number to check
+     * @throws IllegalArgumentException in case of an under- or overflow
+     */
+    private void enforceBounds(long secondsFromCreationToExpiration) {
+        if (secondsFromCreationToExpiration < 0) {
+            throw new IllegalArgumentException("Seconds from creation to expiration cannot be less than 0.");
+        }
+        if (secondsFromCreationToExpiration > 0xffffffffL) {
+            throw new IllegalArgumentException("Integer overflow. Seconds from creation to expiration cannot be larger than 0xffffffff");
+        }
     }
 
     @Override

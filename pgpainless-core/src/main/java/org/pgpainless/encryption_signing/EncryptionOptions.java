@@ -48,11 +48,11 @@ import org.pgpainless.util.Passphrase;
  * This will cause PGPainless to use the provided algorithm for message encryption, instead of negotiating an algorithm
  * by inspecting the provided recipient keys.
  *
- * By default, PGPainless will only encrypt to a single encryption capable subkey per recipient key.
- * This behavior can be changed, e.g. by calling
+ * By default, PGPainless will encrypt to all suitable, encryption capable subkeys on each recipient's certificate.
+ * This behavior can be changed per recipient, e.g. by calling
  * <pre>
  * {@code
- * opt.addRecipient(aliceKey, EncryptionOptions.encryptToAllCapableSubkeys());
+ * opt.addRecipient(aliceKey, EncryptionOptions.encryptToFirstSubkey());
  * }
  * </pre>
  * when adding the recipient key.
@@ -82,6 +82,19 @@ public class EncryptionOptions {
 
     /**
      * Factory method to create an {@link EncryptionOptions} object which will encrypt for keys
+     * which carry either the {@link org.pgpainless.algorithm.KeyFlag#ENCRYPT_COMMS} or
+     * {@link org.pgpainless.algorithm.KeyFlag#ENCRYPT_STORAGE} flag.
+     *
+     * Use this if you are not sure.
+     *
+     * @return encryption options
+     */
+    public static EncryptionOptions get() {
+        return new EncryptionOptions();
+    }
+
+    /**
+     * Factory method to create an {@link EncryptionOptions} object which will encrypt for keys
      * which carry the flag {@link org.pgpainless.algorithm.KeyFlag#ENCRYPT_COMMS}.
      *
      * @return encryption options
@@ -107,6 +120,9 @@ public class EncryptionOptions {
      * @return this
      */
     public EncryptionOptions addRecipients(Iterable<PGPPublicKeyRing> keys) {
+        if (!keys.iterator().hasNext()) {
+            throw new IllegalArgumentException("Set of recipient keys cannot be empty.");
+        }
         for (PGPPublicKeyRing key : keys) {
             addRecipient(key);
         }
@@ -122,6 +138,9 @@ public class EncryptionOptions {
      * @return this
      */
     public EncryptionOptions addRecipients(@Nonnull Iterable<PGPPublicKeyRing> keys, @Nonnull EncryptionKeySelector selector) {
+        if (!keys.iterator().hasNext()) {
+            throw new IllegalArgumentException("Set of recipient keys cannot be empty.");
+        }
         for (PGPPublicKeyRing key : keys) {
             addRecipient(key, selector);
         }

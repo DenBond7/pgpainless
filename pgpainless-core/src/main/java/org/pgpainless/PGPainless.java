@@ -5,17 +5,21 @@
 package org.pgpainless;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.Date;
 import javax.annotation.Nonnull;
 
+import org.bouncycastle.bcpg.ArmoredOutputStream;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPKeyRing;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.PGPSignature;
 import org.pgpainless.decryption_verification.DecryptionBuilder;
 import org.pgpainless.decryption_verification.DecryptionStream;
 import org.pgpainless.encryption_signing.EncryptionBuilder;
 import org.pgpainless.encryption_signing.EncryptionStream;
+import org.pgpainless.key.certification.CertifyCertificate;
 import org.pgpainless.key.generation.KeyRingBuilder;
 import org.pgpainless.key.generation.KeyRingTemplates;
 import org.pgpainless.key.info.KeyRingInfo;
@@ -88,14 +92,43 @@ public final class PGPainless {
      * @param key key or certificate
      * @return ascii armored string
      *
-     * @throws IOException in case of an error in the {@link org.bouncycastle.bcpg.ArmoredOutputStream}
+     * @throws IOException in case of an error in the {@link ArmoredOutputStream}
      */
-    public static String asciiArmor(@Nonnull PGPKeyRing key) throws IOException {
+    public static String asciiArmor(@Nonnull PGPKeyRing key)
+            throws IOException {
         if (key instanceof PGPSecretKeyRing) {
             return ArmorUtils.toAsciiArmoredString((PGPSecretKeyRing) key);
         } else {
             return ArmorUtils.toAsciiArmoredString((PGPPublicKeyRing) key);
         }
+    }
+
+    /**
+     * Wrap the detached signature in ASCII armor.
+     *
+     * @param signature detached signature
+     * @return ascii armored string
+     *
+     * @throws IOException in case of an error in the {@link ArmoredOutputStream}
+     */
+    public static String asciiArmor(@Nonnull PGPSignature signature)
+            throws IOException {
+        return ArmorUtils.toAsciiArmoredString(signature);
+    }
+
+    /**
+     * Wrap a key of certificate in ASCII armor and write the result into the given {@link OutputStream}.
+     *
+     * @param key key or certificate
+     * @param outputStream output stream
+     *
+     * @throws IOException in case of an error ion the {@link ArmoredOutputStream}
+     */
+    public static void asciiArmor(@Nonnull PGPKeyRing key, @Nonnull OutputStream outputStream)
+            throws IOException {
+        ArmoredOutputStream armorOut = ArmorUtils.toAsciiArmoredStream(key, outputStream);
+        key.encode(armorOut);
+        armorOut.close();
     }
 
     /**
@@ -117,8 +150,8 @@ public final class PGPainless {
     }
 
     /**
-     * Make changes to a key ring.
-     * This method can be used to change key expiration dates and passphrases, or add/remove/revoke subkeys.
+     * Make changes to a secret key.
+     * This method can be used to change key expiration dates and passphrases, or add/revoke subkeys.
      *
      * After making the desired changes in the builder, the modified key ring can be extracted using {@link SecretKeyRingEditorInterface#done()}.
      *
@@ -126,7 +159,21 @@ public final class PGPainless {
      * @return builder
      */
     public static SecretKeyRingEditorInterface modifyKeyRing(PGPSecretKeyRing secretKeys) {
-        return new SecretKeyRingEditor(secretKeys);
+        return modifyKeyRing(secretKeys, null);
+    }
+
+    /**
+     * Make changes to a secret key at the given reference time.
+     * This method can be used to change key expiration dates and passphrases, or add/revoke user-ids and subkeys.
+     *
+     * After making the desired changes in the builder, the modified key can be extracted using {@link SecretKeyRingEditorInterface#done()}.
+     *
+     * @param secretKeys secret key ring
+     * @param referenceTime reference time used as signature creation date
+     * @return builder
+     */
+    public static SecretKeyRingEditorInterface modifyKeyRing(PGPSecretKeyRing secretKeys, Date referenceTime) {
+        return new SecretKeyRingEditor(secretKeys, referenceTime);
     }
 
     /**
@@ -148,11 +195,11 @@ public final class PGPainless {
      * This method can be used to determine expiration dates, key flags and other information about a key at a specific time.
      *
      * @param keyRing key ring
-     * @param inspectionDate date of inspection
+     * @param referenceTime date of inspection
      * @return access object
      */
-    public static KeyRingInfo inspectKeyRing(PGPKeyRing keyRing, Date inspectionDate) {
-        return new KeyRingInfo(keyRing, inspectionDate);
+    public static KeyRingInfo inspectKeyRing(PGPKeyRing keyRing, Date referenceTime) {
+        return new KeyRingInfo(keyRing, referenceTime);
     }
 
     /**
@@ -162,5 +209,14 @@ public final class PGPainless {
      */
     public static Policy getPolicy() {
         return Policy.getInstance();
+    }
+
+    /**
+     * Create different kinds of signatures on other keys.
+     *
+     * @return builder
+     */
+    public static CertifyCertificate certify() {
+        return new CertifyCertificate();
     }
 }
