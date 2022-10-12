@@ -157,6 +157,38 @@ public final class ArmorUtils {
     }
 
     /**
+     * Return the ASCII armored representation of the given detached signature.
+     * The signature will not be stripped of non-exportable subpackets or trust-packets.
+     * If you need to strip those (e.g. because the signature is intended to be sent to a third party), use
+     * {@link #toAsciiArmoredString(PGPSignature, boolean)} and provide <pre>true</pre> as boolean value.
+     *
+     * @param signature signature
+     * @return ascii armored string
+     *
+     * @throws IOException in case of an error in the {@link ArmoredOutputStream}
+     */
+    @Nonnull
+    public static String toAsciiArmoredString(@Nonnull PGPSignature signature) throws IOException {
+        return toAsciiArmoredString(signature, false);
+    }
+
+    /**
+     * Return the ASCII armored representation of the given detached signature.
+     * If <pre>export</pre> is true, the signature will be stripped of non-exportable subpackets or trust-packets.
+     * If it is <pre>false</pre>, the signature will be encoded as-is.
+     *
+     * @param signature signature
+     * @return ascii armored string
+     *
+     * @throws IOException in case of an error in the {@link ArmoredOutputStream}
+     */
+    @Nonnull
+    public static String toAsciiArmoredString(@Nonnull PGPSignature signature, boolean export)
+            throws IOException {
+        return toAsciiArmoredString(signature.getEncoded(export));
+    }
+
+    /**
      * Return the ASCII armored encoding of the given OpenPGP data bytes.
      *
      * @param bytes openpgp data
@@ -265,28 +297,6 @@ public final class ArmorUtils {
             }
         }
         return armoredOutputStream;
-    }
-
-    /**
-     * Return an {@link ArmoredOutputStream} prepared with headers for the given key ring, which wraps the given
-     * {@link OutputStream}.
-     *
-     * The armored output stream can be used to encode the key ring by calling {@link PGPKeyRing#encode(OutputStream)}
-     * with the armored output stream as an argument.
-     *
-     * @param keyRing key ring
-     * @param outputStream wrapped output stream
-     * @return armored output stream
-     *
-     * @deprecated use {@link #toAsciiArmoredStream(PGPKeyRing, OutputStream)} instead
-     *
-     * TODO: Remove in 1.2.X
-     */
-    @Deprecated
-    @Nonnull
-    public static ArmoredOutputStream createArmoredOutputStreamFor(@Nonnull PGPKeyRing keyRing,
-                                                                   @Nonnull OutputStream outputStream) {
-        return toAsciiArmoredStream(keyRing, outputStream);
     }
 
     /**

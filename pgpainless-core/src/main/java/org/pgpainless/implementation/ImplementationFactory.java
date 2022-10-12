@@ -32,6 +32,7 @@ import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.util.Passphrase;
+import org.pgpainless.util.SessionKey;
 
 public abstract class ImplementationFactory {
 
@@ -49,7 +50,7 @@ public abstract class ImplementationFactory {
     }
 
     public PBESecretKeyEncryptor getPBESecretKeyEncryptor(SymmetricKeyAlgorithm symmetricKeyAlgorithm,
-                                                   Passphrase passphrase)
+                                                          Passphrase passphrase)
             throws PGPException {
         return getPBESecretKeyEncryptor(symmetricKeyAlgorithm,
                 getPGPDigestCalculator(HashAlgorithm.SHA1), passphrase);
@@ -58,8 +59,8 @@ public abstract class ImplementationFactory {
     public abstract PBESecretKeyEncryptor getPBESecretKeyEncryptor(PGPSecretKey secretKey, Passphrase passphrase) throws PGPException;
 
     public abstract PBESecretKeyEncryptor getPBESecretKeyEncryptor(SymmetricKeyAlgorithm symmetricKeyAlgorithm,
-                                                          PGPDigestCalculator digestCalculator,
-                                                          Passphrase passphrase);
+                                                                   PGPDigestCalculator digestCalculator,
+                                                                   Passphrase passphrase);
 
     public abstract PBESecretKeyDecryptor getPBESecretKeyDecryptor(Passphrase passphrase) throws PGPException;
 
@@ -91,6 +92,16 @@ public abstract class ImplementationFactory {
 
     public abstract PublicKeyDataDecryptorFactory getPublicKeyDataDecryptorFactory(PGPPrivateKey privateKey);
 
+    public SessionKeyDataDecryptorFactory getSessionKeyDataDecryptorFactory(SessionKey sessionKey) {
+        PGPSessionKey pgpSessionKey = new PGPSessionKey(
+                sessionKey.getAlgorithm().getAlgorithmId(),
+                sessionKey.getKey()
+        );
+        return getSessionKeyDataDecryptorFactory(pgpSessionKey);
+    }
+
+    public abstract SessionKeyDataDecryptorFactory getSessionKeyDataDecryptorFactory(PGPSessionKey sessionKey);
+
     public abstract PublicKeyKeyEncryptionMethodGenerator getPublicKeyKeyEncryptionMethodGenerator(PGPPublicKey key);
 
     public abstract PBEKeyEncryptionMethodGenerator getPBEKeyEncryptionMethodGenerator(Passphrase passphrase);
@@ -106,8 +117,6 @@ public abstract class ImplementationFactory {
     public abstract PBESecretKeyEncryptor getPBESecretKeyEncryptor(SymmetricKeyAlgorithm encryptionAlgorithm,
                                                                    HashAlgorithm hashAlgorithm, int s2kCount,
                                                                    Passphrase passphrase) throws PGPException;
-
-    public abstract SessionKeyDataDecryptorFactory provideSessionKeyDataDecryptorFactory(PGPSessionKey sessionKey);
 
     public abstract PGPObjectFactory getPGPObjectFactory(InputStream inputStream);
 

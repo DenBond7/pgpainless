@@ -5,6 +5,32 @@ SPDX-License-Identifier: CC0-1.0
 
 # PGPainless Changelog
 
+## 1.3.7
+- Bugfix: Fix signature verification when `DecryptionStream` is drained byte-by-byte using `read()` call
+- Add `KeyRingUtils.injectCertification(keys, certification)`
+- Add `PGPainless.asciiArmor(key, outputStream)`
+- Add `PGPainless.asciiArmor(signature)`
+
+## 1.3.6
+- Remove deprecated methods
+  - `ArmorUtils.createArmoredOutputStreamFor()` -> use `ArmorUtils.toAsciiArmoredStream()` instead
+  - `EncryptionResult.getSymmetricKeyAlgorithm()` -> use `EncryptionResult.getEncryptionAlgorithm()` instead
+- Add `KeyRingInfo.getRevocationState()`
+  - Better way to determine whether a key is revoked
+- Add `SigningOptions.addDetachedSignature(protector, key)` shortcut method
+- Add `EncryptionOptions.get()`, `ConsumerOptions.get()` factory methods
+- Add support for generating keys without user-id (only using `PGPainless.buildKeyRing()` for now)
+- Switch to `SHA256` as default `S2K` hash algorithm for secret key protection
+- Allow to set custom reference time when modifying secret keys
+- Add diagnostic test to explore system PRNG performance
+
+## 1.3.5
+- Add `KeyRingInfo.isCapableOfSigning()`
+- Add `KeyRingReader.readKeyRing(*)` methods that can take both secret- and public keys
+- Add manpages
+  - Add script to generate manpages from sop-java-picocli
+- Build website from main branch
+
 ## 1.3.4
 - Fix `KeyRingInfo.isUsableForEncryption()`, `KeyRingInfo.isUsableForSigning()` not detecting revoked primary keys
 - Bump `sop-java` and `sop-java-picocli` to `4.0.1`

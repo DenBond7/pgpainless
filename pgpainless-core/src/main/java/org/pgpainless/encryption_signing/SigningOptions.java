@@ -104,6 +104,7 @@ public final class SigningOptions {
      * @param signingKey key ring containing the signing key
      * @return this
      *
+     * @throws KeyException if something is wrong with the key
      * @throws PGPException if the key cannot be unlocked or a signing method cannot be created
      */
     public SigningOptions addSignature(SecretKeyRingProtector signingKeyProtector,
@@ -119,6 +120,7 @@ public final class SigningOptions {
      * @param signingKeys collection of signing keys
      * @param signatureType type of signature (binary, canonical text)
      * @return this
+     *
      * @throws KeyException if something is wrong with any of the keys
      * @throws PGPException if any of the keys cannot be unlocked or a signing method cannot be created
      */
@@ -140,9 +142,10 @@ public final class SigningOptions {
      * @param secretKeyDecryptor decryptor to unlock the signing secret key
      * @param secretKey signing key
      * @param signatureType type of signature (binary, canonical text)
+     * @return this
+     *
      * @throws KeyException if something is wrong with the key
      * @throws PGPException if the key cannot be unlocked or the signing method cannot be created
-     * @return this
      */
     public SigningOptions addInlineSignature(SecretKeyRingProtector secretKeyDecryptor,
                                              PGPSecretKeyRing secretKey,
@@ -163,7 +166,8 @@ public final class SigningOptions {
      * @param userId user-id of the signer
      * @param signatureType signature type (binary, canonical text)
      * @return this
-     * @throws KeyException if the key is invalid
+     *
+     * @throws KeyException if something is wrong with the key
      * @throws PGPException if the key cannot be unlocked or the signing method cannot be created
      */
     public SigningOptions addInlineSignature(SecretKeyRingProtector secretKeyDecryptor,
@@ -187,8 +191,8 @@ public final class SigningOptions {
      * @param signatureType signature type (binary, canonical text)
      * @param subpacketsCallback callback to modify the hashed and unhashed subpackets of the signature
      * @return this
-     * @throws KeyException
-     * if the key is invalid
+     *
+     * @throws KeyException if the key is invalid
      * @throws PGPException if the key cannot be unlocked or the signing method cannot be created
      */
     public SigningOptions addInlineSignature(SecretKeyRingProtector secretKeyDecryptor,
@@ -234,6 +238,8 @@ public final class SigningOptions {
      * @param signingKeys collection of signing key rings
      * @param signatureType type of the signature (binary, canonical text)
      * @return this
+     *
+     * @throws KeyException if something is wrong with any of the keys
      * @throws PGPException if any of the keys cannot be validated or unlocked, or if any signing method cannot be created
      */
     public SigningOptions addDetachedSignatures(SecretKeyRingProtector secretKeyDecryptor,
@@ -248,6 +254,23 @@ public final class SigningOptions {
 
     /**
      * Create a detached signature.
+     * The signature will be of type {@link DocumentSignatureType#BINARY_DOCUMENT}.
+     *
+     * @param secretKeyDecryptor decryptor to unlock the secret signing key
+     * @param signingKey signing key
+     * @return this
+     *
+     * @throws KeyException if something is wrong with the key
+     * @throws PGPException if the key cannot be validated or unlocked, or if no signature method can be created
+     */
+    public SigningOptions addDetachedSignature(SecretKeyRingProtector secretKeyDecryptor,
+                                               PGPSecretKeyRing signingKey)
+            throws PGPException {
+        return addDetachedSignature(secretKeyDecryptor, signingKey, DocumentSignatureType.BINARY_DOCUMENT);
+    }
+
+    /**
+     * Create a detached signature.
      * Detached signatures are not being added into the PGP message itself.
      * Instead, they can be distributed separately to the message.
      * Detached signatures are useful if the data that is being signed shall not be modified (e.g. when signing a file).
@@ -255,8 +278,10 @@ public final class SigningOptions {
      * @param secretKeyDecryptor decryptor to unlock the secret signing key
      * @param secretKey signing key
      * @param signatureType type of data that is signed (binary, canonical text)
-     * @throws PGPException if the key cannot be validated or unlocked, or if no signature method can be created
      * @return this
+     *
+     * @throws KeyException if something is wrong with the key
+     * @throws PGPException if the key cannot be validated or unlocked, or if no signature method can be created
      */
     public SigningOptions addDetachedSignature(SecretKeyRingProtector secretKeyDecryptor,
                                                PGPSecretKeyRing secretKey,
@@ -277,8 +302,10 @@ public final class SigningOptions {
      * @param secretKey signing key
      * @param userId user-id
      * @param signatureType type of data that is signed (binary, canonical text)
-     * @throws PGPException if the key cannot be validated or unlocked, or if no signature method can be created
      * @return this
+     *
+     * @throws KeyException if something is wrong with the key
+     * @throws PGPException if the key cannot be validated or unlocked, or if no signature method can be created
      */
     public SigningOptions addDetachedSignature(SecretKeyRingProtector secretKeyDecryptor,
                                                PGPSecretKeyRing secretKey,
@@ -301,8 +328,10 @@ public final class SigningOptions {
      * @param userId user-id
      * @param signatureType type of data that is signed (binary, canonical text)
      * @param subpacketCallback callback to modify hashed and unhashed subpackets of the signature
-     * @throws PGPException if the key cannot be validated or unlocked, or if no signature method can be created
      * @return this
+     *
+     * @throws KeyException if something is wrong with the key
+     * @throws PGPException if the key cannot be validated or unlocked, or if no signature method can be created
      */
     public SigningOptions addDetachedSignature(SecretKeyRingProtector secretKeyDecryptor,
                                                PGPSecretKeyRing secretKey,

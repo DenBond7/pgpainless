@@ -36,6 +36,7 @@ import org.pgpainless.algorithm.EncryptionPurpose;
 import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.KeyFlag;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
+import org.pgpainless.algorithm.RevocationState;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.exception.KeyException;
 import org.pgpainless.key.OpenPgpFingerprint;
@@ -58,6 +59,7 @@ public class KeyRingInfo {
     private final Signatures signatures;
     private final Date referenceDate;
     private final String primaryUserId;
+    private final RevocationState revocationState;
 
     /**
      * Evaluate the key ring at creation time of the given signature.
@@ -83,10 +85,10 @@ public class KeyRingInfo {
      * Evaluate the key ring at the provided validation date.
      *
      * @param keys key ring
-     * @param validationDate date of validation
+     * @param referenceDate date of validation
      */
-    public KeyRingInfo(PGPKeyRing keys, Date validationDate) {
-        this(keys, PGPainless.getPolicy(), validationDate);
+    public KeyRingInfo(PGPKeyRing keys, Date referenceDate) {
+        this(keys, PGPainless.getPolicy(), referenceDate);
     }
 
     /**
@@ -94,13 +96,23 @@ public class KeyRingInfo {
      *
      * @param keys key ring
      * @param policy policy
-     * @param validationDate validation date
+     * @param referenceDate validation date
      */
-    public KeyRingInfo(PGPKeyRing keys, Policy policy, Date validationDate) {
+    public KeyRingInfo(PGPKeyRing keys, Policy policy, Date referenceDate) {
+        this.referenceDate = referenceDate != null ? referenceDate : new Date();
         this.keys = keys;
-        this.signatures = new Signatures(keys, validationDate, policy);
-        this.referenceDate = validationDate;
+        this.signatures = new Signatures(keys, this.referenceDate, policy);
         this.primaryUserId = findPrimaryUserId();
+        this.revocationState = findRevocationState();
+    }
+
+    private RevocationState findRevocationState() {
+        PGPSignature revocation = signatures.primaryKeyRevocation;
+        if (revocation != null) {
+            return SignatureUtils.isHardRevocation(revocation) ?
+                    RevocationState.hardRevoked() : RevocationState.softRevoked(revocation.getCreationTime());
+        }
+        return RevocationState.notRevoked();
     }
 
     /**
@@ -650,13 +662,17 @@ public class KeyRingInfo {
         return mostRecent;
     }
 
+    public RevocationState getRevocationState() {
+        return revocationState;
+    }
+
     /**
      * Return the date on which the primary key was revoked, or null if it has not yet been revoked.
      *
      * @return revocation date or null
      */
     public @Nullable Date getRevocationDate() {
-        return getRevocationSelfSignature() == null ? null : getRevocationSelfSignature().getCreationTime();
+        return getRevocationState().isSoftRevocation() ? getRevocationState().getDate() : null;
     }
 
     /**
@@ -1051,8 +1067,34 @@ public class KeyRingInfo {
         return isKeyValidlyBound(getKeyId()) && !getEncryptionSubkeys(purpose).isEmpty();
     }
 
-    public boolean isUsableForSigning() {
+    /**
+     * Returns true, if the key ring is capable of signing.
+     * Contrary to {@link #isUsableForSigning()}, this method also returns true, if this {@link KeyRingInfo} is based
+     * on a key ring which has at least one valid public key marked for signing.
+     * The secret key is not required for the key ring to qualify as signing capable.
+     *
+     * @return true if key corresponding to the cert is capable of signing
+     */
+    public boolean isSigningCapable() {
+        // check if primary-key is revoked / expired
         if (!isKeyValidlyBound(getKeyId())) {
+            return false;
+        }
+        // check if it has signing-capable key
+        return !getSigningSubkeys().isEmpty();
+    }
+
+    /**
+     * Returns true, if this {@link KeyRingInfo} is based on a {@link PGPSecretKeyRing}, which has a valid signing key
+     * which is ready to be used (i.e. secret key is present and is not on a smart-card).
+     *
+     * If you just want to check, whether a key / certificate has signing capable subkeys,
+     * use {@link #isSigningCapable()} instead.
+     *
+     * @return true if key is ready to be used for signing
+     */
+    public boolean isUsableForSigning() {
+        if (!isSigningCapable()) {
             return false;
         }
 

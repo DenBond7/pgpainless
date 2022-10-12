@@ -114,6 +114,11 @@ public class BcImplementationFactory extends ImplementationFactory {
     }
 
     @Override
+    public SessionKeyDataDecryptorFactory getSessionKeyDataDecryptorFactory(PGPSessionKey sessionKey) {
+        return new BcSessionKeyDataDecryptorFactory(sessionKey);
+    }
+
+    @Override
     public PublicKeyKeyEncryptionMethodGenerator getPublicKeyKeyEncryptionMethodGenerator(PGPPublicKey key) {
         return new BcPublicKeyKeyEncryptionMethodGenerator(key);
     }
@@ -141,11 +146,6 @@ public class BcImplementationFactory extends ImplementationFactory {
                 getPGPDigestCalculator(hashAlgorithm),
                 s2kCount)
                 .build(passphrase.getChars());
-    }
-
-    @Override
-    public SessionKeyDataDecryptorFactory provideSessionKeyDataDecryptorFactory(PGPSessionKey sessionKey) {
-        return new BcSessionKeyDataDecryptorFactory(sessionKey);
     }
 
     @Override
