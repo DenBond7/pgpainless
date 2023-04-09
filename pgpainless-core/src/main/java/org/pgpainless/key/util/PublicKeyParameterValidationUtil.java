@@ -195,7 +195,7 @@ public class PublicKeyParameterValidationUtil {
         }
 
         // q > 160 bits
-        boolean qLarge = pQ.getLowestSetBit() > 160;
+        boolean qLarge = pQ.bitLength() > 160;
         if (!qLarge) {
             return false;
         }
@@ -237,7 +237,7 @@ public class PublicKeyParameterValidationUtil {
      * Validate ElGamal public key parameters.
      *
      * Original implementation by the openpgpjs authors:
-     * https://github.com/openpgpjs/openpgpjs/blob/main/src/crypto/public_key/elgamal.js#L76-L143
+     * <a href="https://github.com/openpgpjs/openpgpjs/blob/main/src/crypto/public_key/elgamal.js#L76-L143>OpenPGP.js source</a>
      * @param secretKey secret key
      * @param publicKey public key
      * @return true if supposedly valid, false if invalid
@@ -265,14 +265,15 @@ public class PublicKeyParameterValidationUtil {
 
         // check g^i mod p != 1 for i < threshold
         BigInteger res = g;
-        BigInteger i = BigInteger.valueOf(1);
-        BigInteger threshold = BigInteger.valueOf(2).shiftLeft(17);
-        while (i.compareTo(threshold) < 0) {
+        // 262144
+        int threshold = 2 << 17;
+        int i = 1;
+        while (i < threshold) {
             res = res.multiply(g).mod(p);
             if (res.equals(one)) {
                 return false;
             }
-            i = i.add(one);
+            i++;
         }
 
         // blinded exponentiation to check y = g^(r*(p-1)+x) mod p

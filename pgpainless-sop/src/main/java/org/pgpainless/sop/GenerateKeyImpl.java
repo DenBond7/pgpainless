@@ -24,11 +24,14 @@ import sop.Ready;
 import sop.exception.SOPGPException;
 import sop.operation.GenerateKey;
 
+/**
+ * Implementation of the <pre>generate-key</pre> operation using PGPainless.
+ */
 public class GenerateKeyImpl implements GenerateKey {
 
     private boolean armor = true;
     private final Set<String> userIds = new LinkedHashSet<>();
-    private Passphrase passphrase;
+    private Passphrase passphrase = Passphrase.emptyPassphrase();
 
     @Override
     public GenerateKey noArmor() {
@@ -51,20 +54,18 @@ public class GenerateKeyImpl implements GenerateKey {
     @Override
     public Ready generate() throws SOPGPException.MissingArg, SOPGPException.UnsupportedAsymmetricAlgo {
         Iterator<String> userIdIterator = userIds.iterator();
-        if (!userIdIterator.hasNext()) {
-            throw new SOPGPException.MissingArg("Missing user-id.");
-        }
-
+        Passphrase passphraseCopy = new Passphrase(passphrase.getChars()); // generateKeyRing clears the original passphrase
         PGPSecretKeyRing key;
         try {
+            String primaryUserId = userIdIterator.hasNext() ? userIdIterator.next() : null;
              key = PGPainless.generateKeyRing()
-                    .modernKeyRing(userIdIterator.next(), passphrase);
+                    .modernKeyRing(primaryUserId, passphrase);
 
             if (userIdIterator.hasNext()) {
                 SecretKeyRingEditorInterface editor = PGPainless.modifyKeyRing(key);
 
                 while (userIdIterator.hasNext()) {
-                    editor.addUserId(userIdIterator.next(), SecretKeyRingProtector.unprotectedKeys());
+                    editor.addUserId(userIdIterator.next(), SecretKeyRingProtector.unlockAnyKeyWith(passphraseCopy));
                 }
 
                 key = editor.done();

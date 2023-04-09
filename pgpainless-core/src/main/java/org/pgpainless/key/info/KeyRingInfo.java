@@ -611,7 +611,7 @@ public class KeyRingInfo {
      *
      * @return last modification date.
      */
-    public @Nullable Date getLastModified() {
+    public @Nonnull Date getLastModified() {
         PGPSignature mostRecent = getMostRecentSignature();
         if (mostRecent == null) {
             // No sigs found. Return public key creation date instead.
@@ -1100,27 +1100,31 @@ public class KeyRingInfo {
 
         List<PGPPublicKey> signingKeys = getSigningSubkeys();
         for (PGPPublicKey pk : signingKeys) {
-            PGPSecretKey sk = getSecretKey(pk.getKeyID());
-            if (sk == null) {
-                // Missing secret key
-                continue;
-            }
-            S2K s2K = sk.getS2K();
-            // Unencrypted key
-            if (s2K == null) {
-                return true;
-            }
-
-            // Secret key on smart-card
-            int s2kType = s2K.getType();
-            if (s2kType >= 100 && s2kType <= 110) {
-                continue;
-            }
-            // protected secret key
-            return true;
+            return isSecretKeyAvailable(pk.getKeyID());
         }
         // No usable secret key found
         return false;
+    }
+
+    public boolean isSecretKeyAvailable(long keyId) {
+        PGPSecretKey sk = getSecretKey(keyId);
+        if (sk == null) {
+            // Missing secret key
+            return false;
+        }
+        S2K s2K = sk.getS2K();
+        // Unencrypted key
+        if (s2K == null) {
+            return true;
+        }
+
+        // Secret key on smart-card
+        int s2kType = s2K.getType();
+        if (s2kType >= 100 && s2kType <= 110) {
+            return false;
+        }
+        // protected secret key
+        return true;
     }
 
     private KeyAccessor getKeyAccessor(@Nullable String userId, long keyID) {

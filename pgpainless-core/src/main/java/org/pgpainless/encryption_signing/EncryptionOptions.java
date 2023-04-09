@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
-
 import javax.annotation.Nonnull;
 
 import org.bouncycastle.openpgp.PGPPublicKey;
@@ -310,6 +309,16 @@ public class EncryptionOptions {
         }
         this.encryptionAlgorithmOverride = encryptionAlgorithm;
         return this;
+    }
+
+    /**
+     * Return <pre>true</pre> iff the user specified at least one encryption method,
+     * <pre>false</pre> otherwise.
+     *
+     * @return encryption methods is not empty
+     */
+    public boolean hasEncryptionMethod() {
+        return !encryptionMethods.isEmpty();
     }
 
     public interface EncryptionKeySelector {

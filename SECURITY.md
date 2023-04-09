@@ -13,10 +13,10 @@ Use this section to tell people about which versions of your project are
 currently being supported with security updates.
 
 | Version | Supported          |
-|---------| ------------------ |
-| 1.1.X   | :white_check_mark: |
-| 1.0.X   | :white_check_mark: |
-| < 1.0.0 | :x:                |
+|---------|--------------------|
+| 1.4.X   | :white_check_mark: |
+| 1.3.X   | :white_check_mark: |
+| < 1.3.X | :x:                |
 
 ## Reporting a Vulnerability
 

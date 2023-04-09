@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.IOException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Iterator;
@@ -19,6 +18,7 @@ import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
+import org.bouncycastle.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.KeyFlag;
@@ -35,8 +35,7 @@ public class BCUtilTest {
 
     @Test
     public void keyRingToCollectionTest()
-            throws PGPException, NoSuchAlgorithmException, InvalidAlgorithmParameterException,
-            IOException {
+            throws PGPException, NoSuchAlgorithmException, InvalidAlgorithmParameterException {
         PGPSecretKeyRing sec = PGPainless.buildKeyRing()
                 .setPrimaryKey(KeySpec.getBuilder(
                         KeyType.RSA(RsaLength._3072),
@@ -94,14 +93,14 @@ public class BCUtilTest {
     @Test
     public void constantTimeAreEqualsTest() {
         char[] b = "Hello".toCharArray();
-        assertTrue(BCUtil.constantTimeAreEqual(b, b));
-        assertTrue(BCUtil.constantTimeAreEqual("Hello".toCharArray(), "Hello".toCharArray()));
-        assertTrue(BCUtil.constantTimeAreEqual(new char[0], new char[0]));
-        assertTrue(BCUtil.constantTimeAreEqual(new char[] {'H', 'e', 'l', 'l', 'o'}, "Hello".toCharArray()));
+        assertTrue(Arrays.constantTimeAreEqual(b, b));
+        assertTrue(Arrays.constantTimeAreEqual("Hello".toCharArray(), "Hello".toCharArray()));
+        assertTrue(Arrays.constantTimeAreEqual(new char[0], new char[0]));
+        assertTrue(Arrays.constantTimeAreEqual(new char[] {'H', 'e', 'l', 'l', 'o'}, "Hello".toCharArray()));
 
-        assertFalse(BCUtil.constantTimeAreEqual("Hello".toCharArray(), "Hello World".toCharArray()));
-        assertFalse(BCUtil.constantTimeAreEqual(null, "Hello".toCharArray()));
-        assertFalse(BCUtil.constantTimeAreEqual("Hello".toCharArray(), null));
-        assertFalse(BCUtil.constantTimeAreEqual(null, null));
+        assertFalse(Arrays.constantTimeAreEqual("Hello".toCharArray(), "Hello World".toCharArray()));
+        assertFalse(Arrays.constantTimeAreEqual(null, "Hello".toCharArray()));
+        assertFalse(Arrays.constantTimeAreEqual("Hello".toCharArray(), null));
+        assertFalse(Arrays.constantTimeAreEqual((char[]) null, null));
     }
 }

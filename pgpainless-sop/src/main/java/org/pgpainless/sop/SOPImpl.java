@@ -4,6 +4,7 @@
 
 package org.pgpainless.sop;
 
+import org.pgpainless.util.ArmoredOutputStreamFactory;
 import sop.SOP;
 import sop.operation.Armor;
 import sop.operation.Dearmor;
@@ -18,7 +19,17 @@ import sop.operation.InlineSign;
 import sop.operation.InlineVerify;
 import sop.operation.Version;
 
+/**
+ * Implementation of the <pre>sop</pre> API using PGPainless.
+ * <pre> {@code
+ * SOP sop = new SOPImpl();
+ * }</pre>
+ */
 public class SOPImpl implements SOP {
+
+    static {
+        ArmoredOutputStreamFactory.setVersionInfo(null);
+    }
 
     @Override
     public Version version() {

@@ -185,7 +185,7 @@ public class PreventDecryptionUsingNonEncryptionKeyTest {
         decryptionStream.close();
         OpenPgpMetadata metadata = decryptionStream.getResult();
 
-        assertEquals(metadata.getDecryptionKey(), new SubkeyIdentifier(secretKeys, secretKeys.getPublicKey().getKeyID()));
+        assertEquals(new SubkeyIdentifier(secretKeys, secretKeys.getPublicKey().getKeyID()), metadata.getDecryptionKey());
     }
 
     @Test

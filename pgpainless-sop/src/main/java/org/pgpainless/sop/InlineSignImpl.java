@@ -29,10 +29,13 @@ import sop.enums.InlineSignAs;
 import sop.exception.SOPGPException;
 import sop.operation.InlineSign;
 
+/**
+ * Implementation of the <pre>inline-sign</pre> operation using PGPainless.
+ */
 public class InlineSignImpl implements InlineSign {
 
     private boolean armor = true;
-    private InlineSignAs mode = InlineSignAs.Binary;
+    private InlineSignAs mode = InlineSignAs.binary;
     private final SigningOptions signingOptions = new SigningOptions();
     private final MatchMakingSecretKeyRingProtector protector = new MatchMakingSecretKeyRingProtector();
     private final List<PGPSecretKeyRing> signingKeys = new ArrayList<>();
@@ -51,19 +54,14 @@ public class InlineSignImpl implements InlineSign {
 
     @Override
     public InlineSign key(InputStream keyIn) throws SOPGPException.KeyCannotSign, SOPGPException.BadData, IOException {
-        try {
-            PGPSecretKeyRingCollection keys = PGPainless.readKeyRing().secretKeyRingCollection(keyIn);
-
-            for (PGPSecretKeyRing key : keys) {
-                KeyRingInfo info = PGPainless.inspectKeyRing(key);
-                if (!info.isUsableForSigning()) {
-                    throw new SOPGPException.KeyCannotSign("Key " + info.getFingerprint() + " does not have valid, signing capable subkeys.");
-                }
-                protector.addSecretKey(key);
-                signingKeys.add(key);
+        PGPSecretKeyRingCollection keys = KeyReader.readSecretKeys(keyIn, true);
+        for (PGPSecretKeyRing key : keys) {
+            KeyRingInfo info = PGPainless.inspectKeyRing(key);
+            if (!info.isUsableForSigning()) {
+                throw new SOPGPException.KeyCannotSign("Key " + info.getFingerprint() + " does not have valid, signing capable subkeys.");
             }
-        } catch (PGPException | KeyException e) {
-            throw new SOPGPException.BadData(e);
+            protector.addSecretKey(key);
+            signingKeys.add(key);
         }
         return this;
     }
@@ -76,11 +74,11 @@ public class InlineSignImpl implements InlineSign {
     }
 
     @Override
-    public Ready data(InputStream data) throws SOPGPException.KeyIsProtected, IOException, SOPGPException.ExpectedText {
+    public Ready data(InputStream data) throws SOPGPException.KeyIsProtected, SOPGPException.ExpectedText {
         for (PGPSecretKeyRing key : signingKeys) {
             try {
-                if (mode == InlineSignAs.CleartextSigned) {
-                    signingOptions.addDetachedSignature(protector, key);
+                if (mode == InlineSignAs.clearsigned) {
+                    signingOptions.addDetachedSignature(protector, key, DocumentSignatureType.CANONICAL_TEXT_DOCUMENT);
                 } else {
                     signingOptions.addInlineSignature(protector, key, modeToSigType(mode));
                 }
@@ -92,7 +90,7 @@ public class InlineSignImpl implements InlineSign {
         }
 
         ProducerOptions producerOptions = ProducerOptions.sign(signingOptions);
-        if (mode == InlineSignAs.CleartextSigned) {
+        if (mode == InlineSignAs.clearsigned) {
             producerOptions.setCleartextSigned();
             producerOptions.setAsciiArmor(true);
         } else {
@@ -124,7 +122,7 @@ public class InlineSignImpl implements InlineSign {
     }
 
     private static DocumentSignatureType modeToSigType(InlineSignAs mode) {
-        return mode == InlineSignAs.Binary ? DocumentSignatureType.BINARY_DOCUMENT
+        return mode == InlineSignAs.binary ? DocumentSignatureType.BINARY_DOCUMENT
                 : DocumentSignatureType.CANONICAL_TEXT_DOCUMENT;
     }
 }
