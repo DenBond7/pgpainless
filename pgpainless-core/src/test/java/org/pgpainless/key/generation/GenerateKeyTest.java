@@ -27,11 +27,9 @@ import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.pgpainless.PGPainless;
-import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.OpenPgpV4Fingerprint;
+import org.pgpainless.key.info.KeyRingInfo;
 import org.pgpainless.key.util.KeyRingUtils;
 import org.pgpainless.util.ArmoredOutputStreamFactory;
 import org.pgpainless.util.Passphrase;
@@ -62,12 +60,15 @@ public class GenerateKeyTest {
         armor.close();
         String privateKey = bytes.toString();
 
+        KeyRingInfo keyRingInfo = new KeyRingInfo(secretKeys);
+
         LOGGER.log(Level.INFO, String.format("Generated random fresh EC key ring.\n" +
-                "User-ID: %s\n" +
-                "Fingerprint: %s\n" +
-                "Key-ID: %s\n" +
-                "%s\n" +
-                "%s\n", secretKeys.getPublicKey().getUserIDs().next(),
+                        "Creation date: %s\n" +
+                        "User-ID: %s\n" +
+                        "Fingerprint: %s\n" +
+                        "Key-ID: %s\n" +
+                        "%s\n" +
+                        "%s\n", keyRingInfo.getCreationDate(), secretKeys.getPublicKey().getUserIDs().next(),
                 new OpenPgpV4Fingerprint(publicKeys),
                 publicKeys.getPublicKey().getKeyID(),
                 publicKey, privateKey));
@@ -82,7 +83,7 @@ public class GenerateKeyTest {
         armor = ArmoredOutputStreamFactory.get(bytes);
         secretKeysMod.encode(armor);
         armor.close();
-        System.out.println(bytes.toString());
+        System.out.println(bytes);
 
         PGPSecretKeyRing secretKeysModSecond = PGPainless.modifyKeyRing(secretKeys)
                 .changePassphraseFromOldPassphrase(Passphrase.fromPassword(oldPass))
@@ -94,6 +95,6 @@ public class GenerateKeyTest {
         armor = ArmoredOutputStreamFactory.get(bytes);
         secretKeysModSecond.encode(armor);
         armor.close();
-        System.out.println(bytes.toString());
+        System.out.println(bytes);
     }
 }
