@@ -2,12 +2,11 @@
 .\"     Title: pgpainless-cli
 .\"    Author: [see the "AUTHOR(S)" section]
 .\" Generator: Asciidoctor 2.0.10
-.\"      Date: 2022-08-07
 .\"    Manual: PGPainless-CLI Manual
 .\"    Source: 
 .\"  Language: English
 .\"
-.TH "PGPAINLESS\-CLI" "1" "2022-08-07" "" "PGPainless\-CLI Manual"
+.TH "PGPAINLESS\-CLI" "1" "" "" "PGPainless\-CLI Manual"
 .ie \n(.g .ds Aq \(aq
 .el       .ds Aq '
 .ss \n[.ss] 0
@@ -31,14 +30,20 @@
 pgpainless\-cli \- Stateless OpenPGP Protocol
 .SH "SYNOPSIS"
 .sp
-\fBpgpainless\-cli\fP [COMMAND]
+\fBpgpainless\-cli\fP [\fB\-\-stacktrace\fP] [COMMAND]
 .SH "DESCRIPTION"
 
+.SH "OPTIONS"
+.sp
+\fB\-\-stacktrace\fP
+.RS 4
+Print stacktrace
+.RE
 .SH "COMMANDS"
 .sp
 \fBhelp\fP
 .RS 4
-Display usage information for the specified subcommand
+Stateless OpenPGP Protocol
 .RE
 .sp
 \fBarmor\fP
@@ -96,6 +101,11 @@ Create an inline\-signed message from data on standard input
 Verify inline\-signed data from standard input
 .RE
 .sp
+\fBlist\-profiles\fP
+.RS 4
+Emit a list of profiles supported by the identified subcommand
+.RE
+.sp
 \fBversion\fP
 .RS 4
 Display version information about the tool
@@ -103,7 +113,7 @@ Display version information about the tool
 .sp
 \fBgenerate\-completion\fP
 .RS 4
-Generate bash/zsh completion script for pgpainless\-cli.
+Stateless OpenPGP Protocol
 .RE
 .SH "EXIT CODES:"
 .sp
@@ -189,7 +199,7 @@ Unsupported subcommand
 .sp
 \fB71\fP
 .RS 4
-Unsupported special prefix (e.g. "@env/@fd") of indirect parameter
+Unsupported special prefix (e.g. "@ENV/@FD") of indirect parameter
 .RE
 .sp
 \fB73\fP
@@ -200,4 +210,14 @@ Ambiguous input (a filename matching the designator already exists)
 \fB79\fP
 .RS 4
 Key is not signing capable
+.RE
+.sp
+\fB83\fP
+.RS 4
+Options were supplied that are incompatible with each other
+.RE
+.sp
+\fB89\fP
+.RS 4
+The requested profile is unsupported, or the indicated subcommand does not accept profiles
 .RE

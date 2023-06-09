@@ -241,9 +241,8 @@ public final class SignatureUtils {
      * @param maxIterations number of loop iterations until reading is aborted
      * @return list of encountered signatures
      * @throws IOException in case of a stream error
-     * @throws PGPException in case of an OpenPGP error
      */
-    public static List<PGPSignature> readSignatures(InputStream inputStream, int maxIterations) throws IOException, PGPException {
+    public static List<PGPSignature> readSignatures(InputStream inputStream, int maxIterations) throws IOException {
         List<PGPSignature> signatures = new ArrayList<>();
         InputStream pgpIn = ArmorUtils.getDecoderStream(inputStream);
         PGPObjectFactory objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(pgpIn);

@@ -22,8 +22,10 @@ import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
 import org.bouncycastle.openpgp.PGPSignature;
+import org.bouncycastle.openpgp.operator.PublicKeyDataDecryptorFactory;
 import org.pgpainless.decryption_verification.cleartext_signatures.InMemoryMultiPassStrategy;
 import org.pgpainless.decryption_verification.cleartext_signatures.MultiPassStrategy;
+import org.pgpainless.key.SubkeyIdentifier;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.signature.SignatureUtils;
 import org.pgpainless.util.Passphrase;
@@ -34,20 +36,20 @@ import org.pgpainless.util.SessionKey;
  */
 public class ConsumerOptions {
 
-
     private boolean ignoreMDCErrors = false;
     private boolean forceNonOpenPgpData = false;
 
     private Date verifyNotBefore = null;
     private Date verifyNotAfter = new Date();
 
-    // Set of verification keys
-    private final Set<PGPPublicKeyRing> certificates = new HashSet<>();
+    private final CertificateSource certificates = new CertificateSource();
     private final Set<PGPSignature> detachedSignatures = new HashSet<>();
     private MissingPublicKeyCallback missingCertificateCallback = null;
 
     // Session key for decryption without passphrase/key
     private SessionKey sessionKey = null;
+    private final Map<SubkeyIdentifier, PublicKeyDataDecryptorFactory> customPublicKeyDataDecryptorFactories =
+            new HashMap<>();
 
     private final Map<PGPSecretKeyRing, SecretKeyRingProtector> decryptionKeys = new HashMap<>();
     private final Set<Passphrase> decryptionPassphrases = new HashSet<>();
@@ -110,7 +112,7 @@ public class ConsumerOptions {
      * @return options
      */
     public ConsumerOptions addVerificationCert(PGPPublicKeyRing verificationCert) {
-        this.certificates.add(verificationCert);
+        this.certificates.addCertificate(verificationCert);
         return this;
     }
 
@@ -127,11 +129,27 @@ public class ConsumerOptions {
         return this;
     }
 
-    public ConsumerOptions addVerificationOfDetachedSignatures(InputStream signatureInputStream) throws IOException, PGPException {
+    /**
+     * Add some detached signatures from the given {@link InputStream} for verification.
+     *
+     * @param signatureInputStream input stream of detached signatures
+     * @return options
+     *
+     * @throws IOException in case of an IO error
+     * @throws PGPException in case of an OpenPGP error
+     */
+    public ConsumerOptions addVerificationOfDetachedSignatures(InputStream signatureInputStream)
+            throws IOException, PGPException {
         List<PGPSignature> signatures = SignatureUtils.readSignatures(signatureInputStream);
         return addVerificationOfDetachedSignatures(signatures);
     }
 
+    /**
+     * Add some detached signatures for verification.
+     *
+     * @param detachedSignatures detached signatures
+     * @return options
+     */
     public ConsumerOptions addVerificationOfDetachedSignatures(List<PGPSignature> detachedSignatures) {
         for (PGPSignature signature : detachedSignatures) {
             addVerificationOfDetachedSignature(signature);
@@ -198,14 +216,15 @@ public class ConsumerOptions {
     }
 
     /**
-     * Add a key for message decryption. If the key is encrypted, the {@link SecretKeyRingProtector} is used to decrypt it
-     * when needed.
+     * Add a key for message decryption. If the key is encrypted, the {@link SecretKeyRingProtector}
+     * is used to decrypt it when needed.
      *
      * @param key key
      * @param keyRingProtector protector for the secret key
      * @return options
      */
-    public ConsumerOptions addDecryptionKey(@Nonnull PGPSecretKeyRing key, @Nonnull SecretKeyRingProtector keyRingProtector) {
+    public ConsumerOptions addDecryptionKey(@Nonnull PGPSecretKeyRing key,
+                                            @Nonnull SecretKeyRingProtector keyRingProtector) {
         decryptionKeys.put(key, keyRingProtector);
         return this;
     }
@@ -217,7 +236,8 @@ public class ConsumerOptions {
      * @param keyRingProtector protector for encrypted secret keys
      * @return options
      */
-    public ConsumerOptions addDecryptionKeys(@Nonnull PGPSecretKeyRingCollection keys, @Nonnull SecretKeyRingProtector keyRingProtector) {
+    public ConsumerOptions addDecryptionKeys(@Nonnull PGPSecretKeyRingCollection keys,
+                                             @Nonnull SecretKeyRingProtector keyRingProtector) {
         for (PGPSecretKeyRing key : keys) {
             addDecryptionKey(key, keyRingProtector);
         }
@@ -238,26 +258,93 @@ public class ConsumerOptions {
         return this;
     }
 
+    /**
+     * Add a custom {@link PublicKeyDataDecryptorFactory} which enable decryption of messages, e.g. using
+     * hardware-backed secret keys.
+     * (See e.g. {@link org.pgpainless.decryption_verification.HardwareSecurity.HardwareDataDecryptorFactory}).
+     *
+     * @param factory decryptor factory
+     * @return options
+     */
+    public ConsumerOptions addCustomDecryptorFactory(@Nonnull CustomPublicKeyDataDecryptorFactory factory) {
+        this.customPublicKeyDataDecryptorFactories.put(factory.getSubkeyIdentifier(), factory);
+        return this;
+    }
+
+    /**
+     * Return the custom {@link PublicKeyDataDecryptorFactory PublicKeyDataDecryptorFactories} that were
+     * set by the user.
+     * These factories can be used to decrypt session keys using a custom logic.
+     *
+     * @return custom decryptor factories
+     */
+    Map<SubkeyIdentifier, PublicKeyDataDecryptorFactory> getCustomDecryptorFactories() {
+        return new HashMap<>(customPublicKeyDataDecryptorFactories);
+    }
+
+    /**
+     * Return the set of available decryption keys.
+     *
+     * @return decryption keys
+     */
     public @Nonnull Set<PGPSecretKeyRing> getDecryptionKeys() {
         return Collections.unmodifiableSet(decryptionKeys.keySet());
     }
 
+    /**
+     * Return the set of available message decryption passphrases.
+     *
+     * @return decryption passphrases
+     */
     public @Nonnull Set<Passphrase> getDecryptionPassphrases() {
         return Collections.unmodifiableSet(decryptionPassphrases);
     }
 
+    /**
+     * Return the explicitly set verification certificates.
+     *
+     * @deprecated use {@link #getCertificateSource()} instead.
+     * @return verification certs
+     */
+    @Deprecated
     public @Nonnull Set<PGPPublicKeyRing> getCertificates() {
-        return Collections.unmodifiableSet(certificates);
+        return certificates.getExplicitCertificates();
     }
 
+    /**
+     * Return an object holding available certificates for signature verification.
+     *
+     * @return certificate source
+     */
+    public @Nonnull CertificateSource getCertificateSource() {
+        return certificates;
+    }
+
+    /**
+     * Return the callback that gets called when a certificate for signature verification is missing.
+     * This method might return <pre>null</pre> if the users hasn't set a callback.
+     *
+     * @return missing public key callback
+     */
     public @Nullable MissingPublicKeyCallback getMissingCertificateCallback() {
         return missingCertificateCallback;
     }
 
+    /**
+     * Return the {@link SecretKeyRingProtector} for the given {@link PGPSecretKeyRing}.
+     *
+     * @param decryptionKeyRing secret key
+     * @return protector for that particular secret key
+     */
     public @Nonnull SecretKeyRingProtector getSecretKeyProtector(PGPSecretKeyRing decryptionKeyRing) {
         return decryptionKeys.get(decryptionKeyRing);
     }
 
+    /**
+     * Return the set of detached signatures the user provided.
+     *
+     * @return detached signatures
+     */
     public @Nonnull Set<PGPSignature> getDetachedSignatures() {
         return Collections.unmodifiableSet(detachedSignatures);
     }
@@ -266,12 +353,14 @@ public class ConsumerOptions {
      * By default, PGPainless will require encrypted messages to make use of SEIP data packets.
      * Those are Symmetrically Encrypted Integrity Protected Data packets.
      * Symmetrically Encrypted Data Packets without integrity protection are rejected by default.
-     * Furthermore, PGPainless will throw an exception if verification of the MDC error detection code of the SEIP packet
-     * fails.
+     * Furthermore, PGPainless will throw an exception if verification of the MDC error detection
+     * code of the SEIP packet fails.
      *
-     * Failure of MDC verification indicates a tampered ciphertext, which might be the cause of an attack or data corruption.
+     * Failure of MDC verification indicates a tampered ciphertext, which might be the cause of an
+     * attack or data corruption.
      *
-     * This method can be used to ignore MDC errors and allow PGPainless to consume encrypted data without integrity protection.
+     * This method can be used to ignore MDC errors and allow PGPainless to consume encrypted data
+     * without integrity protection.
      * If the flag <pre>ignoreMDCErrors</pre> is set to true, PGPainless will
      * <ul>
      *     <li>not throw exceptions for SEIP packets with tampered ciphertext</li>
@@ -282,7 +371,8 @@ public class ConsumerOptions {
      *
      * It will however still throw an exception if it encounters a SEIP packet with missing or truncated MDC
      *
-     * @see <a href="https://datatracker.ietf.org/doc/html/rfc4880#section-5.13">Sym. Encrypted Integrity Protected Data Packet</a>
+     * @see <a href="https://datatracker.ietf.org/doc/html/rfc4880#section-5.13">
+     *     Sym. Encrypted Integrity Protected Data Packet</a>
      * @param ignoreMDCErrors true if MDC errors or missing MDCs shall be ignored, false otherwise.
      * @return options
      */
@@ -312,6 +402,11 @@ public class ConsumerOptions {
         return this;
     }
 
+    /**
+     * Return true, if the ciphertext should be handled as binary non-OpenPGP data.
+     *
+     * @return true if non-OpenPGP data is forced
+     */
     boolean isForceNonOpenPgpData() {
         return forceNonOpenPgpData;
     }
@@ -364,5 +459,50 @@ public class ConsumerOptions {
      */
     public MultiPassStrategy getMultiPassStrategy() {
         return multiPassStrategy;
+    }
+
+    /**
+     * Source for OpenPGP certificates.
+     * When verifying signatures on a message, this object holds available signer certificates.
+     */
+    public static class CertificateSource {
+
+        private Set<PGPPublicKeyRing> explicitCertificates = new HashSet<>();
+
+        /**
+         * Add a certificate as verification cert explicitly.
+         *
+         * @param certificate certificate
+         */
+        public void addCertificate(PGPPublicKeyRing certificate) {
+            this.explicitCertificates.add(certificate);
+        }
+
+        /**
+         * Return the set of explicitly set verification certificates.
+         * @return explicitly set verification certs
+         */
+        public Set<PGPPublicKeyRing> getExplicitCertificates() {
+            return Collections.unmodifiableSet(explicitCertificates);
+        }
+
+        /**
+         * Return a certificate which contains a subkey with the given keyId.
+         * This method first checks all explicitly set verification certs and if no cert is found it consults
+         * the certificate stores.
+         *
+         * @param keyId key id
+         * @return certificate
+         */
+        public PGPPublicKeyRing getCertificate(long keyId) {
+
+            for (PGPPublicKeyRing cert : explicitCertificates) {
+                if (cert.getPublicKey(keyId) != null) {
+                    return cert;
+                }
+            }
+
+            return null;
+        }
     }
 }

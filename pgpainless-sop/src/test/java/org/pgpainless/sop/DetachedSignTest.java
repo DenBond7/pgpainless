@@ -23,7 +23,9 @@ import org.pgpainless.signature.SignatureUtils;
 import sop.SOP;
 import sop.Verification;
 import sop.enums.SignAs;
+import sop.enums.SignatureMode;
 import sop.exception.SOPGPException;
+import sop.testsuite.assertions.VerificationListAssert;
 
 public class DetachedSignTest {
 
@@ -49,6 +51,7 @@ public class DetachedSignTest {
     public void signArmored() throws IOException {
         byte[] signature = sop.sign()
                 .key(key)
+                .mode(SignAs.Binary)
                 .data(data)
                 .toByteArrayAndResult().getBytes();
 
@@ -56,12 +59,14 @@ public class DetachedSignTest {
 
         List<Verification> verifications = sop.verify()
                 .cert(cert)
-                .notAfter(new Date(new Date().getTime() + 10000))
-                .notBefore(new Date(new Date().getTime() - 10000))
+                .notAfter(new Date(System.currentTimeMillis() + 10000))
+                .notBefore(new Date(System.currentTimeMillis() - 10000))
                 .signatures(signature)
                 .data(data);
 
-        assertEquals(1, verifications.size());
+        VerificationListAssert.assertThatVerificationList(verifications)
+                .hasSingleItem()
+                .hasMode(SignatureMode.binary);
     }
 
     @Test
@@ -76,12 +81,34 @@ public class DetachedSignTest {
 
         List<Verification> verifications = sop.verify()
                 .cert(cert)
-                .notAfter(new Date(new Date().getTime() + 10000))
-                .notBefore(new Date(new Date().getTime() - 10000))
+                .notAfter(new Date(System.currentTimeMillis() + 10000))
+                .notBefore(new Date(System.currentTimeMillis() - 10000))
                 .signatures(signature)
                 .data(data);
 
-        assertEquals(1, verifications.size());
+        VerificationListAssert.assertThatVerificationList(verifications)
+                .hasSingleItem();
+    }
+
+    @Test
+    public void textSig() throws IOException {
+        byte[] signature = sop.sign()
+                .key(key)
+                .noArmor()
+                .mode(SignAs.Text)
+                .data(data)
+                .toByteArrayAndResult().getBytes();
+
+        List<Verification> verifications = sop.verify()
+                .cert(cert)
+                .notAfter(new Date(System.currentTimeMillis() + 10000))
+                .notBefore(new Date(System.currentTimeMillis() - 10000))
+                .signatures(signature)
+                .data(data);
+
+        VerificationListAssert.assertThatVerificationList(verifications)
+                .hasSingleItem()
+                .hasMode(SignatureMode.text);
     }
 
     @Test
@@ -93,7 +120,7 @@ public class DetachedSignTest {
 
         assertThrows(SOPGPException.NoSignature.class, () -> sop.verify()
                 .cert(cert)
-                .notAfter(new Date(new Date().getTime() - 10000)) // Sig is older
+                .notAfter(new Date(System.currentTimeMillis() - 10000)) // Sig is older
                 .signatures(signature)
                 .data(data));
     }
@@ -107,7 +134,7 @@ public class DetachedSignTest {
 
         assertThrows(SOPGPException.NoSignature.class, () -> sop.verify()
                 .cert(cert)
-                .notBefore(new Date(new Date().getTime() + 10000)) // Sig is younger
+                .notBefore(new Date(System.currentTimeMillis() + 10000)) // Sig is younger
                 .signatures(signature)
                 .data(data));
     }

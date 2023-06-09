@@ -12,10 +12,13 @@ import java.util.Properties;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import sop.operation.Version;
 
+/**
+ * Implementation of the <pre>version</pre> operation using PGPainless.
+ */
 public class VersionImpl implements Version {
 
     // draft version
-    private static final String SOP_VERSION = "04";
+    private static final int SOP_VERSION = 6;
 
     @Override
     public String getName() {
@@ -42,22 +45,39 @@ public class VersionImpl implements Version {
 
     @Override
     public String getBackendVersion() {
-        double bcVersion = new BouncyCastleProvider().getVersion();
-        return String.format(Locale.US, "Bouncy Castle %.2f", bcVersion);
+        return "PGPainless " + getVersion();
     }
 
     @Override
     public String getExtendedVersion() {
+        double bcVersion = new BouncyCastleProvider().getVersion();
+        String FORMAT_VERSION = String.format("%02d", SOP_VERSION);
         return getName() + " " + getVersion() + "\n" +
                 "https://codeberg.org/PGPainless/pgpainless/src/branch/master/pgpainless-sop\n" +
                 "\n" +
-                "Implementation of the Stateless OpenPGP Protocol Version " + SOP_VERSION + "\n" +
-                "https://datatracker.ietf.org/doc/html/draft-dkg-openpgp-stateless-cli-" + SOP_VERSION + "\n" +
+                "Implementation of the Stateless OpenPGP Protocol Version " + FORMAT_VERSION + "\n" +
+                "https://datatracker.ietf.org/doc/html/draft-dkg-openpgp-stateless-cli-" + FORMAT_VERSION + "\n" +
                 "\n" +
                 "Based on pgpainless-core " + getVersion() + "\n" +
                 "https://pgpainless.org\n" +
                 "\n" +
-                "Using " + getBackendVersion() + "\n" +
+                "Using " + String.format(Locale.US, "Bouncy Castle %.2f", bcVersion) + "\n" +
                 "https://www.bouncycastle.org/java.html";
     }
+
+    @Override
+    public int getSopSpecRevisionNumber() {
+        return SOP_VERSION;
+    }
+
+    @Override
+    public boolean isSopSpecImplementationIncomplete() {
+        return false;
+    }
+
+    @Override
+    public String getSopSpecImplementationRemarks() {
+        return null;
+    }
+
 }

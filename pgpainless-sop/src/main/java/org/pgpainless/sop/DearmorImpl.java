@@ -15,10 +15,13 @@ import sop.Ready;
 import sop.exception.SOPGPException;
 import sop.operation.Dearmor;
 
+/**
+ * Implementation of the <pre>dearmor</pre> operation using PGPainless.
+ */
 public class DearmorImpl implements Dearmor {
 
     @Override
-    public Ready data(InputStream data) throws IOException {
+    public Ready data(InputStream data) {
         InputStream decoder;
         try {
             decoder = PGPUtil.getDecoderStream(data);

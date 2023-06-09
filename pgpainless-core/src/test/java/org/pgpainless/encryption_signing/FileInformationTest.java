@@ -6,6 +6,7 @@ package org.pgpainless.encryption_signing;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -28,7 +29,7 @@ import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.StreamEncoding;
 import org.pgpainless.decryption_verification.ConsumerOptions;
 import org.pgpainless.decryption_verification.DecryptionStream;
-import org.pgpainless.decryption_verification.OpenPgpMetadata;
+import org.pgpainless.decryption_verification.MessageMetadata;
 
 public class FileInformationTest {
 
@@ -80,11 +81,11 @@ public class FileInformationTest {
 
         decryptionStream.close();
 
-        OpenPgpMetadata decResult = decryptionStream.getResult();
+        MessageMetadata decResult = decryptionStream.getMetadata();
 
-        assertEquals(fileName, decResult.getFileName());
+        assertEquals(fileName, decResult.getFilename());
         JUtils.assertDateEquals(modificationDate, decResult.getModificationDate());
-        assertEquals(encoding, decResult.getFileEncoding());
+        assertEquals(encoding, decResult.getLiteralDataEncoding());
     }
 
     @Test
@@ -119,11 +120,12 @@ public class FileInformationTest {
 
         decryptionStream.close();
 
-        OpenPgpMetadata decResult = decryptionStream.getResult();
+        MessageMetadata decResult = decryptionStream.getMetadata();
 
-        assertEquals("", decResult.getFileName());
+        assertEquals("", decResult.getFilename());
         JUtils.assertDateEquals(PGPLiteralData.NOW, decResult.getModificationDate());
-        assertEquals(PGPLiteralData.BINARY, decResult.getFileEncoding().getCode());
+        assertNotNull(decResult.getLiteralDataEncoding());
+        assertEquals(PGPLiteralData.BINARY, decResult.getLiteralDataEncoding().getCode());
         assertFalse(decResult.isForYourEyesOnly());
     }
 
@@ -160,11 +162,12 @@ public class FileInformationTest {
 
         decryptionStream.close();
 
-        OpenPgpMetadata decResult = decryptionStream.getResult();
+        MessageMetadata decResult = decryptionStream.getMetadata();
 
-        assertEquals(PGPLiteralData.CONSOLE, decResult.getFileName());
+        assertEquals(PGPLiteralData.CONSOLE, decResult.getFilename());
         JUtils.assertDateEquals(PGPLiteralData.NOW, decResult.getModificationDate());
-        assertEquals(PGPLiteralData.BINARY, decResult.getFileEncoding().getCode());
+        assertNotNull(decResult.getLiteralDataEncoding());
+        assertEquals(PGPLiteralData.BINARY, decResult.getLiteralDataEncoding().getCode());
         assertTrue(decResult.isForYourEyesOnly());
     }
 }

@@ -17,13 +17,18 @@ import org.bouncycastle.util.io.Streams;
 import org.pgpainless.PGPainless;
 import org.pgpainless.decryption_verification.ConsumerOptions;
 import org.pgpainless.decryption_verification.DecryptionStream;
-import org.pgpainless.decryption_verification.OpenPgpMetadata;
+import org.pgpainless.decryption_verification.MessageMetadata;
 import org.pgpainless.decryption_verification.SignatureVerification;
+import org.pgpainless.exception.MalformedOpenPgpMessageException;
+import org.pgpainless.exception.MissingDecryptionMethodException;
 import sop.ReadyWithResult;
 import sop.Verification;
 import sop.exception.SOPGPException;
 import sop.operation.InlineVerify;
 
+/**
+ * Implementation of the <pre>inline-verify</pre> operation using PGPainless.
+ */
 public class InlineVerifyImpl implements InlineVerify {
 
     private final ConsumerOptions options = ConsumerOptions.get();
@@ -41,19 +46,14 @@ public class InlineVerifyImpl implements InlineVerify {
     }
 
     @Override
-    public InlineVerify cert(InputStream cert) throws SOPGPException.BadData {
-        PGPPublicKeyRingCollection certificates;
-        try {
-            certificates = PGPainless.readKeyRing().publicKeyRingCollection(cert);
-        } catch (IOException | PGPException e) {
-            throw new SOPGPException.BadData(e);
-        }
+    public InlineVerify cert(InputStream cert) throws SOPGPException.BadData, IOException {
+        PGPPublicKeyRingCollection certificates = KeyReader.readPublicKeys(cert, true);
         options.addVerificationCerts(certificates);
         return this;
     }
 
     @Override
-    public ReadyWithResult<List<Verification>> data(InputStream data) throws IOException, SOPGPException.NoSignature, SOPGPException.BadData {
+    public ReadyWithResult<List<Verification>> data(InputStream data) throws SOPGPException.NoSignature, SOPGPException.BadData {
         return new ReadyWithResult<List<Verification>>() {
             @Override
             public List<Verification> writeTo(OutputStream outputStream) throws IOException, SOPGPException.NoSignature {
@@ -66,34 +66,30 @@ public class InlineVerifyImpl implements InlineVerify {
                     Streams.pipeAll(decryptionStream, outputStream);
                     decryptionStream.close();
 
-                    OpenPgpMetadata metadata = decryptionStream.getResult();
+                    MessageMetadata metadata = decryptionStream.getMetadata();
                     List<Verification> verificationList = new ArrayList<>();
 
-                    List<SignatureVerification> verifications = metadata.isCleartextSigned() ?
+                    List<SignatureVerification> verifications = metadata.isUsingCleartextSignatureFramework() ?
                             metadata.getVerifiedDetachedSignatures() :
-                            metadata.getVerifiedInbandSignatures();
+                            metadata.getVerifiedInlineSignatures();
 
                     for (SignatureVerification signatureVerification : verifications) {
-                        verificationList.add(map(signatureVerification));
+                        verificationList.add(VerificationHelper.mapVerification(signatureVerification));
                     }
 
-                    if (!options.getCertificates().isEmpty()) {
+                    if (!options.getCertificateSource().getExplicitCertificates().isEmpty()) {
                         if (verificationList.isEmpty()) {
                             throw new SOPGPException.NoSignature();
                         }
                     }
 
                     return verificationList;
-                } catch (PGPException e) {
+                } catch (MissingDecryptionMethodException e) {
+                    throw new SOPGPException.BadData("Cannot verify encrypted message.", e);
+                } catch (MalformedOpenPgpMessageException | PGPException e) {
                     throw new SOPGPException.BadData(e);
                 }
             }
         };
-    }
-
-    private Verification map(SignatureVerification sigVerification) {
-        return new Verification(sigVerification.getSignature().getCreationTime(),
-                sigVerification.getSigningKey().getSubkeyFingerprint().toString(),
-                sigVerification.getSigningKey().getPrimaryKeyFingerprint().toString());
     }
 }

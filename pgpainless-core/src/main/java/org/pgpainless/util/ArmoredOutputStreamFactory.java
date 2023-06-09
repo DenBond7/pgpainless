@@ -7,6 +7,10 @@ package org.pgpainless.util;
 import java.io.OutputStream;
 
 import org.bouncycastle.bcpg.ArmoredOutputStream;
+import org.pgpainless.encryption_signing.ProducerOptions;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 /**
  * Factory to create configured {@link ArmoredOutputStream ArmoredOutputStreams}.
@@ -14,6 +18,9 @@ import org.bouncycastle.bcpg.ArmoredOutputStream;
  */
 public final class ArmoredOutputStreamFactory {
 
+    /**
+     * Name of the program.
+     */
     public static final String PGPAINLESS = "PGPainless";
     private static String version = PGPAINLESS;
     private static String[] comment = new String[0];
@@ -28,9 +35,14 @@ public final class ArmoredOutputStreamFactory {
      * @param outputStream inner stream
      * @return armored output stream
      */
-    public static ArmoredOutputStream get(OutputStream outputStream) {
+    @Nonnull
+    public static ArmoredOutputStream get(@Nonnull OutputStream outputStream) {
         ArmoredOutputStream armoredOutputStream = new ArmoredOutputStream(outputStream);
-        armoredOutputStream.setHeader(ArmorUtils.HEADER_VERSION, version);
+        armoredOutputStream.clearHeaders();
+        if (version != null && !version.isEmpty()) {
+            armoredOutputStream.setHeader(ArmorUtils.HEADER_VERSION, version);
+        }
+
         for (String comment : comment) {
             ArmorUtils.addCommentHeader(armoredOutputStream, comment);
         }
@@ -38,16 +50,41 @@ public final class ArmoredOutputStreamFactory {
     }
 
     /**
+     * Return an instance of the {@link ArmoredOutputStream} which might have pre-populated armor headers.
+     *
+     * @param outputStream output stream
+     * @param options options
+     * @return armored output stream
+     */
+    @Nonnull
+    public static ArmoredOutputStream get(@Nonnull OutputStream outputStream, @Nonnull ProducerOptions options) {
+        if (options.isHideArmorHeaders()) {
+            ArmoredOutputStream armorOut = new ArmoredOutputStream(outputStream);
+            armorOut.clearHeaders();
+            return armorOut;
+        } else {
+            return get(outputStream);
+        }
+    }
+
+    /**
      * Overwrite the version header of ASCII armors with a custom value.
      * Newlines in the version info string result in multiple version header entries.
+     * If this is set to <pre>null</pre>, then the version header is omitted altogether.
      *
      * @param versionString version string
      */
-    public static void setVersionInfo(String versionString) {
-        if (versionString == null || versionString.trim().isEmpty()) {
-            throw new IllegalArgumentException("Version Info MUST NOT be null NOR empty.");
+    public static void setVersionInfo(@Nullable String versionString) {
+        if (versionString == null) {
+            version = null;
+            return;
         }
-        version = versionString;
+        String trimmed = versionString.trim();
+        if (trimmed.isEmpty()) {
+            version = null;
+        } else {
+            version = trimmed;
+        }
     }
 
     /**
@@ -66,7 +103,7 @@ public final class ArmoredOutputStreamFactory {
      *
      * @param commentString comment
      */
-    public static void setComment(String commentString) {
+    public static void setComment(@Nullable String commentString) {
         if (commentString == null) {
             throw new IllegalArgumentException("Comment cannot be null.");
         }

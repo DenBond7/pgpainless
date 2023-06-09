@@ -33,15 +33,33 @@ import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.decryption_verification.OpenPgpInputStream;
 import org.pgpainless.key.OpenPgpFingerprint;
 
+/**
+ * Utility class for dealing with ASCII armored OpenPGP data.
+ */
 public final class ArmorUtils {
 
     // MessageIDs are 32 printable characters
     private static final Pattern PATTERN_MESSAGE_ID = Pattern.compile("^\\S{32}$");
 
+    /**
+     * Constant armor key for comments.
+     */
     public static final String HEADER_COMMENT = "Comment";
+    /**
+     * Constant armor key for program versions.
+     */
     public static final String HEADER_VERSION = "Version";
+    /**
+     * Constant armor key for message IDs. Useful for split messages.
+     */
     public static final String HEADER_MESSAGEID = "MessageID";
+    /**
+     * Constant armor key for used hash algorithms in clearsigned messages.
+     */
     public static final String HEADER_HASH = "Hash";
+    /**
+     * Constant armor key for message character sets.
+     */
     public static final String HEADER_CHARSET = "Charset";
 
     private ArmorUtils() {
@@ -178,6 +196,7 @@ public final class ArmorUtils {
      * If it is <pre>false</pre>, the signature will be encoded as-is.
      *
      * @param signature signature
+     * @param export whether to exclude non-exportable subpackets or trust-packets.
      * @return ascii armored string
      *
      * @throws IOException in case of an error in the {@link ArmoredOutputStream}
@@ -396,6 +415,22 @@ public final class ArmorUtils {
         // in that case print the first one
         String printed = primary != null ? primary : first;
         return new Tuple<>(printed, countIdentities);
+    }
+
+    /**
+     * Set the version header entry in the ASCII armor.
+     * If the version info is null or only contains whitespace characters, then the version header will be removed.
+     *
+     * @param armor armored output stream
+     * @param version version header.
+     */
+    public static void setVersionHeader(@Nonnull ArmoredOutputStream armor,
+                                        @Nullable String version) {
+        if (version == null || version.trim().isEmpty()) {
+            armor.setHeader(HEADER_VERSION, null);
+        } else {
+            armor.setHeader(HEADER_VERSION, version);
+        }
     }
 
     /**

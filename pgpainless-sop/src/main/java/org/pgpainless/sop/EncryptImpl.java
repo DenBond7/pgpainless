@@ -8,7 +8,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.bouncycastle.openpgp.PGPException;
@@ -28,18 +30,27 @@ import org.pgpainless.exception.WrongPassphraseException;
 import org.pgpainless.key.OpenPgpFingerprint;
 import org.pgpainless.key.info.KeyRingInfo;
 import org.pgpainless.util.Passphrase;
+import sop.Profile;
 import sop.Ready;
 import sop.enums.EncryptAs;
 import sop.exception.SOPGPException;
 import sop.operation.Encrypt;
 import sop.util.ProxyOutputStream;
 
+/**
+ * Implementation of the <pre>encrypt</pre> operation using PGPainless.
+ */
 public class EncryptImpl implements Encrypt {
+
+    private static final Profile RFC4880_PROFILE = new Profile("rfc4880", "Follow the packet format of rfc4880");
+
+    public static final List<Profile> SUPPORTED_PROFILES = Arrays.asList(RFC4880_PROFILE);
 
     EncryptionOptions encryptionOptions = EncryptionOptions.get();
     SigningOptions signingOptions = null;
     MatchMakingSecretKeyRingProtector protector = new MatchMakingSecretKeyRingProtector();
     private final Set<PGPSecretKeyRing> signingKeys = new HashSet<>();
+    private String profile = RFC4880_PROFILE.getName(); // TODO: Use in future releases
 
     private EncryptAs encryptAs = EncryptAs.Binary;
     boolean armor = true;
@@ -58,28 +69,23 @@ public class EncryptImpl implements Encrypt {
 
     @Override
     public Encrypt signWith(InputStream keyIn)
-            throws SOPGPException.KeyCannotSign, SOPGPException.UnsupportedAsymmetricAlgo, SOPGPException.BadData {
+            throws SOPGPException.KeyCannotSign, SOPGPException.UnsupportedAsymmetricAlgo, SOPGPException.BadData, IOException {
         if (signingOptions == null) {
             signingOptions = SigningOptions.get();
         }
-
-        try {
-            PGPSecretKeyRingCollection keys = PGPainless.readKeyRing().secretKeyRingCollection(keyIn);
-            if (keys.size() != 1) {
-                throw new SOPGPException.BadData(new AssertionError("Exactly one secret key at a time expected. Got " + keys.size()));
-            }
-            PGPSecretKeyRing signingKey = keys.iterator().next();
-
-            KeyRingInfo info = PGPainless.inspectKeyRing(signingKey);
-            if (info.getSigningSubkeys().isEmpty()) {
-                throw new SOPGPException.KeyCannotSign("Key " + OpenPgpFingerprint.of(signingKey) + " cannot sign.");
-            }
-
-            protector.addSecretKey(signingKey);
-            signingKeys.add(signingKey);
-        } catch (IOException | PGPException e) {
-            throw new SOPGPException.BadData(e);
+        PGPSecretKeyRingCollection keys = KeyReader.readSecretKeys(keyIn, true);
+        if (keys.size() != 1) {
+            throw new SOPGPException.BadData(new AssertionError("Exactly one secret key at a time expected. Got " + keys.size()));
         }
+        PGPSecretKeyRing signingKey = keys.iterator().next();
+
+        KeyRingInfo info = PGPainless.inspectKeyRing(signingKey);
+        if (info.getSigningSubkeys().isEmpty()) {
+            throw new SOPGPException.KeyCannotSign("Key " + OpenPgpFingerprint.of(signingKey) + " cannot sign.");
+        }
+
+        protector.addSecretKey(signingKey);
+        signingKeys.add(signingKey);
         return this;
     }
 
@@ -100,19 +106,39 @@ public class EncryptImpl implements Encrypt {
     public Encrypt withCert(InputStream cert) throws SOPGPException.CertCannotEncrypt, SOPGPException.UnsupportedAsymmetricAlgo, SOPGPException.BadData {
         try {
             PGPPublicKeyRingCollection certificates = PGPainless.readKeyRing()
-                    .keyRingCollection(cert, false)
-                    .getPgpPublicKeyRingCollection();
+                            .publicKeyRingCollection(cert);
+            if (certificates.size() == 0) {
+                throw new SOPGPException.BadData("No certificate data found.");
+            }
             encryptionOptions.addRecipients(certificates);
         } catch (KeyException.UnacceptableEncryptionKeyException e) {
             throw new SOPGPException.CertCannotEncrypt(e.getMessage(), e);
-        } catch (IOException | PGPException e) {
+        } catch (IOException e) {
             throw new SOPGPException.BadData(e);
         }
         return this;
     }
 
     @Override
+    public Encrypt profile(String profileName) {
+        // sanitize profile name to make sure we only accept supported profiles
+        for (Profile profile : SUPPORTED_PROFILES) {
+            if (profile.getName().equals(profileName)) {
+                // profile is supported, return
+                this.profile = profile.getName();
+                return this;
+            }
+        }
+
+        // Profile is not supported, throw
+        throw new SOPGPException.UnsupportedProfile("encrypt", profileName);
+    }
+
+    @Override
     public Ready plaintext(InputStream plaintext) throws IOException {
+        if (!encryptionOptions.hasEncryptionMethod()) {
+            throw new SOPGPException.MissingArg("Missing encryption method.");
+        }
         ProducerOptions producerOptions = signingOptions != null ?
                 ProducerOptions.signAndEncrypt(encryptionOptions, signingOptions) :
                 ProducerOptions.encrypt(encryptionOptions);

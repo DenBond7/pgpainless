@@ -16,12 +16,16 @@ import org.bouncycastle.util.io.Streams;
 import org.pgpainless.PGPainless;
 import org.pgpainless.decryption_verification.ConsumerOptions;
 import org.pgpainless.decryption_verification.DecryptionStream;
-import org.pgpainless.decryption_verification.OpenPgpMetadata;
+import org.pgpainless.decryption_verification.MessageMetadata;
 import org.pgpainless.decryption_verification.SignatureVerification;
+import org.pgpainless.exception.MalformedOpenPgpMessageException;
 import sop.Verification;
 import sop.exception.SOPGPException;
 import sop.operation.DetachedVerify;
 
+/**
+ * Implementation of the <pre>verify</pre> operation using PGPainless.
+ */
 public class DetachedVerifyImpl implements DetachedVerify {
 
     private final ConsumerOptions options = ConsumerOptions.get();
@@ -39,13 +43,8 @@ public class DetachedVerifyImpl implements DetachedVerify {
     }
 
     @Override
-    public DetachedVerify cert(InputStream cert) throws SOPGPException.BadData {
-        PGPPublicKeyRingCollection certificates;
-        try {
-            certificates = PGPainless.readKeyRing().publicKeyRingCollection(cert);
-        } catch (IOException | PGPException e) {
-            throw new SOPGPException.BadData(e);
-        }
+    public DetachedVerify cert(InputStream cert) throws SOPGPException.BadData, IOException {
+        PGPPublicKeyRingCollection certificates = KeyReader.readPublicKeys(cert, true);
         options.addVerificationCerts(certificates);
         return this;
     }
@@ -62,6 +61,8 @@ public class DetachedVerifyImpl implements DetachedVerify {
 
     @Override
     public List<Verification> data(InputStream data) throws IOException, SOPGPException.NoSignature, SOPGPException.BadData {
+        options.forceNonOpenPgpData();
+
         DecryptionStream decryptionStream;
         try {
             decryptionStream = PGPainless.decryptAndOrVerify()
@@ -71,28 +72,22 @@ public class DetachedVerifyImpl implements DetachedVerify {
             Streams.drain(decryptionStream);
             decryptionStream.close();
 
-            OpenPgpMetadata metadata = decryptionStream.getResult();
+            MessageMetadata metadata = decryptionStream.getMetadata();
             List<Verification> verificationList = new ArrayList<>();
 
             for (SignatureVerification signatureVerification : metadata.getVerifiedDetachedSignatures()) {
-                verificationList.add(map(signatureVerification));
+                verificationList.add(VerificationHelper.mapVerification(signatureVerification));
             }
 
-            if (!options.getCertificates().isEmpty()) {
+            if (!options.getCertificateSource().getExplicitCertificates().isEmpty()) {
                 if (verificationList.isEmpty()) {
                     throw new SOPGPException.NoSignature();
                 }
             }
 
             return verificationList;
-        } catch (PGPException e) {
+        } catch (MalformedOpenPgpMessageException | PGPException e) {
             throw new SOPGPException.BadData(e);
         }
-    }
-
-    private Verification map(SignatureVerification sigVerification) {
-        return new Verification(sigVerification.getSignature().getCreationTime(),
-                sigVerification.getSigningKey().getSubkeyFingerprint().toString(),
-                sigVerification.getSigningKey().getPrimaryKeyFingerprint().toString());
     }
 }

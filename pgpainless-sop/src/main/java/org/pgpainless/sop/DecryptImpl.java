@@ -21,8 +21,9 @@ import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.decryption_verification.ConsumerOptions;
 import org.pgpainless.decryption_verification.DecryptionStream;
-import org.pgpainless.decryption_verification.OpenPgpMetadata;
+import org.pgpainless.decryption_verification.MessageMetadata;
 import org.pgpainless.decryption_verification.SignatureVerification;
+import org.pgpainless.exception.MalformedOpenPgpMessageException;
 import org.pgpainless.exception.MissingDecryptionMethodException;
 import org.pgpainless.exception.WrongPassphraseException;
 import org.pgpainless.util.Passphrase;
@@ -33,6 +34,9 @@ import sop.Verification;
 import sop.exception.SOPGPException;
 import sop.operation.Decrypt;
 
+/**
+ * Implementation of the <pre>decrypt</pre> operation using PGPainless.
+ */
 public class DecryptImpl implements Decrypt {
 
     private final ConsumerOptions consumerOptions = ConsumerOptions.get();
@@ -52,17 +56,9 @@ public class DecryptImpl implements Decrypt {
 
     @Override
     public DecryptImpl verifyWithCert(InputStream certIn) throws SOPGPException.BadData, IOException {
-        try {
-            PGPPublicKeyRingCollection certs = PGPainless.readKeyRing().keyRingCollection(certIn, false)
-                    .getPgpPublicKeyRingCollection();
-            if (certs.size() == 0) {
-                throw new SOPGPException.BadData(new PGPException("No certificates provided."));
-            }
-
+        PGPPublicKeyRingCollection certs = KeyReader.readPublicKeys(certIn, true);
+        if (certs != null) {
             consumerOptions.addVerificationCerts(certs);
-
-        } catch (PGPException e) {
-            throw new SOPGPException.BadData(e);
         }
         return this;
     }
@@ -96,16 +92,12 @@ public class DecryptImpl implements Decrypt {
     }
 
     @Override
-    public DecryptImpl withKey(InputStream keyIn) throws SOPGPException.BadData, SOPGPException.UnsupportedAsymmetricAlgo {
-        try {
-            PGPSecretKeyRingCollection secretKeyCollection = PGPainless.readKeyRing()
-                    .secretKeyRingCollection(keyIn);
-            for (PGPSecretKeyRing key : secretKeyCollection) {
-                protector.addSecretKey(key);
-                consumerOptions.addDecryptionKey(key, protector);
-            }
-        } catch (IOException | PGPException e) {
-            throw new SOPGPException.BadData(e);
+    public DecryptImpl withKey(InputStream keyIn) throws SOPGPException.BadData, IOException, SOPGPException.UnsupportedAsymmetricAlgo {
+        PGPSecretKeyRingCollection secretKeyCollection = KeyReader.readSecretKeys(keyIn, true);
+
+        for (PGPSecretKeyRing key : secretKeyCollection) {
+            protector.addSecretKey(key);
+            consumerOptions.addDecryptionKey(key, protector);
         }
         return this;
     }
@@ -132,10 +124,10 @@ public class DecryptImpl implements Decrypt {
                     .onInputStream(ciphertext)
                     .withOptions(consumerOptions);
         } catch (MissingDecryptionMethodException e) {
-            throw new SOPGPException.CannotDecrypt();
+            throw new SOPGPException.CannotDecrypt("No usable decryption key or password provided.", e);
         } catch (WrongPassphraseException e) {
             throw new SOPGPException.KeyIsProtected();
-        } catch (PGPException | IOException e) {
+        } catch (MalformedOpenPgpMessageException | PGPException | IOException e) {
             throw new SOPGPException.BadData(e);
         } finally {
             // Forget passphrases after decryption
@@ -147,15 +139,15 @@ public class DecryptImpl implements Decrypt {
             public DecryptionResult writeTo(OutputStream outputStream) throws IOException, SOPGPException.NoSignature {
                 Streams.pipeAll(decryptionStream, outputStream);
                 decryptionStream.close();
-                OpenPgpMetadata metadata = decryptionStream.getResult();
+                MessageMetadata metadata = decryptionStream.getMetadata();
 
                 if (!metadata.isEncrypted()) {
                     throw new SOPGPException.BadData("Data is not encrypted.");
                 }
 
                 List<Verification> verificationList = new ArrayList<>();
-                for (SignatureVerification signatureVerification : metadata.getVerifiedInbandSignatures()) {
-                    verificationList.add(map(signatureVerification));
+                for (SignatureVerification signatureVerification : metadata.getVerifiedInlineSignatures()) {
+                    verificationList.add(VerificationHelper.mapVerification(signatureVerification));
                 }
 
                 SessionKey sessionKey = null;
@@ -170,11 +162,5 @@ public class DecryptImpl implements Decrypt {
                 return new DecryptionResult(sessionKey, verificationList);
             }
         };
-    }
-
-    private Verification map(SignatureVerification sigVerification) {
-        return new Verification(sigVerification.getSignature().getCreationTime(),
-                sigVerification.getSigningKey().getSubkeyFingerprint().toString(),
-                sigVerification.getSigningKey().getPrimaryKeyFingerprint().toString());
     }
 }

@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPKeyRing;
@@ -41,7 +42,9 @@ public class KeyRingReader {
      * @return key ring
      * @throws IOException in case of an IO error
      */
-    public PGPKeyRing keyRing(@Nonnull InputStream inputStream) throws IOException {
+    @Nullable
+    public PGPKeyRing keyRing(@Nonnull InputStream inputStream)
+            throws IOException {
         return readKeyRing(inputStream);
     }
 
@@ -53,7 +56,9 @@ public class KeyRingReader {
      * @return key ring
      * @throws IOException in case of an IO error
      */
-    public PGPKeyRing keyRing(@Nonnull byte[] bytes) throws IOException {
+    @Nullable
+    public PGPKeyRing keyRing(@Nonnull byte[] bytes)
+            throws IOException {
         return keyRing(new ByteArrayInputStream(bytes));
     }
 
@@ -65,70 +70,99 @@ public class KeyRingReader {
      * @return key ring
      * @throws IOException in case of an IO error
      */
-    public PGPKeyRing keyRing(@Nonnull String asciiArmored) throws IOException {
+    @Nullable
+    public PGPKeyRing keyRing(@Nonnull String asciiArmored)
+            throws IOException {
         return keyRing(asciiArmored.getBytes(UTF8));
     }
 
-    public PGPPublicKeyRing publicKeyRing(@Nonnull InputStream inputStream) throws IOException {
+    @Nullable
+    public PGPPublicKeyRing publicKeyRing(@Nonnull InputStream inputStream)
+            throws IOException {
         return readPublicKeyRing(inputStream);
     }
 
-    public PGPPublicKeyRing publicKeyRing(@Nonnull byte[] bytes) throws IOException {
+    @Nullable
+    public PGPPublicKeyRing publicKeyRing(@Nonnull byte[] bytes)
+            throws IOException {
         return publicKeyRing(new ByteArrayInputStream(bytes));
     }
 
-    public PGPPublicKeyRing publicKeyRing(@Nonnull String asciiArmored) throws IOException {
+    @Nullable
+    public PGPPublicKeyRing publicKeyRing(@Nonnull String asciiArmored)
+            throws IOException {
         return publicKeyRing(asciiArmored.getBytes(UTF8));
     }
 
+    @Nonnull
     public PGPPublicKeyRingCollection publicKeyRingCollection(@Nonnull InputStream inputStream)
-            throws IOException, PGPException {
+            throws IOException {
         return readPublicKeyRingCollection(inputStream);
     }
 
-    public PGPPublicKeyRingCollection publicKeyRingCollection(@Nonnull byte[] bytes) throws IOException, PGPException {
+    @Nonnull
+    public PGPPublicKeyRingCollection publicKeyRingCollection(@Nonnull byte[] bytes)
+            throws IOException {
         return publicKeyRingCollection(new ByteArrayInputStream(bytes));
     }
 
-    public PGPPublicKeyRingCollection publicKeyRingCollection(@Nonnull String asciiArmored) throws IOException, PGPException {
+    @Nonnull
+    public PGPPublicKeyRingCollection publicKeyRingCollection(@Nonnull String asciiArmored)
+            throws IOException {
         return publicKeyRingCollection(asciiArmored.getBytes(UTF8));
     }
 
-    public PGPSecretKeyRing secretKeyRing(@Nonnull InputStream inputStream) throws IOException {
+    @Nullable
+    public PGPSecretKeyRing secretKeyRing(@Nonnull InputStream inputStream)
+            throws IOException {
         return readSecretKeyRing(inputStream);
     }
 
-    public PGPSecretKeyRing secretKeyRing(@Nonnull byte[] bytes) throws IOException {
+    @Nullable
+    public PGPSecretKeyRing secretKeyRing(@Nonnull byte[] bytes)
+            throws IOException {
         return secretKeyRing(new ByteArrayInputStream(bytes));
     }
 
-    public PGPSecretKeyRing secretKeyRing(@Nonnull String asciiArmored) throws IOException {
+    @Nullable
+    public PGPSecretKeyRing secretKeyRing(@Nonnull String asciiArmored)
+            throws IOException {
         return secretKeyRing(asciiArmored.getBytes(UTF8));
     }
 
+    @Nonnull
     public PGPSecretKeyRingCollection secretKeyRingCollection(@Nonnull InputStream inputStream)
-            throws IOException, PGPException {
+            throws IOException {
         return readSecretKeyRingCollection(inputStream);
     }
 
-    public PGPSecretKeyRingCollection secretKeyRingCollection(@Nonnull byte[] bytes) throws IOException, PGPException {
+    @Nonnull
+    public PGPSecretKeyRingCollection secretKeyRingCollection(@Nonnull byte[] bytes)
+            throws IOException {
         return secretKeyRingCollection(new ByteArrayInputStream(bytes));
     }
 
-    public PGPSecretKeyRingCollection secretKeyRingCollection(@Nonnull String asciiArmored) throws IOException, PGPException {
+    @Nonnull
+    public PGPSecretKeyRingCollection secretKeyRingCollection(@Nonnull String asciiArmored)
+            throws IOException {
         return secretKeyRingCollection(asciiArmored.getBytes(UTF8));
     }
 
+    @Nonnull
     public PGPKeyRingCollection keyRingCollection(@Nonnull InputStream inputStream, boolean isSilent)
             throws IOException, PGPException {
         return readKeyRingCollection(inputStream, isSilent);
     }
 
-    public PGPKeyRingCollection keyRingCollection(@Nonnull byte[] bytes, boolean isSilent) throws IOException, PGPException {
+    @Nonnull
+    public PGPKeyRingCollection keyRingCollection(@Nonnull byte[] bytes, boolean isSilent)
+            throws IOException, PGPException {
         return keyRingCollection(new ByteArrayInputStream(bytes), isSilent);
     }
 
-    public PGPKeyRingCollection keyRingCollection(@Nonnull String asciiArmored, boolean isSilent) throws IOException, PGPException {
+    @Nonnull
+    public PGPKeyRingCollection keyRingCollection(@Nonnull String asciiArmored, boolean isSilent)
+            throws IOException, PGPException {
         return keyRingCollection(asciiArmored.getBytes(UTF8), isSilent);
     }
 
@@ -142,7 +176,9 @@ public class KeyRingReader {
      * @return key ring
      * @throws IOException in case of an IO error
      */
-    public static PGPKeyRing readKeyRing(@Nonnull InputStream inputStream) throws IOException {
+    @Nullable
+    public static PGPKeyRing readKeyRing(@Nonnull InputStream inputStream)
+            throws IOException {
         return readKeyRing(inputStream, MAX_ITERATIONS);
     }
 
@@ -157,7 +193,9 @@ public class KeyRingReader {
      * @return key ring
      * @throws IOException in case of an IO error
      */
-    public static PGPKeyRing readKeyRing(@Nonnull InputStream inputStream, int maxIterations) throws IOException {
+    @Nullable
+    public static PGPKeyRing readKeyRing(@Nonnull InputStream inputStream, int maxIterations)
+            throws IOException {
         PGPObjectFactory objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(
                 ArmorUtils.getDecoderStream(inputStream));
         int i = 0;
@@ -181,7 +219,9 @@ public class KeyRingReader {
         throw new IOException("Loop exceeded max iteration count.");
     }
 
-    public static PGPPublicKeyRing readPublicKeyRing(@Nonnull InputStream inputStream) throws IOException {
+    @Nullable
+    public static PGPPublicKeyRing readPublicKeyRing(@Nonnull InputStream inputStream)
+            throws IOException {
         return readPublicKeyRing(inputStream, MAX_ITERATIONS);
     }
 
@@ -196,7 +236,9 @@ public class KeyRingReader {
      *
      * @throws IOException in case of an IO error or exceeding of max iterations
      */
-    public static PGPPublicKeyRing readPublicKeyRing(@Nonnull InputStream inputStream, int maxIterations) throws IOException {
+    @Nullable
+    public static PGPPublicKeyRing readPublicKeyRing(@Nonnull InputStream inputStream, int maxIterations)
+            throws IOException {
         PGPObjectFactory objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(
                 ArmorUtils.getDecoderStream(inputStream));
         int i = 0;
@@ -217,8 +259,9 @@ public class KeyRingReader {
         throw new IOException("Loop exceeded max iteration count.");
     }
 
+    @Nonnull
     public static PGPPublicKeyRingCollection readPublicKeyRingCollection(@Nonnull InputStream inputStream)
-            throws IOException, PGPException {
+            throws IOException {
         return readPublicKeyRingCollection(inputStream, MAX_ITERATIONS);
     }
 
@@ -232,10 +275,10 @@ public class KeyRingReader {
      * @return public key ring collection
      *
      * @throws IOException in case of an IO error or exceeding of max iterations
-     * @throws PGPException in case of a broken key
      */
+    @Nonnull
     public static PGPPublicKeyRingCollection readPublicKeyRingCollection(@Nonnull InputStream inputStream, int maxIterations)
-            throws IOException, PGPException {
+            throws IOException {
         PGPObjectFactory objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(
                 ArmorUtils.getDecoderStream(inputStream));
 
@@ -265,7 +308,9 @@ public class KeyRingReader {
         throw new IOException("Loop exceeded max iteration count.");
     }
 
-    public static PGPSecretKeyRing readSecretKeyRing(@Nonnull InputStream inputStream) throws IOException {
+    @Nullable
+    public static PGPSecretKeyRing readSecretKeyRing(@Nonnull InputStream inputStream)
+            throws IOException {
         return readSecretKeyRing(inputStream, MAX_ITERATIONS);
     }
 
@@ -280,7 +325,9 @@ public class KeyRingReader {
      *
      * @throws IOException in case of an IO error or exceeding of max iterations
      */
-    public static PGPSecretKeyRing readSecretKeyRing(@Nonnull InputStream inputStream, int maxIterations) throws IOException {
+    @Nullable
+    public static PGPSecretKeyRing readSecretKeyRing(@Nonnull InputStream inputStream, int maxIterations)
+            throws IOException {
         InputStream decoderStream = ArmorUtils.getDecoderStream(inputStream);
         PGPObjectFactory objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(decoderStream);
         int i = 0;
@@ -302,8 +349,9 @@ public class KeyRingReader {
         throw new IOException("Loop exceeded max iteration count.");
     }
 
+    @Nonnull
     public static PGPSecretKeyRingCollection readSecretKeyRingCollection(@Nonnull InputStream inputStream)
-            throws IOException, PGPException {
+            throws IOException {
         return readSecretKeyRingCollection(inputStream, MAX_ITERATIONS);
     }
 
@@ -317,11 +365,11 @@ public class KeyRingReader {
      * @return secret key ring collection
      *
      * @throws IOException in case of an IO error or exceeding of max iterations
-     * @throws PGPException in case of a broken secret key
      */
+    @Nonnull
     public static PGPSecretKeyRingCollection readSecretKeyRingCollection(@Nonnull InputStream inputStream,
                                                                          int maxIterations)
-            throws IOException, PGPException {
+            throws IOException {
         PGPObjectFactory objectFactory = ImplementationFactory.getInstance().getPGPObjectFactory(
                 ArmorUtils.getDecoderStream(inputStream));
 
@@ -351,6 +399,7 @@ public class KeyRingReader {
         throw new IOException("Loop exceeded max iteration count.");
     }
 
+    @Nonnull
     public static PGPKeyRingCollection readKeyRingCollection(@Nonnull InputStream inputStream, boolean isSilent)
             throws IOException, PGPException {
         return new PGPKeyRingCollection(inputStream, isSilent);

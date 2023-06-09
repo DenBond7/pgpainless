@@ -10,7 +10,6 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
@@ -20,6 +19,9 @@ import sop.Ready;
 import sop.exception.SOPGPException;
 import sop.operation.ExtractCert;
 
+/**
+ * Implementation of the <pre>extract-cert</pre> operation using PGPainless.
+ */
 public class ExtractCertImpl implements ExtractCert {
 
     private boolean armor = true;
@@ -32,16 +34,7 @@ public class ExtractCertImpl implements ExtractCert {
 
     @Override
     public Ready key(InputStream keyInputStream) throws IOException, SOPGPException.BadData {
-        PGPSecretKeyRingCollection keys;
-        try {
-            keys = PGPainless.readKeyRing().secretKeyRingCollection(keyInputStream);
-        } catch (PGPException e) {
-            throw new IOException("Cannot read keys.", e);
-        }
-
-        if (keys == null || keys.size() == 0) {
-            throw new SOPGPException.BadData(new PGPException("No key data found."));
-        }
+        PGPSecretKeyRingCollection keys = KeyReader.readSecretKeys(keyInputStream, true);
 
         List<PGPPublicKeyRing> certs = new ArrayList<>();
         for (PGPSecretKeyRing key : keys) {

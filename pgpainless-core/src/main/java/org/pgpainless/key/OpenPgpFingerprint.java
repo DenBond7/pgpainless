@@ -36,6 +36,9 @@ public abstract class OpenPgpFingerprint implements CharSequence, Comparable<Ope
         if (key.getVersion() == 5) {
             return new OpenPgpV5Fingerprint(key);
         }
+        if (key.getVersion() == 6) {
+            return new OpenPgpV6Fingerprint(key);
+        }
         throw new IllegalArgumentException("OpenPGP keys of version " + key.getVersion() + " are not supported.");
     }
 
@@ -52,17 +55,23 @@ public abstract class OpenPgpFingerprint implements CharSequence, Comparable<Ope
 
     /**
      * Try to parse an {@link OpenPgpFingerprint} from the given fingerprint string.
+     * If the trimmed fingerprint without whitespace is 64 characters long, it is either a v5 or v6 fingerprint.
+     * In this case, we return a {@link _64DigitFingerprint}. Since this is ambiguous, it is generally recommended
+     * to know the version of the key beforehand.
      *
      * @param fingerprint fingerprint
      * @return parsed fingerprint
+     * @deprecated Use the constructor methods of the versioned fingerprint subclasses instead.
      */
+    @Deprecated
     public static OpenPgpFingerprint parse(String fingerprint) {
         String fp = fingerprint.replace(" ", "").trim().toUpperCase();
         if (fp.matches("^[0-9A-F]{40}$")) {
             return new OpenPgpV4Fingerprint(fp);
         }
         if (fp.matches("^[0-9A-F]{64}$")) {
-            return new OpenPgpV5Fingerprint(fp);
+            // Might be v5 or v6 :/
+            return new _64DigitFingerprint(fp);
         }
         throw new IllegalArgumentException("Fingerprint does not appear to match any known fingerprint patterns.");
     }
@@ -72,7 +81,9 @@ public abstract class OpenPgpFingerprint implements CharSequence, Comparable<Ope
      *
      * @param binaryFingerprint binary representation of the fingerprint
      * @return parsed fingerprint
+     * @deprecated use the parse() methods of the versioned fingerprint subclasses instead.
      */
+    @Deprecated
     public static OpenPgpFingerprint parseFromBinary(byte[] binaryFingerprint) {
         String hex = Hex.toHexString(binaryFingerprint).toUpperCase();
         return parse(hex);

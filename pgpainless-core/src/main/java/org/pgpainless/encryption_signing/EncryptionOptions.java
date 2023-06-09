@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
-
 import javax.annotation.Nonnull;
 
 import org.bouncycastle.openpgp.PGPPublicKey;
@@ -34,7 +33,7 @@ import org.pgpainless.util.Passphrase;
 /**
  * Options for the encryption process.
  * This class can be used to set encryption parameters, like encryption keys and passphrases, algorithms etc.
- *
+ * <p>
  * A typical use might look like follows:
  * <pre>
  * {@code
@@ -43,11 +42,11 @@ import org.pgpainless.util.Passphrase;
  * opt.addPassphrase(Passphrase.fromPassword("AdditionalDecryptionPassphrase123"));
  * }
  * </pre>
- *
+ *<p>
  * To use a custom symmetric encryption algorithm, use {@link #overrideEncryptionAlgorithm(SymmetricKeyAlgorithm)}.
  * This will cause PGPainless to use the provided algorithm for message encryption, instead of negotiating an algorithm
  * by inspecting the provided recipient keys.
- *
+ * <p>
  * By default, PGPainless will encrypt to all suitable, encryption capable subkeys on each recipient's certificate.
  * This behavior can be changed per recipient, e.g. by calling
  * <pre>
@@ -76,7 +75,7 @@ public class EncryptionOptions {
         this(EncryptionPurpose.ANY);
     }
 
-    public EncryptionOptions(EncryptionPurpose purpose) {
+    public EncryptionOptions(@Nonnull EncryptionPurpose purpose) {
         this.purpose = purpose;
     }
 
@@ -84,7 +83,7 @@ public class EncryptionOptions {
      * Factory method to create an {@link EncryptionOptions} object which will encrypt for keys
      * which carry either the {@link org.pgpainless.algorithm.KeyFlag#ENCRYPT_COMMS} or
      * {@link org.pgpainless.algorithm.KeyFlag#ENCRYPT_STORAGE} flag.
-     *
+     * <p>
      * Use this if you are not sure.
      *
      * @return encryption options
@@ -119,7 +118,7 @@ public class EncryptionOptions {
      * @param keys keys
      * @return this
      */
-    public EncryptionOptions addRecipients(Iterable<PGPPublicKeyRing> keys) {
+    public EncryptionOptions addRecipients(@Nonnull Iterable<PGPPublicKeyRing> keys) {
         if (!keys.iterator().hasNext()) {
             throw new IllegalArgumentException("Set of recipient keys cannot be empty.");
         }
@@ -155,7 +154,7 @@ public class EncryptionOptions {
      * @param userId user id
      * @return this
      */
-    public EncryptionOptions addRecipient(PGPPublicKeyRing key, String userId) {
+    public EncryptionOptions addRecipient(@Nonnull PGPPublicKeyRing key, @Nonnull CharSequence userId) {
         return addRecipient(key, userId, encryptionKeySelector);
     }
 
@@ -168,11 +167,13 @@ public class EncryptionOptions {
      * @param encryptionKeySelectionStrategy strategy to select one or more encryption subkeys to encrypt to
      * @return this
      */
-    public EncryptionOptions addRecipient(PGPPublicKeyRing key, String userId, EncryptionKeySelector encryptionKeySelectionStrategy) {
+    public EncryptionOptions addRecipient(@Nonnull PGPPublicKeyRing key,
+                                          @Nonnull CharSequence userId,
+                                          @Nonnull EncryptionKeySelector encryptionKeySelectionStrategy) {
         KeyRingInfo info = new KeyRingInfo(key, new Date());
 
         List<PGPPublicKey> encryptionSubkeys = encryptionKeySelectionStrategy
-                .selectEncryptionSubkeys(info.getEncryptionSubkeys(userId, purpose));
+                .selectEncryptionSubkeys(info.getEncryptionSubkeys(userId.toString(), purpose));
         if (encryptionSubkeys.isEmpty()) {
             throw new KeyException.UnacceptableEncryptionKeyException(OpenPgpFingerprint.of(key));
         }
@@ -180,7 +181,7 @@ public class EncryptionOptions {
         for (PGPPublicKey encryptionSubkey : encryptionSubkeys) {
             SubkeyIdentifier keyId = new SubkeyIdentifier(key, encryptionSubkey.getKeyID());
             keyRingInfo.put(keyId, info);
-            keyViews.put(keyId, new KeyAccessor.ViaUserId(info, keyId, userId));
+            keyViews.put(keyId, new KeyAccessor.ViaUserId(info, keyId, userId.toString()));
             addRecipientKey(key, encryptionSubkey);
         }
 
@@ -193,7 +194,7 @@ public class EncryptionOptions {
      * @param key key ring
      * @return this
      */
-    public EncryptionOptions addRecipient(PGPPublicKeyRing key) {
+    public EncryptionOptions addRecipient(@Nonnull PGPPublicKeyRing key) {
         return addRecipient(key, encryptionKeySelector);
     }
 
@@ -204,7 +205,8 @@ public class EncryptionOptions {
      * @param encryptionKeySelectionStrategy strategy used to select one or multiple encryption subkeys.
      * @return this
      */
-    public EncryptionOptions addRecipient(PGPPublicKeyRing key, EncryptionKeySelector encryptionKeySelectionStrategy) {
+    public EncryptionOptions addRecipient(@Nonnull PGPPublicKeyRing key,
+                                          @Nonnull EncryptionKeySelector encryptionKeySelectionStrategy) {
         Date evaluationDate = new Date();
         KeyRingInfo info;
         info = new KeyRingInfo(key, evaluationDate);
@@ -235,7 +237,8 @@ public class EncryptionOptions {
         return this;
     }
 
-    private void addRecipientKey(PGPPublicKeyRing keyRing, PGPPublicKey key) {
+    private void addRecipientKey(@Nonnull PGPPublicKeyRing keyRing,
+                                 @Nonnull PGPPublicKey key) {
         encryptionKeys.add(new SubkeyIdentifier(keyRing, key.getKeyID()));
         PGPKeyEncryptionMethodGenerator encryptionMethod = ImplementationFactory
                 .getInstance().getPublicKeyKeyEncryptionMethodGenerator(key);
@@ -248,7 +251,7 @@ public class EncryptionOptions {
      * @param passphrase passphrase
      * @return this
      */
-    public EncryptionOptions addPassphrase(Passphrase passphrase) {
+    public EncryptionOptions addPassphrase(@Nonnull Passphrase passphrase) {
         if (passphrase.isEmpty()) {
             throw new IllegalArgumentException("Passphrase must not be empty.");
         }
@@ -268,7 +271,7 @@ public class EncryptionOptions {
      * @param encryptionMethod encryption method
      * @return this
      */
-    public EncryptionOptions addEncryptionMethod(PGPKeyEncryptionMethodGenerator encryptionMethod) {
+    public EncryptionOptions addEncryptionMethod(@Nonnull PGPKeyEncryptionMethodGenerator encryptionMethod) {
         encryptionMethods.add(encryptionMethod);
         return this;
     }
@@ -304,7 +307,7 @@ public class EncryptionOptions {
      * @param encryptionAlgorithm encryption algorithm override
      * @return this
      */
-    public EncryptionOptions overrideEncryptionAlgorithm(SymmetricKeyAlgorithm encryptionAlgorithm) {
+    public EncryptionOptions overrideEncryptionAlgorithm(@Nonnull SymmetricKeyAlgorithm encryptionAlgorithm) {
         if (encryptionAlgorithm == SymmetricKeyAlgorithm.NULL) {
             throw new IllegalArgumentException("Plaintext encryption can only be used to denote unencrypted secret keys.");
         }
@@ -312,8 +315,18 @@ public class EncryptionOptions {
         return this;
     }
 
+    /**
+     * Return <pre>true</pre> iff the user specified at least one encryption method,
+     * <pre>false</pre> otherwise.
+     *
+     * @return encryption methods is not empty
+     */
+    public boolean hasEncryptionMethod() {
+        return !encryptionMethods.isEmpty();
+    }
+
     public interface EncryptionKeySelector {
-        List<PGPPublicKey> selectEncryptionSubkeys(List<PGPPublicKey> encryptionCapableKeys);
+        List<PGPPublicKey> selectEncryptionSubkeys(@Nonnull List<PGPPublicKey> encryptionCapableKeys);
     }
 
     /**
@@ -324,7 +337,7 @@ public class EncryptionOptions {
     public static EncryptionKeySelector encryptToFirstSubkey() {
         return new EncryptionKeySelector() {
             @Override
-            public List<PGPPublicKey> selectEncryptionSubkeys(List<PGPPublicKey> encryptionCapableKeys) {
+            public List<PGPPublicKey> selectEncryptionSubkeys(@Nonnull List<PGPPublicKey> encryptionCapableKeys) {
                 return encryptionCapableKeys.isEmpty() ? Collections.emptyList() : Collections.singletonList(encryptionCapableKeys.get(0));
             }
         };
@@ -338,7 +351,7 @@ public class EncryptionOptions {
     public static EncryptionKeySelector encryptToAllCapableSubkeys() {
         return new EncryptionKeySelector() {
             @Override
-            public List<PGPPublicKey> selectEncryptionSubkeys(List<PGPPublicKey> encryptionCapableKeys) {
+            public List<PGPPublicKey> selectEncryptionSubkeys(@Nonnull List<PGPPublicKey> encryptionCapableKeys) {
                 return encryptionCapableKeys;
             }
         };

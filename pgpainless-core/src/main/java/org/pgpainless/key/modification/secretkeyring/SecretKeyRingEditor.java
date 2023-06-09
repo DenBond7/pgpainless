@@ -72,14 +72,12 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
     private PGPSecretKeyRing secretKeyRing;
     private final Date referenceTime;
 
-    public SecretKeyRingEditor(PGPSecretKeyRing secretKeyRing) {
-        this(secretKeyRing, null);
+    public SecretKeyRingEditor(@Nonnull PGPSecretKeyRing secretKeyRing) {
+        this(secretKeyRing, new Date());
     }
 
-    public SecretKeyRingEditor(PGPSecretKeyRing secretKeyRing, Date referenceTime) {
-        if (secretKeyRing == null) {
-            throw new NullPointerException("SecretKeyRing MUST NOT be null.");
-        }
+    public SecretKeyRingEditor(@Nonnull PGPSecretKeyRing secretKeyRing,
+                               @Nonnull Date referenceTime) {
         this.secretKeyRing = secretKeyRing;
         this.referenceTime = referenceTime;
     }
@@ -126,9 +124,7 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
         }
 
         SelfSignatureBuilder builder = new SelfSignatureBuilder(primaryKey, protector);
-        if (referenceTime != null) {
-            builder.getHashedSubpackets().setSignatureCreationTime(referenceTime);
-        }
+        builder.getHashedSubpackets().setSignatureCreationTime(referenceTime);
         builder.setSignatureType(SignatureType.POSITIVE_CERTIFICATION);
 
         // Retain signature subpackets of previous signatures
@@ -184,7 +180,10 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
             }
 
             // We need to unmark this user-id as primary
-            if (info.getLatestUserIdCertification(otherUserId).getHashedSubPackets().isPrimaryUserID()) {
+            PGPSignature userIdCertification = info.getLatestUserIdCertification(otherUserId);
+            assert (userIdCertification != null);
+
+            if (userIdCertification.getHashedSubPackets().isPrimaryUserID()) {
                 addUserId(otherUserId, new SelfSignatureSubpackets.Callback() {
                     @Override
                     public void modifyHashedSubpackets(SelfSignatureSubpackets hashedSubpackets) {
@@ -327,7 +326,7 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
             @Nonnull SecretKeyRingProtector primaryKeyProtector,
             @Nonnull KeyFlag keyFlag,
             KeyFlag... additionalKeyFlags)
-            throws PGPException, IOException, NoSuchAlgorithmException {
+            throws PGPException, IOException {
         KeyFlag[] flags = concat(keyFlag, additionalKeyFlags);
         PublicKeyAlgorithm subkeyAlgorithm = PublicKeyAlgorithm.requireFromId(subkey.getPublicKey().getAlgorithm());
         SignatureSubpacketsUtil.assureKeyCanCarryFlags(subkeyAlgorithm);
@@ -350,16 +349,12 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
                 .getV4FingerprintCalculator(), false, subkeyProtector.getEncryptor(subkey.getKeyID()));
 
         SubkeyBindingSignatureBuilder skBindingBuilder = new SubkeyBindingSignatureBuilder(primaryKey, primaryKeyProtector, hashAlgorithm);
-        if (referenceTime != null) {
-            skBindingBuilder.getHashedSubpackets().setSignatureCreationTime(referenceTime);
-        }
+        skBindingBuilder.getHashedSubpackets().setSignatureCreationTime(referenceTime);
         skBindingBuilder.getHashedSubpackets().setKeyFlags(flags);
 
         if (subkeyAlgorithm.isSigningCapable()) {
             PrimaryKeyBindingSignatureBuilder pkBindingBuilder = new PrimaryKeyBindingSignatureBuilder(secretSubkey, subkeyProtector, hashAlgorithm);
-            if (referenceTime != null) {
-                pkBindingBuilder.getHashedSubpackets().setSignatureCreationTime(referenceTime);
-            }
+            pkBindingBuilder.getHashedSubpackets().setSignatureCreationTime(referenceTime);
             PGPSignature pkBinding = pkBindingBuilder.build(primaryKey.getPublicKey());
             skBindingBuilder.getHashedSubpackets().addEmbeddedSignature(pkBinding);
         }
@@ -603,6 +598,7 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
             }
 
             if (prevUserIdSig.getHashedSubPackets().isPrimaryUserID()) {
+                assert (primaryUserId != null);
                 PGPSignature userIdSig = reissueNonPrimaryUserId(secretKeyRingProtector, userId, prevUserIdSig);
                 secretKeyRing = KeyRingUtils.injectCertification(secretKeyRing, primaryUserId, userIdSig);
             }

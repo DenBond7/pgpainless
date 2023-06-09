@@ -41,11 +41,15 @@ import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.exception.KeyException;
 import org.pgpainless.key.OpenPgpFingerprint;
 import org.pgpainless.key.SubkeyIdentifier;
+import org.pgpainless.key.util.KeyIdUtil;
 import org.pgpainless.key.util.RevocationAttributes;
 import org.pgpainless.policy.Policy;
 import org.pgpainless.signature.SignatureUtils;
 import org.pgpainless.signature.consumer.SignaturePicker;
 import org.pgpainless.signature.subpackets.SignatureSubpacketsUtil;
+import org.pgpainless.util.DateUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Utility class to quickly extract certain information from a {@link PGPPublicKeyRing}/{@link PGPSecretKeyRing}.
@@ -54,6 +58,8 @@ public class KeyRingInfo {
 
     private static final Pattern PATTERN_EMAIL_FROM_USERID = Pattern.compile("<([a-zA-Z0-9_!#$%&'*+/=?`{|}~^.-]+@[a-zA-Z0-9.-]+)>");
     private static final Pattern PATTERN_EMAIL_EXPLICIT = Pattern.compile("^([a-zA-Z0-9_!#$%&'*+/=?`{|}~^.-]+@[a-zA-Z0-9.-]+)$");
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(KeyRingInfo.class);
 
     private final PGPKeyRing keys;
     private final Signatures signatures;
@@ -68,7 +74,9 @@ public class KeyRingInfo {
      * @param signature signature
      * @return info of key ring at signature creation time
      */
-    public static KeyRingInfo evaluateForSignature(PGPKeyRing keyRing, PGPSignature signature) {
+    @Nonnull
+    public static KeyRingInfo evaluateForSignature(@Nonnull PGPKeyRing keyRing,
+                                                   @Nonnull PGPSignature signature) {
         return new KeyRingInfo(keyRing, signature.getCreationTime());
     }
 
@@ -77,7 +85,7 @@ public class KeyRingInfo {
      *
      * @param keys key ring
      */
-    public KeyRingInfo(PGPKeyRing keys) {
+    public KeyRingInfo(@Nonnull PGPKeyRing keys) {
         this(keys, new Date());
     }
 
@@ -87,7 +95,8 @@ public class KeyRingInfo {
      * @param keys key ring
      * @param referenceDate date of validation
      */
-    public KeyRingInfo(PGPKeyRing keys, Date referenceDate) {
+    public KeyRingInfo(@Nonnull PGPKeyRing keys,
+                       @Nonnull Date referenceDate) {
         this(keys, PGPainless.getPolicy(), referenceDate);
     }
 
@@ -98,14 +107,17 @@ public class KeyRingInfo {
      * @param policy policy
      * @param referenceDate validation date
      */
-    public KeyRingInfo(PGPKeyRing keys, Policy policy, Date referenceDate) {
-        this.referenceDate = referenceDate != null ? referenceDate : new Date();
+    public KeyRingInfo(@Nonnull PGPKeyRing keys,
+                       @Nonnull Policy policy,
+                       @Nonnull Date referenceDate) {
+        this.referenceDate = referenceDate;
         this.keys = keys;
         this.signatures = new Signatures(keys, this.referenceDate, policy);
         this.primaryUserId = findPrimaryUserId();
         this.revocationState = findRevocationState();
     }
 
+    @Nonnull
     private RevocationState findRevocationState() {
         PGPSignature revocation = signatures.primaryKeyRevocation;
         if (revocation != null) {
@@ -120,6 +132,7 @@ public class KeyRingInfo {
      *
      * @return public key
      */
+    @Nonnull
     public PGPPublicKey getPublicKey() {
         return keys.getPublicKey();
     }
@@ -130,7 +143,8 @@ public class KeyRingInfo {
      * @param fingerprint fingerprint
      * @return public key or null
      */
-    public @Nullable PGPPublicKey getPublicKey(OpenPgpFingerprint fingerprint) {
+    @Nullable
+    public PGPPublicKey getPublicKey(@Nonnull OpenPgpFingerprint fingerprint) {
         return getPublicKey(fingerprint.getKeyId());
     }
 
@@ -140,7 +154,8 @@ public class KeyRingInfo {
      * @param keyId key id
      * @return public key or null
      */
-    public @Nullable PGPPublicKey getPublicKey(long keyId) {
+    @Nullable
+    public PGPPublicKey getPublicKey(long keyId) {
         return getPublicKey(keys, keyId);
     }
 
@@ -151,7 +166,8 @@ public class KeyRingInfo {
      * @param keyId key id
      * @return public key or null
      */
-    public static @Nullable PGPPublicKey getPublicKey(PGPKeyRing keyRing, long keyId) {
+    @Nullable
+    public static PGPPublicKey getPublicKey(@Nonnull PGPKeyRing keyRing, long keyId) {
         return keyRing.getPublicKey(keyId);
     }
 
@@ -204,6 +220,7 @@ public class KeyRingInfo {
      *
      * @return list of public keys
      */
+    @Nonnull
     public List<PGPPublicKey> getPublicKeys() {
         Iterator<PGPPublicKey> iterator = keys.getPublicKeys();
         List<PGPPublicKey> list = iteratorToList(iterator);
@@ -215,7 +232,8 @@ public class KeyRingInfo {
      *
      * @return primary secret key or null if the key ring is public
      */
-    public @Nullable PGPSecretKey getSecretKey() {
+    @Nullable
+    public PGPSecretKey getSecretKey() {
         if (keys instanceof PGPSecretKeyRing) {
             PGPSecretKeyRing secretKeys = (PGPSecretKeyRing) keys;
             return secretKeys.getSecretKey();
@@ -229,7 +247,8 @@ public class KeyRingInfo {
      * @param fingerprint fingerprint
      * @return secret key or null
      */
-    public @Nullable PGPSecretKey getSecretKey(OpenPgpFingerprint fingerprint) {
+    @Nullable
+    public PGPSecretKey getSecretKey(@Nonnull OpenPgpFingerprint fingerprint) {
         return getSecretKey(fingerprint.getKeyId());
     }
 
@@ -239,7 +258,8 @@ public class KeyRingInfo {
      * @param keyId key id
      * @return secret key or null
      */
-    public @Nullable PGPSecretKey getSecretKey(long keyId) {
+    @Nullable
+    public PGPSecretKey getSecretKey(long keyId) {
         if (keys instanceof PGPSecretKeyRing) {
             return ((PGPSecretKeyRing) keys).getSecretKey(keyId);
         }
@@ -253,6 +273,7 @@ public class KeyRingInfo {
      *
      * @return list of secret keys
      */
+    @Nonnull
     public List<PGPSecretKey> getSecretKeys() {
         if (keys instanceof PGPSecretKeyRing) {
             PGPSecretKeyRing secretKeys = (PGPSecretKeyRing) keys;
@@ -276,22 +297,25 @@ public class KeyRingInfo {
      *
      * @return fingerprint
      */
+    @Nonnull
     public OpenPgpFingerprint getFingerprint() {
         return OpenPgpFingerprint.of(getPublicKey());
     }
 
-    public @Nullable String getPrimaryUserId() {
+    @Nullable
+    public String getPrimaryUserId() {
         return primaryUserId;
     }
 
     /**
      * Return the current primary user-id of the key ring.
-     *
+     * <p>
      * Note: If no user-id is marked as primary key using a {@link PrimaryUserID} packet,
      * this method returns the first user-id on the key, otherwise null.
      *
      * @return primary user-id or null
      */
+    @Nullable
     private String findPrimaryUserId() {
         String primaryUserId = null;
         Date currentModificationDate = null;
@@ -336,10 +360,10 @@ public class KeyRingInfo {
      *
      * @return list of user-ids
      */
+    @Nonnull
     public List<String> getUserIds() {
         Iterator<String> iterator = getPublicKey().getUserIDs();
-        List<String> userIds = iteratorToList(iterator);
-        return userIds;
+        return iteratorToList(iterator);
     }
 
     /**
@@ -347,6 +371,7 @@ public class KeyRingInfo {
      *
      * @return valid user-ids
      */
+    @Nonnull
     public List<String> getValidUserIds() {
         List<String> valid = new ArrayList<>();
         List<String> userIds = getUserIds();
@@ -363,6 +388,7 @@ public class KeyRingInfo {
      *
      * @return bound user-ids
      */
+    @Nonnull
     public List<String> getValidAndExpiredUserIds() {
         List<String> probablyExpired = new ArrayList<>();
         List<String> userIds = getUserIds();
@@ -401,21 +427,25 @@ public class KeyRingInfo {
      * @param userId user-id
      * @return true if user-id is valid
      */
-    public boolean isUserIdValid(String userId) {
+    public boolean isUserIdValid(@Nonnull CharSequence userId) {
+        if (primaryUserId == null) {
+            // No primary userID? No userID at all!
+            return false;
+        }
+
         if (!userId.equals(primaryUserId)) {
             if (!isUserIdBound(primaryUserId)) {
-                // primary user-id not valid
+                // primary user-id not valid? UserID not valid!
                 return false;
             }
         }
         return isUserIdBound(userId);
     }
 
-
-    private boolean isUserIdBound(String userId) {
-
-        PGPSignature certification = signatures.userIdCertifications.get(userId);
-        PGPSignature revocation = signatures.userIdRevocations.get(userId);
+    private boolean isUserIdBound(@Nonnull CharSequence userId) {
+        String userIdString = userId.toString();
+        PGPSignature certification = signatures.userIdCertifications.get(userIdString);
+        PGPSignature revocation = signatures.userIdRevocations.get(userIdString);
 
         if (certification == null) {
             return false;
@@ -447,6 +477,7 @@ public class KeyRingInfo {
      *
      * @return email addresses
      */
+    @Nonnull
     public List<String> getEmailAddresses() {
         List<String> userIds = getUserIds();
         List<String> emails = new ArrayList<>();
@@ -466,12 +497,13 @@ public class KeyRingInfo {
 
     /**
      * Return the latest direct-key self signature.
-     *
+     * <p>
      * Note: This signature might be expired (check with {@link SignatureUtils#isSignatureExpired(PGPSignature)}).
      *
      * @return latest direct key self-signature or null
      */
-    public @Nullable PGPSignature getLatestDirectKeySelfSignature() {
+    @Nullable
+    public PGPSignature getLatestDirectKeySelfSignature() {
         return signatures.primaryKeySelfSignature;
     }
 
@@ -480,7 +512,8 @@ public class KeyRingInfo {
      *
      * @return revocation or null
      */
-    public @Nullable PGPSignature getRevocationSelfSignature() {
+    @Nullable
+    public PGPSignature getRevocationSelfSignature() {
         return signatures.primaryKeyRevocation;
     }
 
@@ -490,8 +523,9 @@ public class KeyRingInfo {
      * @param userId user-id
      * @return certification signature or null
      */
-    public @Nullable PGPSignature getLatestUserIdCertification(String userId) {
-        return signatures.userIdCertifications.get(userId);
+    @Nullable
+    public PGPSignature getLatestUserIdCertification(@Nonnull CharSequence userId) {
+        return signatures.userIdCertifications.get(userId.toString());
     }
 
     /**
@@ -500,8 +534,9 @@ public class KeyRingInfo {
      * @param userId user-id
      * @return revocation or null
      */
-    public @Nullable PGPSignature getUserIdRevocation(String userId) {
-        return signatures.userIdRevocations.get(userId);
+    @Nullable
+    public PGPSignature getUserIdRevocation(@Nonnull CharSequence userId) {
+        return signatures.userIdRevocations.get(userId.toString());
     }
 
     /**
@@ -510,7 +545,8 @@ public class KeyRingInfo {
      * @param keyId subkey id
      * @return subkey binding signature or null
      */
-    public @Nullable PGPSignature getCurrentSubkeyBindingSignature(long keyId) {
+    @Nullable
+    public PGPSignature getCurrentSubkeyBindingSignature(long keyId) {
         return signatures.subkeyBindings.get(keyId);
     }
 
@@ -520,7 +556,8 @@ public class KeyRingInfo {
      * @param keyId subkey id
      * @return subkey binding revocation or null
      */
-    public @Nullable PGPSignature getSubkeyRevocationSignature(long keyId) {
+    @Nullable
+    public PGPSignature getSubkeyRevocationSignature(long keyId) {
         return signatures.subkeyRevocations.get(keyId);
     }
 
@@ -529,7 +566,8 @@ public class KeyRingInfo {
      * @param keyId key-id
      * @return list of key flags
      */
-    public @Nonnull List<KeyFlag> getKeyFlagsOf(long keyId) {
+    @Nonnull
+    public List<KeyFlag> getKeyFlagsOf(long keyId) {
         // key is primary key
         if (getPublicKey().getKeyID() == keyId) {
 
@@ -569,7 +607,8 @@ public class KeyRingInfo {
      * @param userId user-id
      * @return key flags
      */
-    public @Nonnull List<KeyFlag> getKeyFlagsOf(String userId) {
+    @Nonnull
+    public List<KeyFlag> getKeyFlagsOf(String userId) {
         if (!isUserIdValid(userId)) {
             return Collections.emptyList();
         }
@@ -601,6 +640,7 @@ public class KeyRingInfo {
      *
      * @return creation date
      */
+    @Nonnull
     public Date getCreationDate() {
         return getPublicKey().getCreationTime();
     }
@@ -611,7 +651,8 @@ public class KeyRingInfo {
      *
      * @return last modification date.
      */
-    public @Nullable Date getLastModified() {
+    @Nonnull
+    public Date getLastModified() {
         PGPSignature mostRecent = getMostRecentSignature();
         if (mostRecent == null) {
             // No sigs found. Return public key creation date instead.
@@ -625,7 +666,8 @@ public class KeyRingInfo {
      *
      * @return latest key creation time
      */
-    public @Nonnull Date getLatestKeyCreationDate() {
+    @Nonnull
+    public Date getLatestKeyCreationDate() {
         Date latestCreation = null;
         for (PGPPublicKey key : getPublicKeys()) {
             if (!isKeyValidlyBound(key.getKeyID())) {
@@ -642,7 +684,8 @@ public class KeyRingInfo {
         return latestCreation;
     }
 
-    private @Nullable PGPSignature getMostRecentSignature() {
+    @Nullable
+    private PGPSignature getMostRecentSignature() {
         Set<PGPSignature> allSignatures = new HashSet<>();
         PGPSignature mostRecentSelfSignature = getLatestDirectKeySelfSignature();
         PGPSignature revocationSelfSignature = getRevocationSelfSignature();
@@ -662,6 +705,7 @@ public class KeyRingInfo {
         return mostRecent;
     }
 
+    @Nonnull
     public RevocationState getRevocationState() {
         return revocationState;
     }
@@ -671,7 +715,8 @@ public class KeyRingInfo {
      *
      * @return revocation date or null
      */
-    public @Nullable Date getRevocationDate() {
+    @Nullable
+    public Date getRevocationDate() {
         return getRevocationState().isSoftRevocation() ? getRevocationState().getDate() : null;
     }
 
@@ -680,7 +725,8 @@ public class KeyRingInfo {
      *
      * @return expiration date
      */
-    public @Nullable Date getPrimaryKeyExpirationDate() {
+    @Nullable
+    public Date getPrimaryKeyExpirationDate() {
         PGPSignature directKeySig = getLatestDirectKeySelfSignature();
         Date directKeyExpirationDate = null;
         if (directKeySig != null) {
@@ -716,6 +762,7 @@ public class KeyRingInfo {
         return userIdExpirationDate;
     }
 
+    @Nullable
     public String getPossiblyExpiredPrimaryUserId() {
         String validPrimaryUserId = getPrimaryUserId();
         if (validPrimaryUserId != null) {
@@ -754,7 +801,8 @@ public class KeyRingInfo {
      * @param fingerprint subkey fingerprint
      * @return expiration date or null
      */
-    public @Nullable Date getSubkeyExpirationDate(OpenPgpFingerprint fingerprint) {
+    @Nullable
+    public Date getSubkeyExpirationDate(OpenPgpFingerprint fingerprint) {
         if (getPublicKey().getKeyID() == fingerprint.getKeyId()) {
             return getPrimaryKeyExpirationDate();
         }
@@ -776,12 +824,13 @@ public class KeyRingInfo {
      * Return the latest date on which  the key ring is still usable for the given key flag.
      * If only a subkey is carrying the required flag and the primary key expires earlier than the subkey,
      * the expiry date of the primary key is returned.
-     *
+     * <p>
      * This method might return null, if the primary key and a subkey with the required flag does not expire.
      * @param use key flag representing the use case, e.g. {@link KeyFlag#SIGN_DATA} or
      * {@link KeyFlag#ENCRYPT_COMMS}/{@link KeyFlag#ENCRYPT_STORAGE}.
      * @return latest date on which the key ring can be used for the given use case, or null if it can be used indefinitely.
      */
+    @Nullable
     public Date getExpirationDateForUse(KeyFlag use) {
         if (use == KeyFlag.SPLIT || use == KeyFlag.SHARED) {
             throw new IllegalArgumentException("SPLIT and SHARED are not uses, but properties.");
@@ -808,20 +857,18 @@ public class KeyRingInfo {
         }
 
         if (nonExpiringSubkeys.isEmpty()) {
-            if (latestSubkeyExpirationDate != null) {
-                if (primaryExpiration == null) {
-                    return latestSubkeyExpirationDate;
-                }
-                if (latestSubkeyExpirationDate.before(primaryExpiration)) {
-                    return latestSubkeyExpirationDate;
-                }
+            if (primaryExpiration == null) {
+                return latestSubkeyExpirationDate;
+            }
+            if (latestSubkeyExpirationDate.before(primaryExpiration)) {
+                return latestSubkeyExpirationDate;
             }
         }
         return primaryExpiration;
     }
 
-    public boolean isHardRevoked(String userId) {
-        PGPSignature revocation = signatures.userIdRevocations.get(userId);
+    public boolean isHardRevoked(@Nonnull CharSequence userId) {
+        PGPSignature revocation = signatures.userIdRevocations.get(userId.toString());
         if (revocation == null) {
             return false;
         }
@@ -901,9 +948,11 @@ public class KeyRingInfo {
      * @param purpose purpose (encrypt data at rest / communications)
      * @return encryption subkeys
      */
-    public @Nonnull List<PGPPublicKey> getEncryptionSubkeys(EncryptionPurpose purpose) {
+    @Nonnull
+    public List<PGPPublicKey> getEncryptionSubkeys(@Nonnull EncryptionPurpose purpose) {
         Date primaryExpiration = getPrimaryKeyExpirationDate();
-        if (primaryExpiration != null && primaryExpiration.before(new Date())) {
+        if (primaryExpiration != null && primaryExpiration.before(referenceDate)) {
+            LOGGER.debug("Certificate is expired: Primary key is expired on " + DateUtil.formatUTCDate(primaryExpiration));
             return Collections.emptyList();
         }
 
@@ -913,15 +962,18 @@ public class KeyRingInfo {
             PGPPublicKey subKey = subkeys.next();
 
             if (!isKeyValidlyBound(subKey.getKeyID())) {
+                LOGGER.debug("(Sub?)-Key " + KeyIdUtil.formatKeyId(subKey.getKeyID()) + " is not validly bound.");
                 continue;
             }
 
             Date subkeyExpiration = getSubkeyExpirationDate(OpenPgpFingerprint.of(subKey));
-            if (subkeyExpiration != null && subkeyExpiration.before(new Date())) {
+            if (subkeyExpiration != null && subkeyExpiration.before(referenceDate)) {
+                LOGGER.debug("(Sub?)-Key  " + KeyIdUtil.formatKeyId(subKey.getKeyID()) + " is expired on " + DateUtil.formatUTCDate(subkeyExpiration));
                 continue;
             }
 
             if (!subKey.isEncryptionKey()) {
+                LOGGER.debug("(Sub?)-Key " + KeyIdUtil.formatKeyId(subKey.getKeyID()) + " algorithm is not capable of encryption.");
                 continue;
             }
 
@@ -948,12 +1000,50 @@ public class KeyRingInfo {
     }
 
     /**
+     * Return a list of all subkeys that could potentially be used to decrypt a message.
+     * Contrary to {@link #getEncryptionSubkeys(EncryptionPurpose)}, this method also includes revoked, expired keys,
+     * as well as keys which do not carry any encryption keyflags.
+     * Merely keys which use algorithms that cannot be used for encryption at all are excluded.
+     * That way, decryption of messages produced by faulty implementations can still be decrypted.
+     *
+     * @return decryption keys
+     */
+    @Nonnull
+    public List<PGPPublicKey> getDecryptionSubkeys() {
+        Iterator<PGPPublicKey> subkeys = keys.getPublicKeys();
+        List<PGPPublicKey> decryptionKeys = new ArrayList<>();
+
+        while (subkeys.hasNext()) {
+            PGPPublicKey subKey = subkeys.next();
+
+            // subkeys have been valid at some point
+            if (subKey.getKeyID() != getKeyId()) {
+                PGPSignature binding = signatures.subkeyBindings.get(subKey.getKeyID());
+                if (binding == null) {
+                    LOGGER.debug("Subkey " + KeyIdUtil.formatKeyId(subKey.getKeyID()) + " was never validly bound.");
+                    continue;
+                }
+            }
+
+            // Public-Key algorithm can encrypt
+            if (!subKey.isEncryptionKey()) {
+                LOGGER.debug("(Sub?)-Key " + KeyIdUtil.formatKeyId(subKey.getKeyID()) + " is not encryption-capable.");
+                continue;
+            }
+
+            decryptionKeys.add(subKey);
+        }
+        return decryptionKeys;
+    }
+
+    /**
      * Return a list of all keys which carry the provided key flag in their signature.
      *
      * @param flag flag
      * @return keys with flag
      */
-    public List<PGPPublicKey> getKeysWithKeyFlag(KeyFlag flag) {
+    @Nonnull
+    public List<PGPPublicKey> getKeysWithKeyFlag(@Nonnull KeyFlag flag) {
         List<PGPPublicKey> keysWithFlag = new ArrayList<>();
         for (PGPPublicKey key : getPublicKeys()) {
             List<KeyFlag> keyFlags = getKeyFlagsOf(key.getKeyID());
@@ -975,11 +1065,13 @@ public class KeyRingInfo {
      * @param purpose encryption purpose
      * @return encryption subkeys
      */
-    public @Nonnull List<PGPPublicKey> getEncryptionSubkeys(String userId, EncryptionPurpose purpose) {
+    @Nonnull
+    public List<PGPPublicKey> getEncryptionSubkeys(@Nullable CharSequence userId,
+                                                   @Nonnull EncryptionPurpose purpose) {
         if (userId != null && !isUserIdValid(userId)) {
             throw new KeyException.UnboundUserIdException(
                     OpenPgpFingerprint.of(keys),
-                    userId,
+                    userId.toString(),
                     getLatestUserIdCertification(userId),
                     getUserIdRevocation(userId)
             );
@@ -993,7 +1085,8 @@ public class KeyRingInfo {
      *
      * @return signing keys
      */
-    public @Nonnull List<PGPPublicKey> getSigningSubkeys() {
+    @Nonnull
+    public List<PGPPublicKey> getSigningSubkeys() {
         Iterator<PGPPublicKey> subkeys = keys.getPublicKeys();
         List<PGPPublicKey> signingKeys = new ArrayList<>();
         while (subkeys.hasNext()) {
@@ -1011,39 +1104,48 @@ public class KeyRingInfo {
         return signingKeys;
     }
 
+    @Nonnull
     public Set<HashAlgorithm> getPreferredHashAlgorithms() {
         return getPreferredHashAlgorithms(getPrimaryUserId());
     }
 
-    public Set<HashAlgorithm> getPreferredHashAlgorithms(String userId) {
+    @Nonnull
+    public Set<HashAlgorithm> getPreferredHashAlgorithms(@Nullable CharSequence userId) {
         return getKeyAccessor(userId, getKeyId()).getPreferredHashAlgorithms();
     }
 
+    @Nonnull
     public Set<HashAlgorithm> getPreferredHashAlgorithms(long keyId) {
         return new KeyAccessor.SubKey(this, new SubkeyIdentifier(keys, keyId))
                 .getPreferredHashAlgorithms();
     }
 
+    @Nonnull
     public Set<SymmetricKeyAlgorithm> getPreferredSymmetricKeyAlgorithms() {
         return getPreferredSymmetricKeyAlgorithms(getPrimaryUserId());
     }
 
-    public Set<SymmetricKeyAlgorithm> getPreferredSymmetricKeyAlgorithms(String userId) {
+    @Nonnull
+    public Set<SymmetricKeyAlgorithm> getPreferredSymmetricKeyAlgorithms(@Nullable CharSequence userId) {
         return getKeyAccessor(userId, getKeyId()).getPreferredSymmetricKeyAlgorithms();
     }
 
+    @Nonnull
     public Set<SymmetricKeyAlgorithm> getPreferredSymmetricKeyAlgorithms(long keyId) {
         return new KeyAccessor.SubKey(this, new SubkeyIdentifier(keys, keyId)).getPreferredSymmetricKeyAlgorithms();
     }
 
+    @Nonnull
     public Set<CompressionAlgorithm> getPreferredCompressionAlgorithms() {
         return getPreferredCompressionAlgorithms(getPrimaryUserId());
     }
 
-    public Set<CompressionAlgorithm> getPreferredCompressionAlgorithms(String userId) {
+    @Nonnull
+    public Set<CompressionAlgorithm> getPreferredCompressionAlgorithms(@Nullable CharSequence userId) {
         return getKeyAccessor(userId, getKeyId()).getPreferredCompressionAlgorithms();
     }
 
+    @Nonnull
     public Set<CompressionAlgorithm> getPreferredCompressionAlgorithms(long keyId) {
         return new KeyAccessor.SubKey(this, new SubkeyIdentifier(keys, keyId)).getPreferredCompressionAlgorithms();
     }
@@ -1087,7 +1189,7 @@ public class KeyRingInfo {
     /**
      * Returns true, if this {@link KeyRingInfo} is based on a {@link PGPSecretKeyRing}, which has a valid signing key
      * which is ready to be used (i.e. secret key is present and is not on a smart-card).
-     *
+     * <p>
      * If you just want to check, whether a key / certificate has signing capable subkeys,
      * use {@link #isSigningCapable()} instead.
      *
@@ -1100,38 +1202,47 @@ public class KeyRingInfo {
 
         List<PGPPublicKey> signingKeys = getSigningSubkeys();
         for (PGPPublicKey pk : signingKeys) {
-            PGPSecretKey sk = getSecretKey(pk.getKeyID());
-            if (sk == null) {
-                // Missing secret key
-                continue;
-            }
-            S2K s2K = sk.getS2K();
-            // Unencrypted key
-            if (s2K == null) {
-                return true;
-            }
-
-            // Secret key on smart-card
-            int s2kType = s2K.getType();
-            if (s2kType >= 100 && s2kType <= 110) {
-                continue;
-            }
-            // protected secret key
-            return true;
+            return isSecretKeyAvailable(pk.getKeyID());
         }
         // No usable secret key found
         return false;
     }
 
-    private KeyAccessor getKeyAccessor(@Nullable String userId, long keyID) {
+    public boolean isSecretKeyAvailable(long keyId) {
+        PGPSecretKey sk = getSecretKey(keyId);
+        if (sk == null) {
+            // Missing secret key
+            return false;
+        }
+        S2K s2K = sk.getS2K();
+        // Unencrypted key
+        if (s2K == null) {
+            return true;
+        }
+
+        // Secret key on smart-card
+        int s2kType = s2K.getType();
+        if (s2kType >= 100 && s2kType <= 110) {
+            return false;
+        }
+        // protected secret key
+        return true;
+    }
+
+    private KeyAccessor getKeyAccessor(@Nullable CharSequence userId, long keyID) {
         if (getPublicKey(keyID) == null) {
             throw new NoSuchElementException("No subkey with key id " + Long.toHexString(keyID) + " found on this key.");
         }
-        if (userId != null && !getUserIds().contains(userId)) {
+
+        if (userId != null && !getUserIds().contains(userId.toString())) {
             throw new NoSuchElementException("No user-id '" + userId + "' found on this key.");
         }
-        return userId == null ? new KeyAccessor.ViaKeyId(this, new SubkeyIdentifier(keys, keyID))
-                : new KeyAccessor.ViaUserId(this, new SubkeyIdentifier(keys, keyID), userId);
+
+        if (userId != null) {
+            return new KeyAccessor.ViaUserId(this, new SubkeyIdentifier(keys, keyID), userId.toString());
+        } else {
+            return new KeyAccessor.ViaKeyId(this, new SubkeyIdentifier(keys, keyID));
+        }
     }
 
     public static class Signatures {
@@ -1143,7 +1254,9 @@ public class KeyRingInfo {
         private final Map<Long, PGPSignature> subkeyRevocations;
         private final Map<Long, PGPSignature> subkeyBindings;
 
-        public Signatures(PGPKeyRing keyRing, Date referenceDate, Policy policy) {
+        public Signatures(@Nonnull PGPKeyRing keyRing,
+                          @Nonnull Date referenceDate,
+                          @Nonnull Policy policy) {
             primaryKeyRevocation = SignaturePicker.pickCurrentRevocationSelfSignature(keyRing, policy, referenceDate);
             primaryKeySelfSignature = SignaturePicker.pickLatestDirectKeySignature(keyRing, policy, referenceDate);
             userIdRevocations = new HashMap<>();

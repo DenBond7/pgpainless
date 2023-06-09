@@ -44,22 +44,22 @@ public class ManagePolicy {
     public void resetPolicy() {
         // Policy for hash algorithms in non-revocation signatures
         PGPainless.getPolicy().setSignatureHashAlgorithmPolicy(
-                Policy.HashAlgorithmPolicy.defaultSignatureAlgorithmPolicy());
+                Policy.HashAlgorithmPolicy.static2022SignatureHashAlgorithmPolicy());
         // Policy for hash algorithms in revocation signatures
         PGPainless.getPolicy().setRevocationSignatureHashAlgorithmPolicy(
-                Policy.HashAlgorithmPolicy.defaultRevocationSignatureHashAlgorithmPolicy());
+                Policy.HashAlgorithmPolicy.static2022RevocationSignatureHashAlgorithmPolicy());
         // Policy for public key algorithms and bit lengths
         PGPainless.getPolicy().setPublicKeyAlgorithmPolicy(
-                Policy.PublicKeyAlgorithmPolicy.defaultPublicKeyAlgorithmPolicy());
+                Policy.PublicKeyAlgorithmPolicy.bsi2021PublicKeyAlgorithmPolicy());
         // Policy for acceptable symmetric encryption algorithms when decrypting messages
         PGPainless.getPolicy().setSymmetricKeyDecryptionAlgorithmPolicy(
-                Policy.SymmetricKeyAlgorithmPolicy.defaultSymmetricKeyDecryptionAlgorithmPolicy());
+                Policy.SymmetricKeyAlgorithmPolicy.symmetricKeyDecryptionPolicy2022());
         // Policy for acceptable symmetric encryption algorithms when encrypting messages
         PGPainless.getPolicy().setSymmetricKeyEncryptionAlgorithmPolicy(
-                Policy.SymmetricKeyAlgorithmPolicy.defaultSymmetricKeyEncryptionAlgorithmPolicy());
+                Policy.SymmetricKeyAlgorithmPolicy.symmetricKeyEncryptionPolicy2022());
         // Policy for acceptable compression algorithms
         PGPainless.getPolicy().setCompressionAlgorithmPolicy(
-                Policy.CompressionAlgorithmPolicy.defaultCompressionAlgorithmPolicy());
+                Policy.CompressionAlgorithmPolicy.anyCompressionAlgorithmPolicy());
         // Known notations
         PGPainless.getPolicy().getNotationRegistry().clear();
     }
@@ -73,7 +73,7 @@ public class ManagePolicy {
      *
      * Per default, PGPainless will reject non-revocation signatures that use SHA-1 as hash algorithm.
      * To inspect PGPainless' default signature hash algorithm policy, see
-     * {@link Policy.HashAlgorithmPolicy#defaultSignatureAlgorithmPolicy()}.
+     * {@link Policy.HashAlgorithmPolicy#static2022SignatureHashAlgorithmPolicy()}.
      *
      * Since it may be a valid use-case to accept signatures made using SHA-1 as part of a less strict policy,
      * this example demonstrates how to set a custom signature hash algorithm policy.
@@ -88,7 +88,6 @@ public class ManagePolicy {
         // Per default, non-revocation signatures using SHA-1 are rejected
         assertFalse(sigHashAlgoPolicy.isAcceptable(HashAlgorithm.SHA1));
 
-
         // Create a new custom policy which contains SHA-1
         Policy.HashAlgorithmPolicy customPolicy = new Policy.HashAlgorithmPolicy(
                 // The default hash algorithm will be used when hash algorithm negotiation fails when creating a sig
@@ -97,7 +96,6 @@ public class ManagePolicy {
                 Arrays.asList(HashAlgorithm.SHA512, HashAlgorithm.SHA384, HashAlgorithm.SHA256, HashAlgorithm.SHA224, HashAlgorithm.SHA1));
         // Set the hash algo policy as policy for non-revocation signatures
         policy.setSignatureHashAlgorithmPolicy(customPolicy);
-
 
         sigHashAlgoPolicy = policy.getSignatureHashAlgorithmPolicy();
         assertTrue(sigHashAlgoPolicy.isAcceptable(HashAlgorithm.SHA512));
@@ -108,7 +106,8 @@ public class ManagePolicy {
     /**
      * Similar to hash algorithms, {@link PublicKeyAlgorithm PublicKeyAlgorithms} tend to get outdated eventually.
      * Per default, PGPainless will reject signatures made by keys of unacceptable algorithm or length.
-     * See {@link Policy.PublicKeyAlgorithmPolicy#defaultPublicKeyAlgorithmPolicy()} to inspect PGPainless' defaults.
+     * See {@link Policy.PublicKeyAlgorithmPolicy#bsi2021PublicKeyAlgorithmPolicy()}
+     * to inspect PGPainless' defaults.
      *
      * This example demonstrates how to set a custom public key algorithm policy.
      */
@@ -121,7 +120,6 @@ public class ManagePolicy {
         assertFalse(pkAlgorithmPolicy.isAcceptable(PublicKeyAlgorithm.RSA_GENERAL, 1024));
         assertTrue(pkAlgorithmPolicy.isAcceptable(PublicKeyAlgorithm.ECDSA, 256));
 
-
         Policy.PublicKeyAlgorithmPolicy customPolicy = new Policy.PublicKeyAlgorithmPolicy(
                 new HashMap<PublicKeyAlgorithm, Integer>(){{
                     // Put minimum bit strengths for acceptable algorithms.
@@ -131,7 +129,6 @@ public class ManagePolicy {
                 }}
         );
         policy.setPublicKeyAlgorithmPolicy(customPolicy);
-
 
         pkAlgorithmPolicy = policy.getPublicKeyAlgorithmPolicy();
         assertTrue(pkAlgorithmPolicy.isAcceptable(PublicKeyAlgorithm.RSA_GENERAL, 4096));
@@ -155,9 +152,7 @@ public class ManagePolicy {
         NotationRegistry notationRegistry = policy.getNotationRegistry();
         assertFalse(notationRegistry.isKnownNotation("unknown@pgpainless.org"));
 
-
         notationRegistry.addKnownNotation("unknown@pgpainless.org");
-
 
         assertTrue(notationRegistry.isKnownNotation("unknown@pgpainless.org"));
     }

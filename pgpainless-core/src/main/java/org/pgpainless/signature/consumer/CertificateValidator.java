@@ -74,6 +74,7 @@ public final class CertificateValidator {
             PGPSignature revocation = primaryKeyRevocationIterator.next();
             if (revocation.getKeyID() != primaryKey.getKeyID()) {
                 // Revocation was not made by primary key, skip
+                continue;
                 // TODO: What about external revocation keys?
             }
             try {
@@ -171,7 +172,9 @@ public final class CertificateValidator {
 
         if (signingSubkey == primaryKey) {
             if (!directKeySignatures.isEmpty()) {
-                if (KeyFlag.hasKeyFlag(SignatureSubpacketsUtil.getKeyFlags(directKeySignatures.get(0)).getFlags(), KeyFlag.SIGN_DATA)) {
+                PGPSignature directKeySignature = directKeySignatures.get(0);
+                KeyFlags keyFlags = SignatureSubpacketsUtil.getKeyFlags(directKeySignature);
+                if (keyFlags != null && KeyFlag.hasKeyFlag(keyFlags.getFlags(), KeyFlag.SIGN_DATA)) {
                     return true;
                 }
             }
@@ -225,7 +228,7 @@ public final class CertificateValidator {
                 }
                 PGPSignature directKeySig = directKeySignatures.get(0);
                 KeyFlags directKeyFlags = SignatureSubpacketsUtil.getKeyFlags(directKeySig);
-                if (!KeyFlag.hasKeyFlag(directKeyFlags.getFlags(), KeyFlag.SIGN_DATA)) {
+                if (directKeyFlags == null || !KeyFlag.hasKeyFlag(directKeyFlags.getFlags(), KeyFlag.SIGN_DATA)) {
                     throw new SignatureValidationException("Signature was made by key which is not capable of signing (no keyflags on binding sig, no SIGN flag on direct-key sig).");
                 }
             } else if (!KeyFlag.hasKeyFlag(keyFlags.getFlags(), KeyFlag.SIGN_DATA)) {

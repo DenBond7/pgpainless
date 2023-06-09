@@ -179,7 +179,6 @@ public interface SecretKeyRingEditorInterface {
      *
      * @throws PGPException in case we cannot generate a binding signature for the subkey
      * @throws IOException in case of an IO error
-     * @throws NoSuchAlgorithmException in case of missing algorithm support in the crypto backend
      */
     SecretKeyRingEditorInterface addSubKey(
             @Nonnull PGPKeyPair subkey,
@@ -188,7 +187,7 @@ public interface SecretKeyRingEditorInterface {
             @Nonnull SecretKeyRingProtector primaryKeyProtector,
             @Nonnull KeyFlag keyFlag,
             KeyFlag... additionalKeyFlags)
-            throws PGPException, IOException, NoSuchAlgorithmException;
+            throws PGPException, IOException;
 
     /**
      * Revoke the key ring.

@@ -140,15 +140,16 @@ public class SignatureSubpacketsUtilTest {
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignatureSubpacketGenerator hashed = new PGPSignatureSubpacketGenerator();
-        hashed.setFeature(true, Feature.toBitmask(Feature.MODIFICATION_DETECTION, Feature.AEAD_ENCRYPTED_DATA));
+        hashed.setFeature(true, Feature.toBitmask(Feature.MODIFICATION_DETECTION, Feature.GNUPG_AEAD_ENCRYPTED_DATA));
         generator.setHashedSubpackets(hashed.generate());
 
         PGPSignature signature = generator.generateCertification(secretKeys.getPublicKey());
         Set<Feature> featureSet = SignatureSubpacketsUtil.parseFeatures(signature);
+        assertNotNull(featureSet);
         assertEquals(2, featureSet.size());
         assertTrue(featureSet.contains(Feature.MODIFICATION_DETECTION));
-        assertTrue(featureSet.contains(Feature.AEAD_ENCRYPTED_DATA));
-        assertFalse(featureSet.contains(Feature.VERSION_5_PUBLIC_KEY));
+        assertTrue(featureSet.contains(Feature.GNUPG_AEAD_ENCRYPTED_DATA));
+        assertFalse(featureSet.contains(Feature.GNUPG_VERSION_5_PUBLIC_KEY));
     }
 
     @Test
@@ -216,6 +217,7 @@ public class SignatureSubpacketsUtilTest {
         PGPSignature signature = generator.generateCertification(secretKeys.getPublicKey());
 
         RevocationKey revocationKey = SignatureSubpacketsUtil.getRevocationKey(signature);
+        assertNotNull(revocationKey);
         assertArrayEquals(secretKeys.getPublicKey().getFingerprint(), revocationKey.getFingerprint());
         assertEquals(secretKeys.getPublicKey().getAlgorithm(), revocationKey.getAlgorithm());
     }
@@ -277,6 +279,7 @@ public class SignatureSubpacketsUtilTest {
 
         PGPSignature signature = generator.generateCertification(secretKeys.getPublicKey());
         TrustSignature trustSignature = SignatureSubpacketsUtil.getTrustSignature(signature);
+        assertNotNull(trustSignature);
         assertEquals(10, trustSignature.getDepth());
         assertEquals(3, trustSignature.getTrustAmount());
     }

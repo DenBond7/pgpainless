@@ -5,6 +5,166 @@ SPDX-License-Identifier: CC0-1.0
 
 # PGPainless Changelog
 
+## 1.5.3-SNAPSHOT
+- Fix minimal bit-strength check for signing-subkeys accidentally comparing the bit-strength of the primary key
+- `SigningOptions`: Add new methods to add signatures using a single, chosen signing subkey
+
+## 1.5.2
+- Bugfix: Create proper direct-key signatures
+- `KeyRingTemplates`:
+  - Add `rsaKeyRing()` for generating RSA keys with primary key and dedicated signing, encryption subkeys
+  - Reduce number of template methods by replacing `UserId`, `String` arguments with `CharSequence`
+- Add `MessageMetadata.getRecipientKeyIds()`
+- Work towards more null-safe API by annotating methods in `EncryptionOptions`, `SigningOptions`, `KeyRingInfo`, `PGPainless` with `@Nonnull`, `@Nullable`
+- `KeyRingUtils`: Removed `removeSecretKey()` in favour of `stripSecretKey()`
+- General code cleanup
+- SOP: generating keys with `rfc4880` profile now generates key with primary key and subkeys
+- Deprecate ElGamal key type
+- Key generation: Set expiration period of 5 years by default
+- Set AES-128 as default fallback symmetric algorithm
+- `ProducerOptions`: Allow setting custom version header when encrypting/signing message
+
+## 1.5.2-rc1
+- Bump `sop-java` to `6.1.0`
+- Normalize `OpenPgpMessageInputStream.read()` behaviour when reading past the stream
+  - Instead of throwing a `MalformedOpenPgpMessageException` which could throw off unsuspecting parsers,
+    we now simply return `-1` like every other `InputStream`.
+
+## 1.5.1
+- SOP: Emit signature `mode:{binary|text}` in `Verification` results
+- core: Relax constraints on decryption subkeys to improve interoperability with broken clients
+    - Allow decryption with revoked keys
+    - Allow decryption with expired keys
+    - Allow decryption with erroneously addressed keys without encryption key flags
+
+## 1.5.0
+- Bump `bcpg-jdk15to18` to `1.73`
+- Bump `bcprov-jdk15to18` to `1.73`
+- Introduce `OpenPgpv6Fingerprint` class
+- Bump `sop-java` to `5.0.0`, implementing [SOP Spec Revision 05](https://www.ietf.org/archive/id/draft-dkg-openpgp-stateless-cli-05.html)
+  - Add support for `list-profiles` subcommand (`generate-key` only for now)
+  - `generate-key`: Add support for `--profile=` option
+    - Add profile `draft-koch-eddsa-for-openpgp-00` which represents status quo.
+    - Add profile `rfc4880` which generates keys based on 4096-bit RSA.
+- Bump `sop-java` to `6.0.0`, implementing [SOP Spec Revision 06](https://www.ietf.org/archive/id/draft-dkg-openpgp-stateless-cli-06.html)
+  - `encrypt`: Add support for `--profile=` option
+    - Add profile `rfc4880` to reflect status quo
+  - `version`: Add support for `--sop-spec` option
+
+## 1.4.4
+- Fix expectations on subpackets of v3 signatures (thanks @bjansen)
+  - Properly verify v3 signatures, which do not yet have signature subpackets, yet we required them to have  
+    a hashed creation date subpacket.
+
+## 1.4.3
+- Bump `sop-java` to `4.1.1`
+- Reuse shared test suite of `sop-java`
+- Add `EncryptionOptions.hasEncryptionMethod()`
+- SOP `encrypt`: Throw `MissingArg` exception if no encryption method was provided
+- Fix redundant dot in exception message (thanks @DenBond7)
+
+## 1.4.2
+- Properly decrypt messages without MDC packets when `ConsumerOptions.setIgnoreMDCErrors(true)` is set
+- Fix crash in `sop generate-key --with-key-password` when more than one user-id is given
+- Revert integration with `pgp-certificate-store`
+- Bump `sop-java` to `4.1.0`
+
+## 1.4.1
+- Add `UserId.parse()` method to parse user-ids into their components
+
+## 1.4.0
+- `sop generate-key`: Add support for keys without user-ids
+- `sop inline-sign --as=clearsigned`: Make signature in TEXT mode
+- Make countermeasures against [KOpenPGP](https://kopenpgp.com/) attacks configurable
+  - Countermeasures are now disabled by default since they are costly and have a specific threat model
+  - Can be enabled by calling `Policy.setEnableKeyParameterValidation(true)`
+
+## 1.4.0-rc2
+- Bump `bcpg-jdk15to18` to `1.72.3`
+- Use BCs `PGPEncryptedDataList.extractSessionKeyEncryptedData()` method
+  to do decryption using session keys. This enables decryption of messages
+  without encrypted session key packets.
+- Use BCs `PGPEncryptedDataList.isIntegrityProtected()` to check for integrity protection
+- Depend on `pgp-certificate-store`
+- Add `ConsumerOptions.addVerificationCerts(PGPCertificateStore)` to allow sourcing certificates from
+  e.g. a [certificate store implementation](https://github.com/pgpainless/cert-d-java).
+- Make `DecryptionStream.getMetadata()` first class
+  - Deprecate `DecryptionStream.getResult()`
+
+## 1.4.0-rc1
+- Reimplement message consumption via new `OpenPgpMessageInputStream`
+    - Fix validation of prepended signatures (#314)
+    - Fix validation of nested signatures (#319)
+    - Reject malformed messages (#237)
+        - Utilize new `PDA` syntax verifier class
+        - Allow for custom message syntax via `Syntax` class
+    - Gracefully handle `UnsupportedPacketVersionException` for signatures
+    - Allow plugin decryption code (e.g. to add support for hardware-backed keys (see #318))
+        - Add `HardwareSecurity` utility class
+        - Add `GnuPGDummyKeyUtil` which can be used to mimic GnuPGs proprietary S2K extensions
+          for keys which were placed on hardware tokens
+    - Add `OpenPgpPacket` enum class to enumerate available packet tags
+    - Remove old decryption classes in favor of new implementation
+        - Removed `DecryptionStream` class and replaced with new abstract class
+        - Removed `DecryptionStreamFactory`
+        - Removed `FinalIOException`
+        - Removed `MissingLiteralDataException` (replaced by `MalformedOpenPgpMessageException`)
+    - Introduce `MessageMetadata` class as potential future replacement for `OpenPgpMetadata`.
+        - can be obtained via `((OpenPgpMessageInputStream) decryptionStream).getMetadata();`
+- Add `CachingBcPublicKeyDataDecryptorFactory` which can be extended to prevent costly decryption
+  of session keys
+- Fix: Only verify message integrity once
+- Remove unnecessary `@throws` declarations on `KeyRingReader` methods
+- Remove unnecessary `@throws` declarations on `KeyRingUtils` methods
+- Add `KeyIdUtil.formatKeyId(long id)` to format hexadecimal key-ids.
+- Add `KeyRingUtils.publicKeys(PGPKeyRing keys)`
+- Remove `BCUtil` class
+
+## 1.3.16
+- Bump `sop-java` to `4.1.0`
+- Bump `gradlew` to `7.5`
+
+## 1.3.15
+- Fix crash in `sop generate-key --with-key-password` when more than one user-id is given
+- `sop generate-key`: Allow key generation without user-ids
+- `sop inline-sign --as=clearsigned`: Make signatures of type 'text' instead of 'binary'
+
+## 1.3.14
+- Bump `bcpg` to `1.72.3`
+- Fix DSA key parameter check
+- Use proper method to unlock private signing keys when creating detached signatures
+
+## 1.3.13
+- Bump `sop-java` to `4.0.7`
+
+## 1.3.12
+- Bump `sop-java` to `4.0.5`
+- Fix: `sop inline-sign`: Adopt `--as=clearsigned` instead of `--as=cleartextsigned`
+- SOP: Hide `Version: PGPainless` armor header in all armored outputs
+- Fix: `sop armor`: Do not re-armor already armored data
+
+## 1.3.11
+- Fix: When verifying subkey binding signatures with embedded recycled primary
+  key binding signatures, do not reject signature if primary key binding
+  predates subkey binding
+- SOP `verify`: Forcefully expect `data()` to be non-OpenPGP data
+- SOP `sign`: Fix matching of keys and passphrases
+- CLI: Added tons of tests \o/
+
+## 1.3.10
+- Bump `sop-java` to `4.0.3`
+- Fix: Fix NPE when verifying signature made by key without key flags on direct-key signature
+
+## 1.3.9
+- Bump `sop-java` to `4.0.2`
+- SOP: Improve exception handling
+
+## 1.3.8
+- Bump `bcprov` to `1.72`
+- Bump `bcpg` to `1.72.1`
+- Add `ProducerOptions.setHideArmorHeaders(boolean)` to hide automatically added armor headers
+    in encrypted messages
+
 ## 1.3.7
 - Bugfix: Fix signature verification when `DecryptionStream` is drained byte-by-byte using `read()` call
 - Add `KeyRingUtils.injectCertification(keys, certification)`

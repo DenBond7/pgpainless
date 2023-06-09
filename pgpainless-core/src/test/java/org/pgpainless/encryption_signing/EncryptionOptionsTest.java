@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.IOException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -36,6 +35,8 @@ import org.pgpainless.key.generation.type.eddsa.EdDSACurve;
 import org.pgpainless.key.generation.type.xdh.XDHSpec;
 import org.pgpainless.key.util.KeyRingUtils;
 import org.pgpainless.util.Passphrase;
+
+import javax.annotation.Nonnull;
 
 public class EncryptionOptionsTest {
 
@@ -150,7 +151,7 @@ public class EncryptionOptionsTest {
         assertThrows(KeyException.UnacceptableEncryptionKeyException.class,
                 () -> options.addRecipient(publicKeys, new EncryptionOptions.EncryptionKeySelector() {
                     @Override
-                    public List<PGPPublicKey> selectEncryptionSubkeys(List<PGPPublicKey> encryptionCapableKeys) {
+                    public List<PGPPublicKey> selectEncryptionSubkeys(@Nonnull List<PGPPublicKey> encryptionCapableKeys) {
                         return Collections.emptyList();
                     }
                 }));
@@ -158,14 +159,14 @@ public class EncryptionOptionsTest {
         assertThrows(KeyException.UnacceptableEncryptionKeyException.class,
                 () -> options.addRecipient(publicKeys, "test@pgpainless.org", new EncryptionOptions.EncryptionKeySelector() {
                     @Override
-                    public List<PGPPublicKey> selectEncryptionSubkeys(List<PGPPublicKey> encryptionCapableKeys) {
+                    public List<PGPPublicKey> selectEncryptionSubkeys(@Nonnull List<PGPPublicKey> encryptionCapableKeys) {
                         return Collections.emptyList();
                     }
                 }));
     }
 
     @Test
-    public void testAddRecipients_PGPPublicKeyRingCollection() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, IOException {
+    public void testAddRecipients_PGPPublicKeyRingCollection() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
         PGPPublicKeyRing secondKeyRing = KeyRingUtils.publicKeyRingFrom(
                 PGPainless.generateKeyRing().modernKeyRing("other@pgpainless.org"));
 

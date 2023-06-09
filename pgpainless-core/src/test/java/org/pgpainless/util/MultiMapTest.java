@@ -14,6 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -155,5 +157,44 @@ public class MultiMapTest {
         assertFalse(map.isEmpty());
         assertFalse(map.containsKey("foo"));
         assertTrue(map.containsKey("bingo"));
+    }
+
+    @Test
+    public void putAll() {
+        MultiMap<String, String> map = new MultiMap<>();
+        map.put("A", "1");
+        map.put("A", "2");
+        map.put("B", "1");
+
+        MultiMap<String, String> other = new MultiMap<>();
+        other.put("A", "1");
+        other.put("B", "2");
+        other.put("C", "3");
+
+        map.putAll(other);
+        assertTrue(map.get("A").contains("1"));
+        assertTrue(map.get("A").contains("2"));
+        assertTrue(map.get("B").contains("1"));
+        assertTrue(map.get("B").contains("2"));
+        assertTrue(map.get("C").contains("3"));
+    }
+
+    @Test
+    public void flattenEmptyMap() {
+        MultiMap<String, String> empty = new MultiMap<>();
+        assertEquals(Collections.emptySet(), empty.flatten());
+    }
+
+    @Test
+    public void flattenMap() {
+        MultiMap<String, String> map = new MultiMap<>();
+        map.put("A", "1");
+        map.put("A", "2");
+        map.put("B", "1");
+
+        Set<String> expected = new LinkedHashSet<>();
+        expected.add("1");
+        expected.add("2");
+        assertEquals(expected, map.flatten());
     }
 }

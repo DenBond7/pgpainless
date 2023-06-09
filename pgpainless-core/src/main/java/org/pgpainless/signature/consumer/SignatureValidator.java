@@ -5,6 +5,7 @@
 package org.pgpainless.signature.consumer;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
@@ -115,6 +116,12 @@ public abstract class SignatureValidator {
 
                 try {
                     PGPSignatureList embeddedSignatures = SignatureSubpacketsUtil.getEmbeddedSignature(signature);
+                    if (embeddedSignatures == null) {
+                        throw new SignatureValidationException(
+                                "Missing primary key binding signature on signing capable subkey " +
+                                        Long.toHexString(subkey.getKeyID()), Collections.emptyMap());
+                    }
+
                     boolean hasValidPrimaryKeyBinding = false;
                     Map<PGPSignature, Exception> rejectedEmbeddedSigs = new ConcurrentHashMap<>();
                     for (PGPSignature embedded : embeddedSignatures) {
@@ -158,8 +165,10 @@ public abstract class SignatureValidator {
             @Override
             public void verify(PGPSignature signature) throws SignatureValidationException {
                 signatureIsNotMalformed(signingKey).verify(signature);
-                signatureDoesNotHaveCriticalUnknownNotations(policy.getNotationRegistry()).verify(signature);
-                signatureDoesNotHaveCriticalUnknownSubpackets().verify(signature);
+                if (signature.getVersion() >= 4) {
+                    signatureDoesNotHaveCriticalUnknownNotations(policy.getNotationRegistry()).verify(signature);
+                    signatureDoesNotHaveCriticalUnknownSubpackets().verify(signature);
+                }
                 signatureUsesAcceptableHashAlgorithm(policy).verify(signature);
                 signatureUsesAcceptablePublicKeyAlgorithm(policy, signingKey).verify(signature);
             }
@@ -373,9 +382,13 @@ public abstract class SignatureValidator {
         return new SignatureValidator() {
             @Override
             public void verify(PGPSignature signature) throws SignatureValidationException {
-                signatureHasHashedCreationTime().verify(signature);
+                if (signature.getVersion() >= 4) {
+                    signatureHasHashedCreationTime().verify(signature);
+                }
                 signatureDoesNotPredateSigningKey(creator).verify(signature);
-                signatureDoesNotPredateSigningKeyBindingDate(creator).verify(signature);
+                if (signature.getSignatureType() != SignatureType.PRIMARYKEY_BINDING.getCode()) {
+                    signatureDoesNotPredateSigningKeyBindingDate(creator).verify(signature);
+                }
             }
         };
     }
@@ -533,10 +546,10 @@ public abstract class SignatureValidator {
                 try {
                     signature.init(ImplementationFactory.getInstance().getPGPContentVerifierBuilderProvider(), signer);
                     boolean valid;
-                    if (signer.getKeyID() != signee.getKeyID()) {
-                        valid = signature.verifyCertification(signer, signee);
-                    } else {
+                    if (signer.getKeyID() == signee.getKeyID() || signature.getSignatureType() == PGPSignature.DIRECT_KEY) {
                         valid = signature.verifyCertification(signee);
+                    } else {
+                        valid = signature.verifyCertification(signer, signee);
                     }
                     if (!valid) {
                         throw new SignatureValidationException("Signature is not correct.");
