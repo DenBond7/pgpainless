@@ -23,6 +23,7 @@ import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
 import org.bouncycastle.util.io.Streams;
+import org.pgpainless.PGPainless;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.collection.PGPKeyRingCollection;
 import org.pgpainless.util.ArmorUtils;
@@ -269,6 +270,7 @@ public class KeyRingReader {
      * Read a public key ring collection from the provided {@link InputStream}.
      * If more than maxIterations PGP packets are encountered before the stream is exhausted,
      * an {@link IOException} is thrown.
+     * If the stream contain secret key packets, their public key parts are extracted and returned.
      *
      * @param inputStream input stream
      * @param maxIterations max iterations before abort
@@ -295,6 +297,12 @@ public class KeyRingReader {
             }
             if (next instanceof PGPPublicKeyRing) {
                 rings.add((PGPPublicKeyRing) next);
+                continue;
+            }
+            // Parse public keys from secret keys
+            if (next instanceof PGPSecretKeyRing) {
+                rings.add(PGPainless.extractCertificate((PGPSecretKeyRing) next));
+                continue;
             }
             if (next instanceof PGPPublicKeyRingCollection) {
                 PGPPublicKeyRingCollection collection = (PGPPublicKeyRingCollection) next;

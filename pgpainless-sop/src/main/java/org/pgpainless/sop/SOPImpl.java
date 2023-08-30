@@ -7,6 +7,7 @@ package org.pgpainless.sop;
 import org.pgpainless.util.ArmoredOutputStreamFactory;
 import sop.SOP;
 import sop.operation.Armor;
+import sop.operation.ChangeKeyPassword;
 import sop.operation.Dearmor;
 import sop.operation.Decrypt;
 import sop.operation.DetachedSign;
@@ -18,6 +19,7 @@ import sop.operation.GenerateKey;
 import sop.operation.InlineSign;
 import sop.operation.InlineVerify;
 import sop.operation.ListProfiles;
+import sop.operation.RevokeKey;
 import sop.operation.Version;
 
 /**
@@ -100,6 +102,16 @@ public class SOPImpl implements SOP {
     @Override
     public ListProfiles listProfiles() {
         return new ListProfilesImpl();
+    }
+
+    @Override
+    public RevokeKey revokeKey() {
+        return new RevokeKeyImpl();
+    }
+
+    @Override
+    public ChangeKeyPassword changeKeyPassword() {
+        return new ChangeKeyPasswordImpl();
     }
 
     @Override

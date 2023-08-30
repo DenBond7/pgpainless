@@ -23,6 +23,8 @@ import org.bouncycastle.openpgp.operator.PGPKeyEncryptionMethodGenerator;
 import org.bouncycastle.openpgp.operator.PublicKeyKeyEncryptionMethodGenerator;
 import org.pgpainless.algorithm.EncryptionPurpose;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
+import org.pgpainless.authentication.CertificateAuthenticity;
+import org.pgpainless.authentication.CertificateAuthority;
 import org.pgpainless.exception.KeyException;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.OpenPgpFingerprint;
@@ -65,6 +67,8 @@ public class EncryptionOptions {
     private final Map<SubkeyIdentifier, KeyRingInfo> keyRingInfo = new HashMap<>();
     private final Map<SubkeyIdentifier, KeyAccessor> keyViews = new HashMap<>();
     private final EncryptionKeySelector encryptionKeySelector = encryptToAllCapableSubkeys();
+    private boolean allowEncryptionWithMissingKeyFlags = false;
+    private Date evaluationDate = new Date();
 
     private SymmetricKeyAlgorithm encryptionAlgorithmOverride = null;
 
@@ -94,6 +98,17 @@ public class EncryptionOptions {
     }
 
     /**
+     * Override the evaluation date for recipient keys with the given date.
+     *
+     * @param evaluationDate new evaluation date
+     * @return this
+     */
+    public EncryptionOptions setEvaluationDate(@Nonnull Date evaluationDate) {
+        this.evaluationDate = evaluationDate;
+        return this;
+    }
+
+    /**
      * Factory method to create an {@link EncryptionOptions} object which will encrypt for keys
      * which carry the flag {@link org.pgpainless.algorithm.KeyFlag#ENCRYPT_COMMS}.
      *
@@ -111,6 +126,45 @@ public class EncryptionOptions {
      */
     public static EncryptionOptions encryptDataAtRest() {
         return new EncryptionOptions(EncryptionPurpose.STORAGE);
+    }
+
+    /**
+     * Identify authenticatable certificates for the given user-ID by querying the {@link CertificateAuthority} for
+     * identifiable bindings.
+     * Add all acceptable bindings, whose trust amount is larger or equal to the target amount to the list of recipients.
+     * @param userId userId
+     * @param email if true, treat the user-ID as an email address and match all user-IDs containing the mail address
+     * @param authority certificate authority
+     * @return encryption options
+     */
+    public EncryptionOptions addAuthenticatableRecipients(String userId, boolean email, CertificateAuthority authority) {
+        return addAuthenticatableRecipients(userId, email, authority, 120);
+    }
+
+    /**
+     * Identify authenticatable certificates for the given user-ID by querying the {@link CertificateAuthority} for
+     * identifiable bindings.
+     * Add all acceptable bindings, whose trust amount is larger or equal to the target amount to the list of recipients.
+     * @param userId userId
+     * @param email if true, treat the user-ID as an email address and match all user-IDs containing the mail address
+     * @param authority certificate authority
+     * @param targetAmount target amount (120 = fully authenticated, 240 = doubly authenticated,
+     *                    60 = partially authenticated...)
+     * @return encryption options
+     */
+    public EncryptionOptions addAuthenticatableRecipients(String userId, boolean email, CertificateAuthority authority, int targetAmount) {
+        List<CertificateAuthenticity> identifiedCertificates = authority.lookupByUserId(userId, email, evaluationDate, targetAmount);
+        boolean foundAcceptable = false;
+        for (CertificateAuthenticity candidate : identifiedCertificates) {
+            if (candidate.isAuthenticated()) {
+                addRecipient(candidate.getCertificate());
+                foundAcceptable = true;
+            }
+        }
+        if (!foundAcceptable) {
+            throw new IllegalArgumentException("Could not identify any trust-worthy certificates for '" + userId + "' and target trust amount " + targetAmount);
+        }
+        return this;
     }
 
     /**
@@ -171,7 +225,7 @@ public class EncryptionOptions {
     public EncryptionOptions addRecipient(@Nonnull PGPPublicKeyRing key,
                                           @Nonnull CharSequence userId,
                                           @Nonnull EncryptionKeySelector encryptionKeySelectionStrategy) {
-        KeyRingInfo info = new KeyRingInfo(key, new Date());
+        KeyRingInfo info = new KeyRingInfo(key, evaluationDate);
 
         List<PGPPublicKey> encryptionSubkeys = encryptionKeySelectionStrategy
                 .selectEncryptionSubkeys(info.getEncryptionSubkeys(userId.toString(), purpose));
@@ -235,9 +289,7 @@ public class EncryptionOptions {
     }
 
     private EncryptionOptions addAsRecipient(PGPPublicKeyRing key, EncryptionKeySelector encryptionKeySelectionStrategy, boolean wildcardKeyId) {
-        Date evaluationDate = new Date();
-        KeyRingInfo info;
-        info = new KeyRingInfo(key, evaluationDate);
+        KeyRingInfo info = new KeyRingInfo(key, evaluationDate);
 
         Date primaryKeyExpiration;
         try {
@@ -251,6 +303,23 @@ public class EncryptionOptions {
 
         List<PGPPublicKey> encryptionSubkeys = encryptionKeySelectionStrategy
                 .selectEncryptionSubkeys(info.getEncryptionSubkeys(purpose));
+
+        // There are some legacy keys around without key flags.
+        // If we allow encryption for those keys, we add valid keys without any key flags, if they are
+        // capable of encryption by means of their algorithm
+        if (encryptionSubkeys.isEmpty() && allowEncryptionWithMissingKeyFlags) {
+            List<PGPPublicKey> validSubkeys = info.getValidSubkeys();
+            for (PGPPublicKey validSubkey : validSubkeys) {
+                if (!validSubkey.isEncryptionKey()) {
+                    continue;
+                }
+                // only add encryption keys with no key flags.
+                if (info.getKeyFlagsOf(validSubkey.getKeyID()).isEmpty()) {
+                    encryptionSubkeys.add(validSubkey);
+                }
+            }
+        }
+
         if (encryptionSubkeys.isEmpty()) {
             throw new KeyException.UnacceptableEncryptionKeyException(OpenPgpFingerprint.of(key));
         }
@@ -342,6 +411,19 @@ public class EncryptionOptions {
             throw new IllegalArgumentException("Plaintext encryption can only be used to denote unencrypted secret keys.");
         }
         this.encryptionAlgorithmOverride = encryptionAlgorithm;
+        return this;
+    }
+
+    /**
+     * If this method is called, subsequent calls to {@link #addRecipient(PGPPublicKeyRing)} will allow encryption
+     * for subkeys that do not carry any {@link org.pgpainless.algorithm.KeyFlag} subpacket.
+     * This is a workaround for dealing with legacy keys that have no key flags subpacket but rely on the key algorithm
+     * type to convey the subkeys use.
+     *
+     * @return this
+     */
+    public EncryptionOptions setAllowEncryptionWithMissingKeyFlags() {
+        this.allowEncryptionWithMissingKeyFlags = true;
         return this;
     }
 

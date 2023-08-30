@@ -5,7 +5,51 @@ SPDX-License-Identifier: CC0-1.0
 
 # PGPainless Changelog
 
-## 1.5.4-SNAPSHOT
+# 1.6.2-SNAPSHOT
+- Switch `bcpg` and `bcprov` artifacts from `-jdk15to18`variant to `-jdk18on`
+- Bump `bcpg-jdk8on` to `1.76`
+- Bump `bcprov-jdk18on` to `1.76`
+- Add `EncryptionOptions.setAllowEncryptionWithMissingKeyFlags()` to properly allow
+    encrypting to legacy keys which do not carry any key flags.
+- Allow overriding of reference time in `EncryptionOptions` and `SigningOptions`.
+
+# 1.6.1
+- `KeyRingBuilder`: Require UTF8 when adding user-ID via `addUserId(byte[])`
+- `pgpainless-sop`: Remove dependency on jetbrains annotations
+- Add `CertificateAuthority` interface to allow integration with [`pgpainless-wot`](https://github.com/pgpainless/pgpainless-wot)
+  - Add `EncryptionOptions.addAuthenticatableRecipients()` method
+  - Add `MessageMetadata.isAuthenticatablySignedBy()` method
+
+## 1.6.0
+- Bump `sop-java` to `7.0.0`, implementing [SOP Spec Revision 07](https://www.ietf.org/archive/id/draft-dkg-openpgp-stateless-cli-07.html)
+  - Implement `revoke-key` subcommand and API
+  - Implement `change-key-password` subcommand and API
+  - `generate-key`: Add support for new `--signing-only` option
+- Move some methods related to password changing from `SecretKeyRingEditor` to `KeyRingUtils`
+
+## 1.5.6
+- Bump `jacoco` to `0.8.8` (thanks @hkos)
+- Ignore malformed, non-UTF8 user-IDs on certificates
+- `KeyRingReader.readPublicKeyRingCollection()`: Extract and return public keys from encountered secret keys
+- Add some utility methods to `KeyRingInfo`:
+  - `getValidSubkeys()` only returns validly bound sub-keys
+- Add some utility methods to `SignatureUtils`:
+  - `getDelegations()` returns all third-party signatures made over the primary key
+  - `get3rdPartyCertificationsFor(userId)` returns all third-party certification signatures made over the given user-id
+- Add some utility methods to `SignatureSubpacketsUtil`:
+  - `isExportable()` will return true if the signature is *not* marked as non-exportable
+  - `getTrustDepthOr()` returns the signatures trust-depth, or a default value if there is no trust-signature subpacket
+  - `getTrustAmountOr()` returns the signatures trust-amount, or a default value if there is no trust-signature subpacket
+
+## 1.5.5
+- Bump `bcpg-jdk15to18` to `1.75`
+- Bump `bcprov-jdk15to18` to `1.75`
+- Bump `checkstyle` to `10.12.1` to fix build dependency on [vulnerable guava](https://github.com/pgpainless/pgpainless/security/dependabot/6).
+- `SecretKeyRingEditor`:
+  - Rename `createRevocationCertificate()` to `createRevocation()`
+  - Add `createMinimalRevocationCertificate()` method to generate OpenPGP v6-style self-certifying revocation certificates
+
+## 1.5.4
 - Bump `bcpg-jdk15to18` to `1.74`
 - Bump `bcprov-jdk15to18` to `1.74`
 - Remove unused methods from `SignatureUtils`

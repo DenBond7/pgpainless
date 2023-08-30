@@ -4,17 +4,29 @@
 
 package org.pgpainless.key.modification.secretkeyring;
 
-import org.bouncycastle.bcpg.S2K;
-import org.bouncycastle.bcpg.SecretKeyPacket;
+import static org.pgpainless.key.util.KeyRingUtils.changePassphrase;
+import static org.pgpainless.util.CollectionUtils.concat;
+
+import java.io.IOException;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Collections;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Set;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import org.bouncycastle.bcpg.sig.KeyExpirationTime;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPKeyPair;
 import org.bouncycastle.openpgp.PGPPublicKey;
+import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSignature;
-import org.bouncycastle.openpgp.operator.PBESecretKeyDecryptor;
-import org.bouncycastle.openpgp.operator.PBESecretKeyEncryptor;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.AlgorithmSuite;
 import org.pgpainless.algorithm.CompressionAlgorithm;
@@ -34,7 +46,6 @@ import org.pgpainless.key.protection.KeyRingProtectionSettings;
 import org.pgpainless.key.protection.PasswordBasedSecretKeyRingProtector;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnprotectedKeysProtector;
-import org.pgpainless.key.protection.fixes.S2KUsageFix;
 import org.pgpainless.key.protection.passphrase_provider.SolitaryPassphraseProvider;
 import org.pgpainless.key.util.KeyRingUtils;
 import org.pgpainless.key.util.RevocationAttributes;
@@ -51,22 +62,6 @@ import org.pgpainless.signature.subpackets.SignatureSubpacketsUtil;
 import org.pgpainless.util.Passphrase;
 import org.pgpainless.util.selection.userid.SelectUserId;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.io.IOException;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Set;
-
-import static org.pgpainless.util.CollectionUtils.concat;
-
 public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
 
     private PGPSecretKeyRing secretKeyRing;
@@ -80,6 +75,12 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
                                @Nonnull Date referenceTime) {
         this.secretKeyRing = secretKeyRing;
         this.referenceTime = referenceTime;
+    }
+
+    @Nonnull
+    @Override
+    public Date getReferenceTime() {
+        return referenceTime;
     }
 
     @Override
@@ -154,7 +155,7 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
         PGPSignature signature = primaryUserId == null ?
                 info.getLatestDirectKeySelfSignature() : info.getLatestUserIdCertification(primaryUserId);
         final Date previousKeyExpiration = signature == null ? null :
-            SignatureSubpacketsUtil.getKeyExpirationTimeAsDate(signature, primaryKey);
+                SignatureSubpacketsUtil.getKeyExpirationTimeAsDate(signature, primaryKey);
 
         // Add new primary user-id signature
         addUserId(
@@ -407,8 +408,8 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
     }
 
     @Override
-    public PGPSignature createRevocationCertificate(@Nonnull SecretKeyRingProtector secretKeyRingProtector,
-                                                    @Nullable RevocationAttributes revocationAttributes)
+    public PGPSignature createRevocation(@Nonnull SecretKeyRingProtector secretKeyRingProtector,
+                                         @Nullable RevocationAttributes revocationAttributes)
             throws PGPException {
         PGPPublicKey revokeeSubKey = secretKeyRing.getPublicKey();
         PGPSignature revocationCertificate = generateRevocation(
@@ -417,7 +418,7 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
     }
 
     @Override
-    public PGPSignature createRevocationCertificate(
+    public PGPSignature createRevocation(
             long subkeyId,
             @Nonnull SecretKeyRingProtector secretKeyRingProtector,
             @Nullable RevocationAttributes revocationAttributes)
@@ -428,7 +429,7 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
     }
 
     @Override
-    public PGPSignature createRevocationCertificate(
+    public PGPSignature createRevocation(
             long subkeyId,
             @Nonnull SecretKeyRingProtector secretKeyRingProtector,
             @Nullable RevocationSignatureSubpackets.Callback certificateSubpacketsCallback)
@@ -605,6 +606,23 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
         }
 
         return this;
+    }
+
+    @Override
+    public PGPPublicKeyRing createMinimalRevocationCertificate(
+            @Nonnull SecretKeyRingProtector secretKeyRingProtector,
+            @Nullable RevocationAttributes keyRevocationAttributes)
+            throws PGPException {
+        // Check reason
+        if (keyRevocationAttributes != null && !RevocationAttributes.Reason.isKeyRevocation(keyRevocationAttributes.getReason())) {
+            throw new IllegalArgumentException("Revocation reason MUST be applicable to a key revocation.");
+        }
+
+        PGPSignature revocation = createRevocation(secretKeyRingProtector, keyRevocationAttributes);
+        PGPPublicKey primaryKey = secretKeyRing.getSecretKey().getPublicKey();
+        primaryKey = KeyRingUtils.getStrippedDownPublicKey(primaryKey);
+        primaryKey = PGPPublicKey.addCertification(primaryKey, revocation);
+        return new PGPPublicKeyRing(Collections.singletonList(primaryKey));
     }
 
     private PGPSignature reissueNonPrimaryUserId(
@@ -789,67 +807,4 @@ public class SecretKeyRingEditor implements SecretKeyRingEditorInterface {
         }
     }
 
-    private PGPSecretKeyRing changePassphrase(Long keyId,
-                                              PGPSecretKeyRing secretKeys,
-                                              SecretKeyRingProtector oldProtector,
-                                              SecretKeyRingProtector newProtector)
-            throws PGPException {
-        List<PGPSecretKey> secretKeyList = new ArrayList<>();
-        if (keyId == null) {
-            // change passphrase of whole key ring
-            Iterator<PGPSecretKey> secretKeyIterator = secretKeys.getSecretKeys();
-            while (secretKeyIterator.hasNext()) {
-                PGPSecretKey secretKey = secretKeyIterator.next();
-                secretKey = reencryptPrivateKey(secretKey, oldProtector, newProtector);
-                secretKeyList.add(secretKey);
-            }
-        } else {
-            // change passphrase of selected subkey only
-            Iterator<PGPSecretKey> secretKeyIterator = secretKeys.getSecretKeys();
-            while (secretKeyIterator.hasNext()) {
-                PGPSecretKey secretKey = secretKeyIterator.next();
-                if (secretKey.getPublicKey().getKeyID() == keyId) {
-                    // Re-encrypt only the selected subkey
-                    secretKey = reencryptPrivateKey(secretKey, oldProtector, newProtector);
-                }
-                secretKeyList.add(secretKey);
-            }
-        }
-
-        PGPSecretKeyRing newRing = new PGPSecretKeyRing(secretKeyList);
-        newRing = s2kUsageFixIfNecessary(newRing, newProtector);
-        return newRing;
-    }
-
-    private PGPSecretKeyRing s2kUsageFixIfNecessary(PGPSecretKeyRing secretKeys, SecretKeyRingProtector protector)
-            throws PGPException {
-        boolean hasS2KUsageChecksum = false;
-        for (PGPSecretKey secKey : secretKeys) {
-            if (secKey.getS2KUsage() == SecretKeyPacket.USAGE_CHECKSUM) {
-                hasS2KUsageChecksum = true;
-                break;
-            }
-        }
-        if (hasS2KUsageChecksum) {
-            secretKeys = S2KUsageFix.replaceUsageChecksumWithUsageSha1(
-                    secretKeys, protector, true);
-        }
-        return secretKeys;
-    }
-
-    private static PGPSecretKey reencryptPrivateKey(
-            PGPSecretKey secretKey,
-            SecretKeyRingProtector oldProtector,
-            SecretKeyRingProtector newProtector)
-            throws PGPException {
-        S2K s2k = secretKey.getS2K();
-        // If the key uses GNU_DUMMY_S2K, we leave it as is and skip this block
-        if (s2k == null || s2k.getType() != S2K.GNU_DUMMY_S2K) {
-            long secretKeyId = secretKey.getKeyID();
-            PBESecretKeyDecryptor decryptor = oldProtector.getDecryptor(secretKeyId);
-            PBESecretKeyEncryptor encryptor = newProtector.getEncryptor(secretKeyId);
-            secretKey = PGPSecretKey.copyWithNewPassword(secretKey, decryptor, encryptor);
-        }
-        return secretKey;
-    }
 }
