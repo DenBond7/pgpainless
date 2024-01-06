@@ -27,12 +27,13 @@
 .  LINKSTYLE blue R < >
 .\}
 .SH "NAME"
-pgpainless\-cli\-extract\-cert \- Extract a public key certificate from a secret key from standard input
+pgpainless\-cli\-extract\-cert \- Extract a public key certificate from a secret key
 .SH "SYNOPSIS"
 .sp
 \fBpgpainless\-cli extract\-cert\fP [\fB\-\-[no\-]armor\fP] [\fB\-\-stacktrace\fP]
 .SH "DESCRIPTION"
-
+.sp
+Read a secret key from STDIN and emit the public key certificate to STDOUT.
 .SH "OPTIONS"
 .sp
 \fB\-\-[no\-]armor\fP
@@ -42,4 +43,5 @@ ASCII armor the output
 .sp
 \fB\-\-stacktrace\fP
 .RS 4
+Print stacktrace
 .RE

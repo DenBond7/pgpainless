@@ -64,7 +64,7 @@ public class DecryptAndVerifyMessageTest {
         Streams.pipeAll(decryptor, toPlain);
         decryptor.close();
         toPlain.close();
-        OpenPgpMetadata metadata = decryptor.getResult();
+        MessageMetadata metadata = decryptor.getMetadata();
 
         byte[] expected = TestKeys.TEST_MESSAGE_01_PLAIN.getBytes(UTF8);
         byte[] actual = toPlain.toByteArray();
@@ -72,15 +72,32 @@ public class DecryptAndVerifyMessageTest {
         assertArrayEquals(expected, actual);
 
         assertTrue(metadata.isEncrypted());
-        assertTrue(metadata.isSigned());
-        assertFalse(metadata.isCleartextSigned());
-        assertTrue(metadata.isVerified());
+        assertFalse(metadata.isUsingCleartextSignatureFramework());
+        assertTrue(metadata.isVerifiedSigned());
         assertEquals(CompressionAlgorithm.ZLIB, metadata.getCompressionAlgorithm());
-        assertEquals(SymmetricKeyAlgorithm.AES_256, metadata.getSymmetricKeyAlgorithm());
-        assertEquals(1, metadata.getSignatures().size());
+        assertEquals(SymmetricKeyAlgorithm.AES_256, metadata.getEncryptionAlgorithm());
         assertEquals(1, metadata.getVerifiedSignatures().size());
-        assertTrue(metadata.containsVerifiedSignatureFrom(TestKeys.JULIET_FINGERPRINT));
+        assertEquals(1, metadata.getVerifiedSignatures().size());
+        assertTrue(metadata.isVerifiedSignedBy(TestKeys.JULIET_FINGERPRINT));
         assertEquals(new SubkeyIdentifier(TestKeys.JULIET_FINGERPRINT), metadata.getDecryptionKey());
+    }
+
+    @TestTemplate
+    @ExtendWith(TestAllImplementations.class)
+    public void decryptMessageAndReadBeyondEndTest() throws Exception {
+        final String encryptedMessage = TestKeys.MSG_SIGN_CRYPT_JULIET_JULIET;
+
+        final ConsumerOptions options = new ConsumerOptions()
+                .addDecryptionKey(juliet)
+                .addVerificationCert(KeyRingUtils.publicKeyRingFrom(juliet));
+
+        try (DecryptionStream decryptor = PGPainless.decryptAndOrVerify()
+                .onInputStream(new ByteArrayInputStream(encryptedMessage.getBytes()))
+                .withOptions(options);
+             ByteArrayOutputStream toPlain = new ByteArrayOutputStream()) {
+            Streams.pipeAll(decryptor, toPlain);
+            assertEquals(-1, decryptor.read());
+        }
     }
 
     @TestTemplate
@@ -104,7 +121,7 @@ public class DecryptAndVerifyMessageTest {
 
         decryptor.close();
         toPlain.close();
-        OpenPgpMetadata metadata = decryptor.getResult();
+        MessageMetadata metadata = decryptor.getMetadata();
 
         byte[] expected = TestKeys.TEST_MESSAGE_01_PLAIN.getBytes(UTF8);
         byte[] actual = toPlain.toByteArray();
@@ -112,14 +129,13 @@ public class DecryptAndVerifyMessageTest {
         assertArrayEquals(expected, actual);
 
         assertTrue(metadata.isEncrypted());
-        assertTrue(metadata.isSigned());
-        assertFalse(metadata.isCleartextSigned());
-        assertTrue(metadata.isVerified());
+        assertFalse(metadata.isUsingCleartextSignatureFramework());
+        assertTrue(metadata.isVerifiedSigned());
         assertEquals(CompressionAlgorithm.ZLIB, metadata.getCompressionAlgorithm());
-        assertEquals(SymmetricKeyAlgorithm.AES_256, metadata.getSymmetricKeyAlgorithm());
-        assertEquals(1, metadata.getSignatures().size());
+        assertEquals(SymmetricKeyAlgorithm.AES_256, metadata.getEncryptionAlgorithm());
         assertEquals(1, metadata.getVerifiedSignatures().size());
-        assertTrue(metadata.containsVerifiedSignatureFrom(TestKeys.JULIET_FINGERPRINT));
+        assertEquals(1, metadata.getVerifiedSignatures().size());
+        assertTrue(metadata.isVerifiedSignedBy(TestKeys.JULIET_FINGERPRINT));
         assertEquals(new SubkeyIdentifier(TestKeys.JULIET_FINGERPRINT), metadata.getDecryptionKey());
     }
 

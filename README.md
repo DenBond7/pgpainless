@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 [![Build Status](https://github.com/pgpainless/pgpainless/actions/workflows/gradle_push.yml/badge.svg)](https://github.com/pgpainless/pgpainless/actions/workflows/gradle_push.yml)
 [![Coverage Status](https://coveralls.io/repos/github/pgpainless/pgpainless/badge.svg?branch=main)](https://coveralls.io/github/pgpainless/pgpainless?branch=main)
-[![Interoperability Test-Suite](https://badgen.net/badge/Sequoia%20Test%20Suite/%232/green)](https://tests.sequoia-pgp.org/)
+[![Interoperability Test-Suite](https://badgen.net/badge/Sequoia%20Test%20Suite/%231/green)](https://tests.sequoia-pgp.org/)
 [![PGP](https://img.shields.io/badge/pgp-A027%20DB2F%203E1E%20118A-blue)](https://keyoxide.org/7F9116FEA90A5983936C7CFAA027DB2F3E1E118A)
 [![REUSE status](https://api.reuse.software/badge/github.com/pgpainless/pgpainless)](https://api.reuse.software/info/github.com/pgpainless/pgpainless)
 [![Documentation Status](https://readthedocs.org/projects/pgpainless/badge/?version=latest)](https://pgpainless.readthedocs.io/en/latest/?badge=latest)
@@ -32,7 +32,7 @@ It also checks if signing subkeys are properly bound to their primary key, if ke
 if keys are allowed to create signatures in the first place.
 
 These rigorous checks make PGPainless stand out from other Java-based OpenPGP libraries and are the reason why
-PGPainless currently [*scores second place* on Sequoia-PGPs Interoperability Test-Suite](https://tests.sequoia-pgp.org).
+PGPainless currently [*scores first place* on Sequoia-PGPs Interoperability Test-Suite](https://tests.sequoia-pgp.org).
 
 > At FlowCrypt we are using PGPainless in our Kotlin code bases on Android and on server side.
 > The ergonomics of legacy PGP tooling on Java is not very good, and PGPainless improves it greatly.
@@ -172,10 +172,10 @@ This behaviour can be modified though using the `Policy` class.
         decryptionStream.close();
 
         // Result contains information like signature status etc.
-        OpenPgpMetadata metadata = decryptionStream.getResult();
+        MessageMetadata metadata = decryptionStream.getMetadata();
 ```
 
-*After* the `DecryptionStream` was closed, you can get metadata about the processed data by retrieving the `OpenPgpMetadata`.
+*After* the `DecryptionStream` was closed, you can get metadata about the processed data by retrieving the `MessageMetadata`.
 Again, this object will contain information about how the message was encrypted, who signed it and so on.
 
 #### Many more examples can be found in the [examples package](pgpainless-core/src/test/java/org/pgpainless/example)!!!
@@ -191,7 +191,7 @@ repositories {
 }
 
 dependencies {
-	implementation 'org.pgpainless:pgpainless-core:1.5.2'
+	implementation 'org.pgpainless:pgpainless-core:1.6.2'
 }
 ```
 

@@ -64,6 +64,7 @@ public class EncryptDecryptRoundTripTest {
                 .withCert(aliceCert)
                 .withCert(bobCert)
                 .plaintext(message)
+                .toByteArrayAndResult()
                 .getBytes();
 
         ByteArrayAndResult<DecryptionResult> bytesAndResult = sop.decrypt()
@@ -97,6 +98,7 @@ public class EncryptDecryptRoundTripTest {
                 .withCert(aliceCertNoArmor)
                 .noArmor()
                 .plaintext(message)
+                .toByteArrayAndResult()
                 .getBytes();
 
         ByteArrayAndResult<DecryptionResult> bytesAndResult = sop.decrypt()
@@ -118,6 +120,7 @@ public class EncryptDecryptRoundTripTest {
         byte[] encrypted = sop.encrypt()
                 .withPassword("passphr4s3")
                 .plaintext(message)
+                .toByteArrayAndResult()
                 .getBytes();
 
         ByteArrayAndResult<DecryptionResult> bytesAndResult = sop.decrypt()
@@ -141,6 +144,7 @@ public class EncryptDecryptRoundTripTest {
                         sop.encrypt()
                                 .withPassword("passphr4s3")
                                 .plaintext(message)
+                                .toByteArrayAndResult()
                                 .getInputStream()
                 )
                 .toByteArrayAndResult();
@@ -158,6 +162,7 @@ public class EncryptDecryptRoundTripTest {
         byte[] encrypted = sop.encrypt()
                 .withPassword("passphr4s3    ")
                 .plaintext(message)
+                .toByteArrayAndResult()
                 .getBytes();
 
         ByteArrayAndResult<DecryptionResult> bytesAndResult = sop.decrypt()
@@ -178,6 +183,7 @@ public class EncryptDecryptRoundTripTest {
         byte[] encrypted = sop.encrypt()
                 .withCert(bobCert)
                 .plaintext(message)
+                .toByteArrayAndResult()
                 .getBytes();
 
         DecryptionResult result = sop.decrypt()
@@ -196,6 +202,7 @@ public class EncryptDecryptRoundTripTest {
         byte[] encrypted = sop.encrypt()
                 .withCert(bobCert)
                 .plaintext(message)
+                .toByteArrayAndResult()
                 .getBytes();
 
         assertThrows(SOPGPException.MissingArg.class, () -> sop
@@ -266,6 +273,7 @@ public class EncryptDecryptRoundTripTest {
         byte[] ciphertext = sop.encrypt()
                 .withCert(cert)
                 .plaintext(plaintext)
+                .toByteArrayAndResult()
                 .getBytes();
 
         byte[] decrypted = sop.decrypt()
@@ -308,6 +316,7 @@ public class EncryptDecryptRoundTripTest {
                 .withCert(cert1)
                 .withCert(cert2)
                 .plaintext(plaintext)
+                .toByteArrayAndResult()
                 .getBytes();
 
         byte[] decrypted = sop.decrypt()
@@ -339,6 +348,7 @@ public class EncryptDecryptRoundTripTest {
         byte[] ciphertext = sop.encrypt()
                 .withCert(cert)
                 .plaintext(plaintext)
+                .toByteArrayAndResult()
                 .getBytes();
 
         assertThrows(SOPGPException.KeyIsProtected.class,
@@ -545,5 +555,45 @@ public class EncryptDecryptRoundTripTest {
                         .ciphertext(signed)
                         .toByteArrayAndResult()
         );
+    }
+
+    @Test
+    public void encryptWithUnsupportedProfileFails() {
+        assertThrows(SOPGPException.UnsupportedProfile.class, () -> sop
+                .encrypt()
+                .profile("Unknown"));
+    }
+
+    @Test
+    public void encryptWithSupportedProfileTest() throws IOException {
+
+        byte[] key = sop.generateKey()
+                .profile("rfc4880")
+                .userId("Alice <alice@pgpainless.org>")
+                .generate()
+                .getBytes();
+
+        byte[] cert = sop.extractCert()
+                .key(key)
+                .getBytes();
+
+        byte[] encrypted = sop.encrypt()
+                .profile("rfc4880")
+                .withCert(cert)
+                .plaintext(message)
+                .toByteArrayAndResult()
+                .getBytes();
+
+        ByteArrayAndResult<DecryptionResult> bytesAndResult = sop.decrypt()
+                .withKey(key)
+                .ciphertext(encrypted)
+                .toByteArrayAndResult();
+
+        ByteArrayOutputStream decrypted = new ByteArrayOutputStream();
+        Streams.pipeAll(bytesAndResult.getInputStream(), decrypted);
+        assertArrayEquals(message, decrypted.toByteArray());
+
+        DecryptionResult result = bytesAndResult.getResult();
+        assertTrue(result.getSessionKey().isPresent());
     }
 }

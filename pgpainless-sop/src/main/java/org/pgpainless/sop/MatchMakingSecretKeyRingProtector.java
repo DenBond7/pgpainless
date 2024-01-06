@@ -12,13 +12,14 @@ import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.operator.PBESecretKeyDecryptor;
 import org.bouncycastle.openpgp.operator.PBESecretKeyEncryptor;
-import org.jetbrains.annotations.Nullable;
 import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.info.KeyInfo;
 import org.pgpainless.key.protection.CachingSecretKeyRingProtector;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnlockSecretKey;
 import org.pgpainless.util.Passphrase;
+
+import javax.annotation.Nullable;
 
 /**
  * Implementation of the {@link SecretKeyRingProtector} which can be handed passphrases and keys separately,
@@ -87,19 +88,19 @@ public class MatchMakingSecretKeyRingProtector implements SecretKeyRingProtector
     }
 
     @Override
-    public boolean hasPassphraseFor(Long keyId) {
+    public boolean hasPassphraseFor(long keyId) {
         return protector.hasPassphrase(keyId);
     }
 
     @Nullable
     @Override
-    public PBESecretKeyDecryptor getDecryptor(Long keyId) throws PGPException {
+    public PBESecretKeyDecryptor getDecryptor(long keyId) throws PGPException {
         return protector.getDecryptor(keyId);
     }
 
     @Nullable
     @Override
-    public PBESecretKeyEncryptor getEncryptor(Long keyId) throws PGPException {
+    public PBESecretKeyEncryptor getEncryptor(long keyId) throws PGPException {
         return protector.getEncryptor(keyId);
     }
 

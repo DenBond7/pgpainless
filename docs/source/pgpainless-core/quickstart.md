@@ -50,9 +50,15 @@ There is a very good chance that you can find code examples there that fit your 
 Reading keys from ASCII armored strings or from binary files is easy:
 
 ```java
+// Secret Keys
 String key = "-----BEGIN PGP PRIVATE KEY BLOCK-----\n"...;
 PGPSecretKeyRing secretKey = PGPainless.readKeyRing()
         .secretKeyRing(key);
+
+// Certificates (Public Keys)
+String cert = "-----BEGIN PGP PUBLIC KEY BLOCK-----\n...";
+PGPPublicKeyRing certificate = PGPainless.readKeyRing()
+        .publicKeyRing(cert);
 ```
 
 Similarly, keys or certificates can quickly be exported:
@@ -230,6 +236,15 @@ EncryptionOptions encOptions = EncryptionOptions.get()
 ```
 
 Once again, it is possible to add multiple recipients by repeating the `addRecipient()` method call.
+
+In order to prevent metadata leaks, you might want to add recipients anonymously.
+Anonymous recipients have their key-id hidden by replacing it with a wildcard.
+That way, it is not easily possible for an attacker to deduce the recipients of a message without further
+analysis of additional metadata.
+Anonymous recipients can be added like follows:
+```java
+encOptions.addHiddenRecipient(certificate);
+```
 
 You can also encrypt a message to a password like this:
 ```java

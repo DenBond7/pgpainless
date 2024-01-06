@@ -18,6 +18,7 @@ import com.ginsberg.junit.exit.FailOnSystemExit;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.KeyFlag;
@@ -139,6 +140,7 @@ public class RoundTripEncryptDecryptCmdTest extends CLITest {
     }
 
     @Test
+    @Disabled("Disabled, since we now read certificates from secret keys")
     public void testEncryptingForKeyFails() throws IOException {
         File notACert = writeFile("key.asc", KEY);
 
@@ -643,5 +645,31 @@ public class RoundTripEncryptDecryptCmdTest extends CLITest {
         pipeStringToStdin(ciphertext);
         int exitCode = executeCommand("decrypt");
         assertEquals(SOPGPException.MissingArg.EXIT_CODE, exitCode);
+    }
+
+    @Test
+    public void testEncryptDecryptWithFreshRSAKey() throws IOException {
+        // Generate key
+        File passwordFile = writeFile("password", "sw0rdf1sh");
+        File keyFile = pipeStdoutToFile("key.asc");
+        assertSuccess(executeCommand("generate-key", "--profile=rfc4880", "--with-key-password", passwordFile.getAbsolutePath(), "Alice <alice@example.org>"));
+
+        File certFile = pipeStdoutToFile("cert.asc");
+        pipeFileToStdin(keyFile);
+        assertSuccess(executeCommand("extract-cert"));
+
+        // Write plaintext
+        File plaintextFile = writeFile("msg.txt", "Hello, World!\n");
+
+        // Encrypt
+        File ciphertextFile = pipeStdoutToFile("msg.asc");
+        pipeFileToStdin(plaintextFile);
+        assertSuccess(executeCommand("encrypt", "--profile=rfc4880", certFile.getAbsolutePath()));
+
+        ByteArrayOutputStream decrypted = pipeStdoutToStream();
+        pipeFileToStdin(ciphertextFile);
+        assertSuccess(executeCommand("decrypt", "--with-key-password", passwordFile.getAbsolutePath(), keyFile.getAbsolutePath()));
+
+        assertEquals("Hello, World!\n", decrypted.toString());
     }
 }

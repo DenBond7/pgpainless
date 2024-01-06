@@ -5,7 +5,95 @@ SPDX-License-Identifier: CC0-1.0
 
 # PGPainless Changelog
 
-## 1.5.3-SNAPSHOT
+## 2.0.0-SNAPSHOT
+- Bump `bcpg-jdk8on` to `1.77`
+- Bump `bcprov-jdk18on` to `1.77`
+- Bump `logback-core` and `logback-classic` to `1.4.13`
+- `pgpainless-core`
+  - Rewrote most of the codebase in Kotlin
+  - Removed `OpenPgpMetadata` (`decryptionStream.getResult()`) in favor of `MessageMetadata` (`decryptionStream.getMetadata()`)
+- `pgpainless-sop`, `pgpainless-cli`
+  - Bump `sop-java` to `8.0.1`, implementing [SOP Spec Revision 08](https://www.ietf.org/archive/id/draft-dkg-openpgp-stateless-cli-08.html)
+  - Change API of `sop.encrypt` to return a `ReadyWithResult<EncryptionResult>` to expose the session key
+  - `decrypt --verify-with`: Fix to not throw `NoSignature` exception (exit code 3) if `VERIFICATIONS` is empty
+- Properly feed EOS tokens to the pushdown automaton when reaching the end of stream (thanks @iNPUTmice)
+- Do not choke on unknown signature subpackets (thanks @Jerbell)
+- Prevent timing issues resuting in subkey binding signatures predating the subkey (@thanks Jerbell)
+
+## 1.6.5
+- Add `SecretKeyRingEditor.setExpirationDateOfSubkey()`
+
+## 1.6.4
+- Bump `bcpg-jdk8on` to `1.77`
+- Bump `bcprov-jdk18on` to `1.77`
+- Bump `logback-core` and `logback-classic` to `1.4.13`
+- Properly feed EOS tokens to the pushdown automaton when reaching the end of stream (thanks @iNPUTmice)
+- Do not choke on unknown signature subpackets (thanks @Jerbell)
+- Prevent timing issues resuting in subkey binding signatures predating the subkey (@thanks Jerbell)
+
+## 1.6.3
+- Bump `sop-java` to `7.0.1`
+- `decrypt --verify-with`: Fix to not throw `NoSignature` exception (exit code 3) if `VERIFICATIONS` is empty
+
+## 1.6.2
+- Switch `bcpg` and `bcprov` artifacts from `-jdk15to18`variant to `-jdk18on`
+- Bump `bcpg-jdk8on` to `1.76`
+- Bump `bcprov-jdk18on` to `1.76`
+- Add `EncryptionOptions.setAllowEncryptionWithMissingKeyFlags()` to properly allow
+    encrypting to legacy keys which do not carry any key flags.
+- Allow overriding of reference time in `EncryptionOptions` and `SigningOptions`.
+
+## 1.6.1
+- `KeyRingBuilder`: Require UTF8 when adding user-ID via `addUserId(byte[])`
+- `pgpainless-sop`: Remove dependency on jetbrains annotations
+- Add `CertificateAuthority` interface to allow integration with [`pgpainless-wot`](https://github.com/pgpainless/pgpainless-wot)
+  - Add `EncryptionOptions.addAuthenticatableRecipients()` method
+  - Add `MessageMetadata.isAuthenticatablySignedBy()` method
+
+## 1.6.0
+- Bump `sop-java` to `7.0.0`, implementing [SOP Spec Revision 07](https://www.ietf.org/archive/id/draft-dkg-openpgp-stateless-cli-07.html)
+  - Implement `revoke-key` subcommand and API
+  - Implement `change-key-password` subcommand and API
+  - `generate-key`: Add support for new `--signing-only` option
+- Move some methods related to password changing from `SecretKeyRingEditor` to `KeyRingUtils`
+
+## 1.5.7
+- Bump `sop-java` to `6.1.1`
+- `decrypt --verify-with`: Fix to not throw `NoSignature` exception (exit code 3) if `VERIFICATIONS` is empty
+
+## 1.5.6
+- Bump `jacoco` to `0.8.8` (thanks @hkos)
+- Ignore malformed, non-UTF8 user-IDs on certificates
+- `KeyRingReader.readPublicKeyRingCollection()`: Extract and return public keys from encountered secret keys
+- Add some utility methods to `KeyRingInfo`:
+  - `getValidSubkeys()` only returns validly bound sub-keys
+- Add some utility methods to `SignatureUtils`:
+  - `getDelegations()` returns all third-party signatures made over the primary key
+  - `get3rdPartyCertificationsFor(userId)` returns all third-party certification signatures made over the given user-id
+- Add some utility methods to `SignatureSubpacketsUtil`:
+  - `isExportable()` will return true if the signature is *not* marked as non-exportable
+  - `getTrustDepthOr()` returns the signatures trust-depth, or a default value if there is no trust-signature subpacket
+  - `getTrustAmountOr()` returns the signatures trust-amount, or a default value if there is no trust-signature subpacket
+
+## 1.5.5
+- Bump `bcpg-jdk15to18` to `1.75`
+- Bump `bcprov-jdk15to18` to `1.75`
+- Bump `checkstyle` to `10.12.1` to fix build dependency on [vulnerable guava](https://github.com/pgpainless/pgpainless/security/dependabot/6).
+- `SecretKeyRingEditor`:
+  - Rename `createRevocationCertificate()` to `createRevocation()`
+  - Add `createMinimalRevocationCertificate()` method to generate OpenPGP v6-style self-certifying revocation certificates
+
+## 1.5.4
+- Bump `bcpg-jdk15to18` to `1.74`
+- Bump `bcprov-jdk15to18` to `1.74`
+- Remove unused methods from `SignatureUtils`
+- Encryption: Allow anonymous recipients using wildcard key-IDs
+- Add `SignatureSubpacketsUtil.getRegularExpressions()`
+- Remove `SecretKeyRingProtector.unlockAllKeysWith()` in favor of `unlockAnyKeyWith()`
+- Remove `SignatureCheck.getFingerprint()` in favor of `getSigningKeyIdentifier()`
+- Tests, tests, tests
+
+## 1.5.3
 - Fix minimal bit-strength check for signing-subkeys accidentally comparing the bit-strength of the primary key
 - `SigningOptions`: Add new methods to add signatures using a single, chosen signing subkey
 
@@ -50,6 +138,14 @@ SPDX-License-Identifier: CC0-1.0
   - `encrypt`: Add support for `--profile=` option
     - Add profile `rfc4880` to reflect status quo
   - `version`: Add support for `--sop-spec` option
+
+## 1.4.6
+- Bump `sop-java` to `4.1.2`
+- Fix `decrypt --verify-with` to not throw `NoSignature` exception (exit code 3) if `VERIFICAIONS` is empty.
+
+## 1.4.5
+- Bugfix: Direct-Key signatures are calculated over the signee key only, not the signer key + signee key
+- Security: Fix faulty bit-strength policy check for signing subkeys
 
 ## 1.4.4
 - Fix expectations on subpackets of v3 signatures (thanks @bjansen)
@@ -119,6 +215,14 @@ SPDX-License-Identifier: CC0-1.0
 - Add `KeyIdUtil.formatKeyId(long id)` to format hexadecimal key-ids.
 - Add `KeyRingUtils.publicKeys(PGPKeyRing keys)`
 - Remove `BCUtil` class
+
+## 1.3.18
+- Bump `sop-java` to `4.1.2`
+- Fix `decrypt --verify-with XYZ` not throwing `NoSignature` exception (exit code 3) if `VERIFICATIONS` is empty (#415)
+
+## 1.3.17
+- Bugfix: Direct-Key signatures are calculated over the signee key only, not the signer key + signee key
+- Security: Fix faulty bit-strength policy check for signing subkeys
 
 ## 1.3.16
 - Bump `sop-java` to `4.1.0`

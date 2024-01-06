@@ -27,8 +27,14 @@ public class ListProfilesTest {
     }
 
     @Test
+    public void listProfilesOfEncrypt() {
+        assertFalse(sop.listProfiles().encrypt().isEmpty());
+    }
+
+    @Test
     public void listProfilesOfHelpCommandThrows() {
         assertThrows(SOPGPException.UnsupportedProfile.class, () ->
                 sop.listProfiles().subcommand("help"));
     }
+
 }
