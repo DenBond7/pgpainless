@@ -12,20 +12,24 @@ import java.util.Properties;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import sop.operation.Version;
 
+import javax.annotation.Nonnull;
+
 /**
  * Implementation of the <pre>version</pre> operation using PGPainless.
  */
 public class VersionImpl implements Version {
 
     // draft version
-    private static final int SOP_VERSION = 7;
+    private static final int SOP_VERSION = 8;
 
     @Override
+    @Nonnull
     public String getName() {
         return "PGPainless-SOP";
     }
 
     @Override
+    @Nonnull
     public String getVersion() {
         // See https://stackoverflow.com/a/50119235
         String version;
@@ -44,11 +48,13 @@ public class VersionImpl implements Version {
     }
 
     @Override
+    @Nonnull
     public String getBackendVersion() {
         return "PGPainless " + getVersion();
     }
 
     @Override
+    @Nonnull
     public String getExtendedVersion() {
         double bcVersion = new BouncyCastleProvider().getVersion();
         String FORMAT_VERSION = String.format("%02d", SOP_VERSION);
