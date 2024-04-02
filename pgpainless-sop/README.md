@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # PGPainless-SOP
 
-[![Spec Revision: 7](https://img.shields.io/badge/Spec%20Revision-7-blue)](https://datatracker.ietf.org/doc/draft-dkg-openpgp-stateless-cli/)
+[![Spec Revision: 10](https://img.shields.io/badge/Spec%20Revision-10-blue)](https://datatracker.ietf.org/doc/draft-dkg-openpgp-stateless-cli/)
 [![Maven Central](https://badgen.net/maven/v/maven-central/org.pgpainless/pgpainless-sop)](https://search.maven.org/artifact/org.pgpainless/pgpainless-sop)
 [![javadoc](https://javadoc.io/badge2/org.pgpainless/pgpainless-sop/javadoc.svg)](https://javadoc.io/doc/org.pgpainless/pgpainless-sop)
 
@@ -23,7 +23,7 @@ To start using pgpainless-sop in your code, include the following lines in your 
 ...
 dependencies {
     ...
-    implementation "org.pgpainless:pgpainless-sop:1.6.2"
+    implementation "org.pgpainless:pgpainless-sop:1.6.6"
     ...
 }
 
@@ -34,7 +34,7 @@ dependencies {
     <dependency>
         <groupId>org.pgpainless</groupId>
         <artifactId>pgpainless-sop</artifactId>
-        <version>1.6.2</version>
+        <version>1.6.6</version>
     </dependency>
     ...
 </dependencies>
