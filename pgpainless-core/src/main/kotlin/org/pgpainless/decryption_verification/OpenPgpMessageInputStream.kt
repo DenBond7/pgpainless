@@ -10,16 +10,16 @@ import java.io.OutputStream
 import openpgp.openPgpKeyId
 import org.bouncycastle.bcpg.BCPGInputStream
 import org.bouncycastle.bcpg.UnsupportedPacketVersionException
-import org.bouncycastle.extensions.getPublicKeyFor
-import org.bouncycastle.extensions.getSecretKeyFor
-import org.bouncycastle.extensions.issuerKeyId
-import org.bouncycastle.extensions.unlock
 import org.bouncycastle.openpgp.*
 import org.bouncycastle.openpgp.operator.PBEDataDecryptorFactory
 import org.bouncycastle.openpgp.operator.PublicKeyDataDecryptorFactory
 import org.bouncycastle.util.io.TeeInputStream
 import org.pgpainless.PGPainless
 import org.pgpainless.algorithm.*
+import org.pgpainless.bouncycastle.extensions.getPublicKeyFor
+import org.pgpainless.bouncycastle.extensions.getSecretKeyFor
+import org.pgpainless.bouncycastle.extensions.issuerKeyId
+import org.pgpainless.bouncycastle.extensions.unlock
 import org.pgpainless.decryption_verification.MessageMetadata.*
 import org.pgpainless.decryption_verification.cleartext_signatures.ClearsignedMessageUtil
 import org.pgpainless.decryption_verification.syntax_check.InputSymbol
@@ -144,6 +144,10 @@ class OpenPgpMessageInputStream(
                     LOGGER.debug("Skipping Marker Packet")
                     pIn.readMarker()
                 }
+                OpenPgpPacket.PADDING -> {
+                    LOGGER.debug("Skipping Padding Packet")
+                    pIn.readPacket()
+                }
                 OpenPgpPacket.SK,
                 OpenPgpPacket.PK,
                 OpenPgpPacket.SSK,
@@ -197,9 +201,13 @@ class OpenPgpMessageInputStream(
 
     private fun processOnePassSignature() {
         syntaxVerifier.next(InputSymbol.ONE_PASS_SIGNATURE)
-        val ops = packetInputStream!!.readOnePassSignature()
-        LOGGER.debug(
-            "One-Pass-Signature Packet by key ${ops.keyID.openPgpKeyId()} at depth ${layerMetadata.depth} encountered.")
+        val ops =
+            try {
+                packetInputStream!!.readOnePassSignature()
+            } catch (e: UnsupportedPacketVersionException) {
+                LOGGER.debug("Unsupported One-Pass-Signature packet version encountered.", e)
+                return
+            }
         signatures.addOnePassSignature(ops)
     }
 

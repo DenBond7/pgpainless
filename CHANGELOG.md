@@ -5,20 +5,37 @@ SPDX-License-Identifier: CC0-1.0
 
 # PGPainless Changelog
 
+
 ## 2.0.0-SNAPSHOT
-- Bump `bcpg-jdk8on` to `1.77`
-- Bump `bcprov-jdk18on` to `1.77`
+- Bump `bcpg-jdk8on` to `1.78.1`
+- Bump `bcprov-jdk18on` to `1.78.1`
 - Bump `logback-core` and `logback-classic` to `1.4.13`
 - `pgpainless-core`
   - Rewrote most of the codebase in Kotlin
   - Removed `OpenPgpMetadata` (`decryptionStream.getResult()`) in favor of `MessageMetadata` (`decryptionStream.getMetadata()`)
+  - Removed support for generating EC keys over non-standard curve `secp256k1`
 - `pgpainless-sop`, `pgpainless-cli`
-  - Bump `sop-java` to `8.0.1`, implementing [SOP Spec Revision 08](https://www.ietf.org/archive/id/draft-dkg-openpgp-stateless-cli-08.html)
+  - Bump `sop-java` to `10.0.0`, implementing [SOP Spec Revision 10](https://www.ietf.org/archive/id/draft-dkg-openpgp-stateless-cli-10.html)
   - Change API of `sop.encrypt` to return a `ReadyWithResult<EncryptionResult>` to expose the session key
   - `decrypt --verify-with`: Fix to not throw `NoSignature` exception (exit code 3) if `VERIFICATIONS` is empty
+  - Separate signature verification operations into `SOPV` interface
+  - Add `version --sopv` option
+  - Throw `BadData` error when passing KEYS where CERTS are expected.
 - Properly feed EOS tokens to the pushdown automaton when reaching the end of stream (thanks @iNPUTmice)
 - Do not choke on unknown signature subpackets (thanks @Jerbell)
 - Prevent timing issues resuting in subkey binding signatures predating the subkey (@thanks Jerbell)
+- Rename LibrePGP-related `Feature` enums:
+  - `GNUPG_AEAD_ENCRYPTED_DATA` -> `LIBREPGP_OCB_ENCRYPTED_DATA`
+  - `GNUPG_VERSION_5_PUBLIC_KEY` -> `LIBREPGP_VERSION_5_PUBLIC_KEY`
+
+## 1.6.7
+- SOP: Fix OOM error when detached-signing large amounts of data (fix #432)
+- Move `CachingBcPublicKeyDataDecryptorFactory` from `org.bouncycastle` packet to `org.pgpainless.decryption_verification` to avoid package split (partially addresses #428)
+- Basic support for Java Modules for `pgpainless-core` and `pgpainless-sop`
+  - Added `Automatic-Module-Name` directive to gradle build files
+
+## 1.6.6
+- Downgrade `logback-core` and `logback-classic` to `1.2.13` to fix #426
 
 ## 1.6.5
 - Add `SecretKeyRingEditor.setExpirationDateOfSubkey()`
