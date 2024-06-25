@@ -144,6 +144,10 @@ class OpenPgpMessageInputStream(
                     LOGGER.debug("Skipping Marker Packet")
                     pIn.readMarker()
                 }
+                OpenPgpPacket.PADDING -> {
+                    LOGGER.debug("Skipping Padding Packet")
+                    pIn.readPacket()
+                }
                 OpenPgpPacket.SK,
                 OpenPgpPacket.PK,
                 OpenPgpPacket.SSK,
@@ -197,9 +201,13 @@ class OpenPgpMessageInputStream(
 
     private fun processOnePassSignature() {
         syntaxVerifier.next(InputSymbol.ONE_PASS_SIGNATURE)
-        val ops = packetInputStream!!.readOnePassSignature()
-        LOGGER.debug(
-            "One-Pass-Signature Packet by key ${ops.keyID.openPgpKeyId()} at depth ${layerMetadata.depth} encountered.")
+        val ops =
+            try {
+                packetInputStream!!.readOnePassSignature()
+            } catch (e: UnsupportedPacketVersionException) {
+                LOGGER.debug("Unsupported One-Pass-Signature packet version encountered.", e)
+                return
+            }
         signatures.addOnePassSignature(ops)
     }
 
