@@ -5,28 +5,49 @@ SPDX-License-Identifier: CC0-1.0
 
 # PGPainless Changelog
 
+## 1.7.2
+- Fix bug in `KeyRingInfo.lastModified` (thanks to @Jerbell, @sosnovsky for reporting)
+- Bump `sop-java` to `10.0.3`
+  - allow multiple arguments `--with-key-password` in `revoke-key` command
+  - Properly pass `--old-key-password` and `--new-key-password` options as indirect arguments in `change-key-password` command
 
-## 2.0.0-SNAPSHOT
+## 1.7.1
+- Bump `sop-java` to `10.0.2`
+- Downgrade `logback-core` and `logback-classic` to `1.2.13` (fix CLI spam)
+
+## 1.7.0
 - Bump `bcpg-jdk8on` to `1.78.1`
 - Bump `bcprov-jdk18on` to `1.78.1`
-- Bump `logback-core` and `logback-classic` to `1.4.13`
+- Bump `logback-core` and `logback-classic` to `1.4.14`
 - `pgpainless-core`
   - Rewrote most of the codebase in Kotlin
   - Removed `OpenPgpMetadata` (`decryptionStream.getResult()`) in favor of `MessageMetadata` (`decryptionStream.getMetadata()`)
   - Removed support for generating EC keys over non-standard curve `secp256k1`
+  - Properly feed EOS tokens to the pushdown automaton when reaching the end of stream (thanks @iNPUTmice)
+  - Do not choke on unknown signature subpackets (thanks @Jerbell)
+  - Prevent timing issues resulting in subkey binding signatures predating the subkey (@thanks Jerbell)
+  - Rename LibrePGP-related `Feature` enums:
+    - `GNUPG_AEAD_ENCRYPTED_DATA` -> `LIBREPGP_OCB_ENCRYPTED_DATA`
+    - `GNUPG_VERSION_5_PUBLIC_KEY` -> `LIBREPGP_VERSION_5_PUBLIC_KEY`
+  - Properly reject signatures by non-signing primary keys
+  - Add `EncryptionBuilder.discardOutput()` (useful for detached signing)
+  - Remove support for generation of keys over non-standard `secp256k1` curve
+  - Add base support for padding packets
+  - Do not choke on LibrePGP OED packets
+  - Supersede `addPassphrase()`/`addDecryptionPassphrase()` methods with more clear `addMessagePassphrase()`
 - `pgpainless-sop`, `pgpainless-cli`
-  - Bump `sop-java` to `10.0.0`, implementing [SOP Spec Revision 10](https://www.ietf.org/archive/id/draft-dkg-openpgp-stateless-cli-10.html)
+  - Bump `sop-java` to `10.0.1`, implementing [SOP Spec Revision 10](https://www.ietf.org/archive/id/draft-dkg-openpgp-stateless-cli-10.html)
   - Change API of `sop.encrypt` to return a `ReadyWithResult<EncryptionResult>` to expose the session key
   - `decrypt --verify-with`: Fix to not throw `NoSignature` exception (exit code 3) if `VERIFICATIONS` is empty
   - Separate signature verification operations into `SOPV` interface
   - Add `version --sopv` option
   - Throw `BadData` error when passing KEYS where CERTS are expected.
-- Properly feed EOS tokens to the pushdown automaton when reaching the end of stream (thanks @iNPUTmice)
-- Do not choke on unknown signature subpackets (thanks @Jerbell)
-- Prevent timing issues resuting in subkey binding signatures predating the subkey (@thanks Jerbell)
-- Rename LibrePGP-related `Feature` enums:
-  - `GNUPG_AEAD_ENCRYPTED_DATA` -> `LIBREPGP_OCB_ENCRYPTED_DATA`
-  - `GNUPG_VERSION_5_PUBLIC_KEY` -> `LIBREPGP_VERSION_5_PUBLIC_KEY`
+  - `armor`: Remove `--label` option
+
+## 1.6.8
+- Bump `sop-java` to `7.0.2`
+- SOP `change-key-password`: Fix reading password from indirect parameter instead of erroneously passing filename (fixes #453)
+- SOP `revoke-key`: Allow for multiple `--with-key-password` options
 
 ## 1.6.7
 - SOP: Fix OOM error when detached-signing large amounts of data (fix #432)

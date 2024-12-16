@@ -23,7 +23,7 @@ enum class SignatureType(val code: Int) {
     /**
      * Signature of a canonical text document. This means the signer owns it, created it, or
      * certifies that it has not been modified. The signature is calculated over the text data with
-     * its line endings converted to {@code <CR><LF>}.
+     * its line endings converted to `<CR><LF>`.
      */
     CANONICAL_TEXT_DOCUMENT(0x01),
 
@@ -170,7 +170,8 @@ enum class SignatureType(val code: Int) {
 
         @JvmStatic
         fun isRevocationSignature(signatureType: Int): Boolean {
-            return isRevocationSignature(valueOf(signatureType))
+            val sigType = fromCode(signatureType)
+            return sigType?.let { isRevocationSignature(it) } ?: false
         }
 
         @JvmStatic
