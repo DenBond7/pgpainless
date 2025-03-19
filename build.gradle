@@ -45,6 +45,7 @@ allprojects {
     // without this we would generate an empty pgpainless.jar for the project root
     // https://stackoverflow.com/a/25445035
     jar {
+        reproducibleFileOrder = true
         onlyIf { !sourceSets.main.allSource.files.isEmpty() }
     }
 
@@ -278,7 +279,7 @@ if (JavaVersion.current().isJava8Compatible()) {
         // gradle. See https://github.com/gradle/gradle/issues/2354
         // See JDK-8200363 (https://bugs.openjdk.java.net/browse/JDK-8200363)
         // for information about the -Xwerror option.
-        options.addStringOption('Xwerror', '-quiet')
+        // options.addStringOption('Xwerror', '-quiet')
     }
 }
 

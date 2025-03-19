@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2021 Paul Schaub <vanitasvitae@fsfe.org>
 //
 // SPDX-License-Identifier: Apache-2.0
-
+import org.apache.tools.ant.filters.*
 plugins {
     id 'java-library'
 }
@@ -22,12 +22,18 @@ dependencies {
     testImplementation "ch.qos.logback:logback-classic:$logbackVersion"
 
     // Depend on "shared" sop-java test suite (fixtures are turned into tests by inheritance inside test sources)
-    testImplementation(testFixtures("org.pgpainless:sop-java:$sopJavaVersion"))
+    testImplementation "org.pgpainless:sop-java-testfixtures:$sopJavaVersion"
 
     implementation(project(":pgpainless-core"))
     api "org.pgpainless:sop-java:$sopJavaVersion"
 
     implementation "com.google.code.findbugs:jsr305:3.0.2"
+}
+
+processResources {
+    filter ReplaceTokens, tokens: [
+            "project.version": project.version.toString()
+    ]
 }
 
 test {

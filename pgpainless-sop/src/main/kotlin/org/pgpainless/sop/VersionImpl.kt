@@ -8,6 +8,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.util.*
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import sop.SOP
 import sop.operation.Version
 
 /** Implementation of the `version` operation using PGPainless. */
@@ -25,14 +26,14 @@ class VersionImpl : Version {
             String.format(Locale.US, "Bouncy Castle %.2f", BouncyCastleProvider().version)
         val specVersion = String.format("%02d", SOP_VERSION)
         return """${getName()} ${getVersion()}
-https://codeberg.org/PGPainless/pgpainless/src/branch/master/pgpainless-sop
+https://codeberg.org/PGPainless/pgpainless/src/branch/main/pgpainless-sop
 
 Implementation of the Stateless OpenPGP Protocol Version $specVersion
 https://datatracker.ietf.org/doc/html/draft-dkg-openpgp-stateless-cli-$specVersion
 
 Based on pgpainless-core ${getVersion()}
 https://pgpainless.org
-
+${formatSopJavaVersion()}
 Using $bcVersion
 https://www.bouncycastle.org/java.html"""
     }
@@ -49,14 +50,26 @@ https://www.bouncycastle.org/java.html"""
         // See https://stackoverflow.com/a/50119235
         return try {
             val resourceIn: InputStream =
-                javaClass.getResourceAsStream("/version.properties")
-                    ?: throw IOException("File version.properties not found.")
+                SOP::class.java.getResourceAsStream("/pgpainless-sop.properties")
+                    ?: throw IOException("File pgpainless-sop.properties not found.")
 
             val properties = Properties().apply { load(resourceIn) }
-            properties.getProperty("version")
+            properties.getProperty("pgpainless-sop-version")
         } catch (e: IOException) {
             "DEVELOPMENT"
         }
+    }
+
+    private fun formatSopJavaVersion(): String {
+        return getSopJavaVersion()?.let {
+            """
+            
+            sop-java $it
+            
+        """
+                .trimIndent()
+        }
+            ?: ""
     }
 
     override fun isSopSpecImplementationIncomplete(): Boolean = false
