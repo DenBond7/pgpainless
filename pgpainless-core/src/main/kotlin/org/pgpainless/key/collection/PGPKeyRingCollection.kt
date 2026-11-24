@@ -6,13 +6,14 @@ package org.pgpainless.key.collection
 
 import java.io.InputStream
 import org.bouncycastle.openpgp.*
-import org.pgpainless.implementation.ImplementationFactory
+import org.bouncycastle.openpgp.api.OpenPGPImplementation
 import org.pgpainless.util.ArmorUtils
 
 /**
  * This class describes a logic of handling a collection of different [PGPKeyRing]. The logic was
  * inspired by [PGPSecretKeyRingCollection] and [PGPPublicKeyRingCollection].
  */
+@Deprecated("Use of this class is discouraged.")
 class PGPKeyRingCollection(
     val pgpSecretKeyRingCollection: PGPSecretKeyRingCollection,
     val pgpPublicKeyRingCollection: PGPPublicKeyRingCollection
@@ -42,9 +43,6 @@ class PGPKeyRingCollection(
 
     fun size() = size
 
-    @Deprecated("Wrong case of PGP -> Pgp", ReplaceWith("getPgpSecretKeyRingCollection()"))
-    fun getPGPSecretKeyRingCollection() = pgpSecretKeyRingCollection
-
     companion object {
         @JvmStatic
         private fun parse(
@@ -55,8 +53,8 @@ class PGPKeyRingCollection(
             val certificates = mutableListOf<PGPPublicKeyRing>()
             // Double getDecoderStream because of #96
             val objectFactory =
-                ImplementationFactory.getInstance()
-                    .getPGPObjectFactory(ArmorUtils.getDecoderStream(inputStream))
+                OpenPGPImplementation.getInstance()
+                    .pgpObjectFactory(ArmorUtils.getDecoderStream(inputStream))
 
             for (obj in objectFactory) {
                 if (obj == null) {

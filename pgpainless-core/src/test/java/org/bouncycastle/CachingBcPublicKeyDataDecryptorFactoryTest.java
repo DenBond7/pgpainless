@@ -10,10 +10,9 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
+import org.bouncycastle.bcpg.KeyIdentifier;
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPPrivateKey;
-import org.bouncycastle.openpgp.PGPSecretKey;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.api.OpenPGPKey;
 import org.bouncycastle.util.io.Streams;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
@@ -64,21 +63,21 @@ public class CachingBcPublicKeyDataDecryptorFactoryTest {
 
     @Test
     public void test() throws PGPException, IOException {
-        PGPSecretKeyRing secretKeys = PGPainless.readKeyRing().secretKeyRing(KEY);
+        PGPainless api = PGPainless.getInstance();
+        OpenPGPKey secretKeys = api.readKey().parseKey(KEY);
         SecretKeyRingProtector protector = SecretKeyRingProtector.unprotectedKeys();
-        KeyRingInfo info = PGPainless.inspectKeyRing(secretKeys);
-        SubkeyIdentifier decryptionKey = new SubkeyIdentifier(secretKeys,
-                info.getEncryptionSubkeys(EncryptionPurpose.ANY).get(0).getKeyID());
+        KeyRingInfo info = api.inspect(secretKeys);
+        KeyIdentifier decryptionKeyIdentifier = info.getEncryptionSubkeys(EncryptionPurpose.ANY).get(0).getKeyIdentifier();
 
-        PGPSecretKey secretKey = secretKeys.getSecretKey(decryptionKey.getSubkeyId());
-        PGPPrivateKey privateKey = UnlockSecretKey.unlockSecretKey(secretKey, protector);
+        OpenPGPKey.OpenPGPSecretKey secretKey = secretKeys.getSecretKey(decryptionKeyIdentifier);
+        OpenPGPKey.OpenPGPPrivateKey privateKey = UnlockSecretKey.unlockSecretKey(secretKey, protector, api.getAlgorithmPolicy());
         CachingBcPublicKeyDataDecryptorFactory cachingFactory = new CachingBcPublicKeyDataDecryptorFactory(
-                privateKey, decryptionKey);
+                privateKey.getKeyPair().getPrivateKey(), new SubkeyIdentifier(secretKey));
 
         ByteArrayInputStream ciphertextIn = new ByteArrayInputStream(MSG.getBytes());
-        DecryptionStream decryptionStream = PGPainless.decryptAndOrVerify()
+        DecryptionStream decryptionStream = api.processMessage()
                 .onInputStream(ciphertextIn)
-                .withOptions(ConsumerOptions.get()
+                .withOptions(ConsumerOptions.get(api)
                         .addCustomDecryptorFactory(cachingFactory));
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -87,9 +86,9 @@ public class CachingBcPublicKeyDataDecryptorFactoryTest {
         assertEquals("Hello, World!\n", out.toString());
 
         ciphertextIn = new ByteArrayInputStream(MSG.getBytes());
-        decryptionStream = PGPainless.decryptAndOrVerify()
+        decryptionStream = api.processMessage()
                 .onInputStream(ciphertextIn)
-                .withOptions(ConsumerOptions.get()
+                .withOptions(ConsumerOptions.get(api)
                         .addCustomDecryptorFactory(cachingFactory));
         out = new ByteArrayOutputStream();
         Streams.pipeAll(decryptionStream, out);

@@ -30,23 +30,23 @@
 pgpainless\-cli\-revoke\-key \- Generate revocation certificates
 .SH "SYNOPSIS"
 .sp
-\fBpgpainless\-cli revoke\-key\fP [\fB\-\-[no\-]armor\fP] [\fB\-\-stacktrace\fP] [\fB\-\-with\-key\-password\fP=\fIPASSWORD\fP]
+\fBpgpainless\-cli revoke\-key\fP [\fB\-\-debug\fP] [\fB\-\-[no\-]armor\fP] [\fB\-\-with\-key\-password\fP[=\fIPASSWORD\fP...]]...
 .SH "DESCRIPTION"
 .sp
 Emit revocation certificates for secret keys from STDIN to STDOUT.
 .SH "OPTIONS"
+.sp
+\fB\-\-debug, \-\-stacktrace\fP
+.RS 4
+Print stacktrace
+.RE
 .sp
 \fB\-\-[no\-]armor\fP
 .RS 4
 ASCII armor the output
 .RE
 .sp
-\fB\-\-stacktrace\fP
-.RS 4
-Print stacktrace
-.RE
-.sp
-\fB\-\-with\-key\-password\fP=\fIPASSWORD\fP
+\fB\-\-with\-key\-password\fP[=\fIPASSWORD\fP...]
 .RS 4
 Passphrase to unlock the secret key(s).
 .sp

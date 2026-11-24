@@ -7,22 +7,22 @@ package org.pgpainless.key.protection.fixes
 import org.bouncycastle.bcpg.SecretKeyPacket
 import org.bouncycastle.openpgp.PGPSecretKey
 import org.bouncycastle.openpgp.PGPSecretKeyRing
-import org.pgpainless.algorithm.HashAlgorithm
-import org.pgpainless.bouncycastle.extensions.unlock
+import org.bouncycastle.openpgp.api.OpenPGPImplementation
+import org.pgpainless.bouncycastle.extensions.checksumCalculator
 import org.pgpainless.exception.WrongPassphraseException
-import org.pgpainless.implementation.ImplementationFactory
 import org.pgpainless.key.protection.SecretKeyRingProtector
+import org.pgpainless.key.protection.UnlockSecretKey
+import org.pgpainless.key.protection.fixes.S2KUsageFix.Companion.replaceUsageChecksumWithUsageSha1
+import org.pgpainless.policy.Policy
 
 /**
  * Repair class to fix keys which use S2K usage of value [SecretKeyPacket.USAGE_CHECKSUM]. The
  * method [replaceUsageChecksumWithUsageSha1] ensures that such keys are encrypted using S2K usage
  * [SecretKeyPacket.USAGE_SHA1] instead.
  *
- * @see <a href="https://github.com/pgpainless/pgpainless/issues/176">Related PGPainless Bug
- *   Report</a>
- * @see <a href="https://github.com/pgpainless/pgpainless/issues/178">Related PGPainless Feature
- *   Request</a>
- * @see <a href="https://github.com/bcgit/bc-java/issues/1020">Related upstream BC bug report</a>
+ * @see [Related PGPainless Bug Report](https://github.com/pgpainless/pgpainless/issues/176)
+ * @see [Related PGPainless Feature Request](https://github.com/pgpainless/pgpainless/issues/178)
+ * @see [Related upstream BC bug report](https://github.com/bcgit/bc-java/issues/1020)
  */
 class S2KUsageFix {
 
@@ -38,27 +38,28 @@ class S2KUsageFix {
          * @param skipKeysWithMissingPassphrase if set to true, missing subkey passphrases will
          *   cause the subkey to stay unaffected.
          * @return fixed key ring
-         * @throws PGPException in case of a PGP error.
          */
         @JvmStatic
         @JvmOverloads
         fun replaceUsageChecksumWithUsageSha1(
             keys: PGPSecretKeyRing,
             protector: SecretKeyRingProtector,
-            skipKeysWithMissingPassphrase: Boolean = false
+            skipKeysWithMissingPassphrase: Boolean = false,
+            implementation: OpenPGPImplementation,
+            policy: Policy
         ): PGPSecretKeyRing {
-            val digestCalculator =
-                ImplementationFactory.getInstance().getPGPDigestCalculator(HashAlgorithm.SHA1)
+            val digestCalculator = implementation.checksumCalculator()
             val keyList = mutableListOf<PGPSecretKey>()
             for (key in keys) {
                 // CHECKSUM is not recommended
+                @Suppress("DEPRECATION")
                 if (key.s2KUsage != SecretKeyPacket.USAGE_CHECKSUM) {
                     keyList.add(key)
                     continue
                 }
 
                 val keyId = key.keyID
-                val encryptor = protector.getEncryptor(keyId)
+                val encryptor = protector.getEncryptor(key.publicKey)
                 if (encryptor == null) {
                     if (skipKeysWithMissingPassphrase) {
                         keyList.add(key)
@@ -68,7 +69,13 @@ class S2KUsageFix {
                         "Missing passphrase for key with ID " + java.lang.Long.toHexString(keyId))
                 }
 
-                val privateKey = key.unlock(protector)
+                // skip stripped secret keys
+                if (key.isPrivateKeyEmpty) {
+                    keyList.add(key)
+                    continue
+                }
+
+                val privateKey = UnlockSecretKey.unlockSecretKey(key, protector, policy)
                 // This constructor makes use of USAGE_SHA1 by default
                 val fixedKey =
                     PGPSecretKey(
@@ -76,7 +83,7 @@ class S2KUsageFix {
                         key.publicKey,
                         digestCalculator,
                         key.isMasterKey,
-                        protector.getEncryptor(keyId))
+                        protector.getEncryptor(key.publicKey))
                 keyList.add(fixedKey)
             }
             return PGPSecretKeyRing(keyList)

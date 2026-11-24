@@ -7,25 +7,15 @@ package org.pgpainless.key.collection;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
-import java.util.Collection;
 
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPKeyRing;
-import org.bouncycastle.openpgp.PGPPublicKeyRing;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.junit.jupiter.api.Test;
-import org.pgpainless.PGPainless;
-import org.pgpainless.key.util.KeyRingUtils;
 
 public class PGPKeyRingCollectionTest {
 
     @Test
-    public void constructorThrowsForInvalidInput() throws PGPException, IOException {
+    public void constructorThrowsForInvalidInput() {
         // This is neither a public key, nor a private key
         String invalidKeyRing = "-----BEGIN PGP SIGNATURE-----\n" +
                 "\n" +
@@ -53,17 +43,5 @@ public class PGPKeyRingCollectionTest {
         PGPKeyRingCollection collection = new PGPKeyRingCollection(bytes, true);
         assertEquals(0, collection.getPgpPublicKeyRingCollection().size());
         assertEquals(0, collection.getPgpSecretKeyRingCollection().size());
-    }
-
-    @Test
-    public void testConstructorFromCollection() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
-        PGPSecretKeyRing first = PGPainless.generateKeyRing().simpleEcKeyRing("alice@wonderland.lit");
-        PGPSecretKeyRing second = PGPainless.generateKeyRing().simpleEcKeyRing("bob@the-builder.tv");
-        PGPPublicKeyRing secondPub = KeyRingUtils.publicKeyRingFrom(second);
-        Collection<PGPKeyRing> keys = Arrays.asList(first, second, secondPub);
-
-        PGPKeyRingCollection collection = new PGPKeyRingCollection(keys, true);
-        assertEquals(2, collection.getPgpSecretKeyRingCollection().size());
-        assertEquals(1, collection.getPgpPublicKeyRingCollection().size());
     }
 }

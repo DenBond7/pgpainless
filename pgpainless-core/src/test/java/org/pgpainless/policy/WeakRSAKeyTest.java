@@ -6,15 +6,17 @@ package org.pgpainless.policy;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Date;
 
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPPublicKeyRing;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.api.OpenPGPCertificate;
+import org.bouncycastle.openpgp.api.OpenPGPKey;
 import org.bouncycastle.util.io.Streams;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
@@ -149,13 +151,15 @@ public class WeakRSAKeyTest {
     public void cannotGenerateWeakKeyWithDefaultPolicyTest() {
         String userId = "Alice <alice@pgpainless.org>";
         assertThrows(IllegalArgumentException.class, () ->
-                PGPainless.generateKeyRing()
+                PGPainless.getInstance().generateKey()
                         .rsaKeyRing(userId, RsaLength._1024, Passphrase.emptyPassphrase()));
     }
 
     @Test
     public void cannotSignWithWeakKey() throws IOException {
-        PGPSecretKeyRing secretKeys = PGPainless.readKeyRing().secretKeyRing(WEAK_RSA_KEY);
+        PGPainless api = PGPainless.getInstance();
+        OpenPGPKey secretKeys = api.readKey().parseKey(WEAK_RSA_KEY);
+        assumeTrue(secretKeys.getExpirationTime().after(new Date()));
         SecretKeyRingProtector protector = SecretKeyRingProtector.unprotectedKeys();
 
         SigningOptions signingOptions = SigningOptions.get();
@@ -167,14 +171,15 @@ public class WeakRSAKeyTest {
 
     @Test
     public void encryptDecryptRoundTripWithWeakRSAKey() throws IOException, PGPException {
-        PGPSecretKeyRing secretKeys = PGPainless.readKeyRing().secretKeyRing(WEAK_RSA_KEY);
-        PGPPublicKeyRing publicKeys = PGPainless.extractCertificate(secretKeys);
+        PGPainless api = PGPainless.getInstance();
+        OpenPGPKey secretKeys = api.readKey().parseKey(WEAK_RSA_KEY);
+        OpenPGPCertificate publicKeys = secretKeys.toCertificate();
 
         ByteArrayOutputStream encryptOut = new ByteArrayOutputStream();
-        EncryptionOptions encryptionOptions = EncryptionOptions.encryptCommunications()
+        EncryptionOptions encryptionOptions = EncryptionOptions.encryptCommunications(api)
                 .addRecipient(publicKeys);
 
-        EncryptionStream encryptionStream = PGPainless.encryptAndOrSign()
+        EncryptionStream encryptionStream = api.generateMessage()
                 .onOutputStream(encryptOut)
                 .withOptions(ProducerOptions.encrypt(encryptionOptions));
 
@@ -183,7 +188,7 @@ public class WeakRSAKeyTest {
 
         ByteArrayInputStream ciphertextIn = new ByteArrayInputStream(encryptOut.toByteArray());
         ByteArrayOutputStream plaintextOut = new ByteArrayOutputStream();
-        DecryptionStream decryptionStream = PGPainless.decryptAndOrVerify()
+        DecryptionStream decryptionStream = api.processMessage()
                 .onInputStream(ciphertextIn)
                 .withOptions(ConsumerOptions.get()
                         .addDecryptionKey(secretKeys));

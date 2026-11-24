@@ -6,11 +6,13 @@ package org.pgpainless.signature.builder
 
 import java.util.function.Predicate
 import org.bouncycastle.openpgp.PGPException
-import org.bouncycastle.openpgp.PGPSecretKey
 import org.bouncycastle.openpgp.PGPSignature
 import org.bouncycastle.openpgp.PGPSignatureGenerator
+import org.bouncycastle.openpgp.api.OpenPGPKey
+import org.pgpainless.PGPainless
 import org.pgpainless.algorithm.SignatureType
 import org.pgpainless.key.protection.SecretKeyRingProtector
+import org.pgpainless.policy.Policy
 import org.pgpainless.signature.subpackets.SignatureSubpackets
 
 /**
@@ -24,18 +26,26 @@ class UniversalSignatureBuilder : AbstractSignatureBuilder<UniversalSignatureBui
         get() = Predicate<SignatureType> { true }
 
     @Throws(PGPException::class)
+    @JvmOverloads
     constructor(
         signatureType: SignatureType,
-        signingKey: PGPSecretKey,
-        protector: SecretKeyRingProtector
-    ) : super(signatureType, signingKey, protector)
+        signingKey: OpenPGPKey.OpenPGPSecretKey,
+        protector: SecretKeyRingProtector,
+        api: PGPainless,
+        hashAlgorithmPolicySelector: Function1<PGPainless, Policy.HashAlgorithmPolicy> =
+            certSigHashPolicy()
+    ) : super(signatureType, signingKey, protector, api, hashAlgorithmPolicySelector)
 
     @Throws(PGPException::class)
+    @JvmOverloads
     constructor(
-        signingKey: PGPSecretKey,
+        signingKey: OpenPGPKey.OpenPGPSecretKey,
         protector: SecretKeyRingProtector,
-        archetypeSignature: PGPSignature
-    ) : super(signingKey, protector, archetypeSignature)
+        archetypeSignature: PGPSignature,
+        api: PGPainless,
+        hashAlgorithmPolicySelector: Function1<PGPainless, Policy.HashAlgorithmPolicy> =
+            certSigHashPolicy()
+    ) : super(signingKey, protector, archetypeSignature, api, hashAlgorithmPolicySelector)
 
     val hashedSubpackets: SignatureSubpackets = _hashedSubpackets
     val unhashedSubpackets: SignatureSubpackets = _unhashedSubpackets

@@ -11,15 +11,14 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.security.InvalidAlgorithmParameterException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPPublicKeyRing;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
-import org.bouncycastle.openpgp.PGPSignature;
+import org.bouncycastle.openpgp.api.OpenPGPCertificate;
+import org.bouncycastle.openpgp.api.OpenPGPKey;
+import org.bouncycastle.openpgp.api.OpenPGPSignature;
 import org.bouncycastle.util.io.Streams;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
@@ -61,43 +60,49 @@ public class BcHashContextSignerTest {
 
     @Test
     public void signContextWithEdDSAKeys() throws PGPException, NoSuchAlgorithmException, IOException {
-        PGPSecretKeyRing secretKeys = PGPainless.readKeyRing().secretKeyRing(KEY);
-        signWithKeys(secretKeys);
+        PGPainless api = PGPainless.getInstance();
+        OpenPGPKey secretKeys = api.readKey().parseKey(KEY);
+        signWithKeys(secretKeys, api);
     }
 
     @Test
-    public void signContextWithRSAKeys() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, IOException {
-        PGPSecretKeyRing secretKeys = PGPainless.generateKeyRing().simpleRsaKeyRing("Sigfried", RsaLength._3072);
-        signWithKeys(secretKeys);
+    public void signContextWithRSAKeys() throws PGPException, NoSuchAlgorithmException, IOException {
+        PGPainless api = PGPainless.getInstance();
+        OpenPGPKey secretKeys = api.generateKey()
+                .simpleRsaKeyRing("Sigfried", RsaLength._3072);
+        signWithKeys(secretKeys, api);
     }
 
     @Test
-    public void signContextWithEcKeys() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException, IOException {
-        PGPSecretKeyRing secretKeys = PGPainless.generateKeyRing().simpleEcKeyRing("Sigfried");
-        signWithKeys(secretKeys);
+    public void signContextWithEcKeys() throws PGPException, NoSuchAlgorithmException, IOException {
+        PGPainless api = PGPainless.getInstance();
+        OpenPGPKey secretKeys = api.generateKey()
+                .simpleEcKeyRing("Sigfried");
+        signWithKeys(secretKeys, api);
     }
 
-    private void signWithKeys(PGPSecretKeyRing secretKeys) throws PGPException, NoSuchAlgorithmException, IOException {
+    private void signWithKeys(OpenPGPKey secretKeys, PGPainless api) throws PGPException, NoSuchAlgorithmException, IOException {
         for (HashAlgorithm hashAlgorithm : new HashAlgorithm[] {
                 HashAlgorithm.SHA256, HashAlgorithm.SHA384, HashAlgorithm.SHA512
         }) {
-            signFromContext(secretKeys, hashAlgorithm);
+            signFromContext(secretKeys, hashAlgorithm, api);
         }
     }
 
-    private void signFromContext(PGPSecretKeyRing secretKeys, HashAlgorithm hashAlgorithm)
+    private void signFromContext(OpenPGPKey secretKeys, HashAlgorithm hashAlgorithm, PGPainless api)
             throws PGPException, NoSuchAlgorithmException, IOException {
-        PGPPublicKeyRing certificate = PGPainless.extractCertificate(secretKeys);
+        OpenPGPCertificate certificate = secretKeys.toCertificate();
 
         byte[] messageBytes = message.getBytes(StandardCharsets.UTF_8);
         ByteArrayInputStream messageIn = new ByteArrayInputStream(messageBytes);
 
-        PGPSignature signature = signMessage(messageBytes, hashAlgorithm, secretKeys);
-        assertEquals(hashAlgorithm.getAlgorithmId(), signature.getHashAlgorithm());
+        OpenPGPSignature.OpenPGPDocumentSignature signature = signMessage(
+                messageBytes, hashAlgorithm, secretKeys, api);
+        assertEquals(hashAlgorithm.getAlgorithmId(), signature.getSignature().getHashAlgorithm());
 
-        DecryptionStream decryptionStream = PGPainless.decryptAndOrVerify()
+        DecryptionStream decryptionStream = api.processMessage()
                 .onInputStream(messageIn)
-                .withOptions(new ConsumerOptions()
+                .withOptions(ConsumerOptions.get()
                         .addVerificationCert(certificate)
                         .addVerificationOfDetachedSignature(signature));
 
@@ -109,13 +114,18 @@ public class BcHashContextSignerTest {
         assertTrue(metadata.isVerifiedSigned());
     }
 
-    private PGPSignature signMessage(byte[] message, HashAlgorithm hashAlgorithm, PGPSecretKeyRing secretKeys)
-            throws NoSuchAlgorithmException, PGPException {
+    private OpenPGPSignature.OpenPGPDocumentSignature signMessage(
+            byte[] message,
+            HashAlgorithm hashAlgorithm,
+            OpenPGPKey secretKeys,
+            PGPainless api)
+            throws NoSuchAlgorithmException {
         // Prepare the hash context
         // This would be done by the caller application
         MessageDigest messageDigest = MessageDigest.getInstance(hashAlgorithm.getAlgorithmName(), new BouncyCastleProvider());
         messageDigest.update(message);
 
-        return BcHashContextSigner.signHashContext(messageDigest, SignatureType.BINARY_DOCUMENT, secretKeys, SecretKeyRingProtector.unprotectedKeys());
+        return BcHashContextSigner.signHashContext(messageDigest, SignatureType.BINARY_DOCUMENT,
+                secretKeys, SecretKeyRingProtector.unprotectedKeys(), api.getAlgorithmPolicy());
     }
 }

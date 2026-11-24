@@ -12,9 +12,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 
+import org.bouncycastle.bcpg.KeyIdentifier;
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPSecretKey;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.PGPSignature;
+import org.bouncycastle.openpgp.api.OpenPGPCertificate;
+import org.bouncycastle.openpgp.api.OpenPGPKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
@@ -35,30 +37,41 @@ public class GenerateKeyTest {
 
     @Test
     public void generateKey() throws IOException {
+        PGPainless api = PGPainless.getInstance();
         byte[] bytes = sop.generateKey()
                 .userId("Alice <alice@pgpainless.org>")
                 .generate()
                 .getBytes();
 
-        PGPSecretKeyRing secretKeys = PGPainless.readKeyRing()
-                .secretKeyRing(bytes);
+        OpenPGPKey secretKeys = api.readKey().parseKey(bytes);
 
-        assertTrue(PGPainless.inspectKeyRing(secretKeys)
+        for (OpenPGPCertificate.OpenPGPComponentKey subkey : secretKeys.getKeys()) {
+            if (subkey.isPrimaryKey()) {
+                continue;
+            }
+            PGPSignature binding = subkey.getPGPPublicKey().getKeySignatures().next();
+            for (KeyIdentifier issuer : binding.getKeyIdentifiers()) {
+                assertTrue(issuer.matchesExplicit(secretKeys.getPrimaryKey().getKeyIdentifier()),
+                        "Subkey signature MUST be issued by primary key.");
+            }
+        }
+
+        assertTrue(api.inspect(secretKeys)
                 .isUserIdValid("Alice <alice@pgpainless.org>"));
     }
 
     @Test
     public void generateKeyWithMultipleUserIds() throws IOException {
+        PGPainless api = PGPainless.getInstance();
         byte[] bytes = sop.generateKey()
                 .userId("Alice <alice@pgpainless.org>")
                 .userId("Al <al@example.org>")
                 .generate()
                 .getBytes();
 
-        PGPSecretKeyRing secretKeys = PGPainless.readKeyRing()
-                .secretKeyRing(bytes);
+        OpenPGPKey secretKeys = api.readKey().parseKey(bytes);
 
-        KeyRingInfo info = PGPainless.inspectKeyRing(secretKeys);
+        KeyRingInfo info = api.inspect(secretKeys);
         assertEquals("Alice <alice@pgpainless.org>", info.getPrimaryUserId());
         assertTrue(info.isUserIdValid("Alice <alice@pgpainless.org>"));
         assertTrue(info.isUserIdValid("Al <al@example.org>"));
@@ -77,6 +90,7 @@ public class GenerateKeyTest {
 
     @Test
     public void protectedMultiUserIdKey() throws IOException, PGPException {
+        PGPainless api = new PGPainless();
         byte[] bytes = sop.generateKey()
                 .userId("Alice")
                 .userId("Bob")
@@ -84,14 +98,14 @@ public class GenerateKeyTest {
                 .generate()
                 .getBytes();
 
-        PGPSecretKeyRing secretKey = PGPainless.readKeyRing().secretKeyRing(bytes);
-        KeyRingInfo info = PGPainless.inspectKeyRing(secretKey);
+        OpenPGPKey secretKey = api.readKey().parseKey(bytes);
+        KeyRingInfo info = api.inspect(secretKey);
 
         assertTrue(info.getUserIds().contains("Alice"));
         assertTrue(info.getUserIds().contains("Bob"));
 
-        for (PGPSecretKey key : secretKey) {
-            assertNotNull(UnlockSecretKey.unlockSecretKey(key, Passphrase.fromPassword("sw0rdf1sh")));
+        for (OpenPGPKey.OpenPGPSecretKey key : secretKey.getSecretKeys().values()) {
+            assertNotNull(UnlockSecretKey.unlockSecretKey(key, Passphrase.fromPassword("sw0rdf1sh"), api.getAlgorithmPolicy()));
         }
     }
 
@@ -99,5 +113,29 @@ public class GenerateKeyTest {
     public void invalidProfile() {
         assertThrows(SOPGPException.UnsupportedProfile.class, () ->
                 sop.generateKey().profile("invalid"));
+    }
+
+    @Test
+    public void generateKeyWithNewlinesInUserId() throws IOException {
+        byte[] keyBytes = sop.generateKey()
+                .userId("Foo\n\nBar")
+                .generate()
+                .getBytes();
+
+        OpenPGPKey key = PGPainless.getInstance().readKey().parseKey(keyBytes);
+        assertTrue(key.getValidUserIds().get(0).getUserId().equals("Foo\n\nBar"));
+    }
+
+    @Test
+    public void generateV6KeyCarriesDirectKeySignature() throws IOException {
+        byte[] keyBytes = sop.generateKey()
+                .profile(GenerateKeyImpl.RFC9580_CURVE25519_PROFILE)
+                .userId("Alice <alice@example.org>")
+                .generate()
+                .getBytes();
+
+        OpenPGPKey key = PGPainless.getInstance().readKey().parseKey(keyBytes);
+        assertNotNull(key.getPrimaryKey().getLatestDirectKeySelfSignature(),
+                "Expected Direct-Key self-signature on v6-key.");
     }
 }

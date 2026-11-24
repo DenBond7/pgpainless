@@ -7,9 +7,6 @@ package org.pgpainless.key.protection;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import java.security.InvalidAlgorithmParameterException;
-import java.security.NoSuchAlgorithmException;
-
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPrivateKey;
 import org.bouncycastle.openpgp.PGPSecretKey;
@@ -22,9 +19,11 @@ import org.pgpainless.util.Passphrase;
 public class UnlockSecretKeyTest {
 
     @Test
-    public void testUnlockSecretKey() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
-        PGPSecretKeyRing secretKeyRing = PGPainless.generateKeyRing()
-                .simpleEcKeyRing("alice@wonderland.lit", "heureka!");
+    public void testUnlockSecretKey() throws PGPException {
+        PGPainless api = PGPainless.getInstance();
+        PGPSecretKeyRing secretKeyRing = api.generateKey()
+                .simpleEcKeyRing("alice@wonderland.lit", "heureka!")
+                .getPGPSecretKeyRing();
         PGPSecretKey secretKey = secretKeyRing.getSecretKey();
 
         SecretKeyRingProtector correctPassphrase = SecretKeyRingProtector
@@ -39,14 +38,14 @@ public class UnlockSecretKeyTest {
                 .unlockAnyKeyWith(cleared);
 
         // Correct passphrase works
-        PGPPrivateKey privateKey = UnlockSecretKey.unlockSecretKey(secretKey, correctPassphrase);
+        PGPPrivateKey privateKey = UnlockSecretKey.unlockSecretKey(secretKey, correctPassphrase, api.getAlgorithmPolicy());
         assertNotNull(privateKey);
 
         assertThrows(WrongPassphraseException.class, () ->
-                UnlockSecretKey.unlockSecretKey(secretKey, incorrectPassphrase));
+                UnlockSecretKey.unlockSecretKey(secretKey, incorrectPassphrase, api.getAlgorithmPolicy()));
         assertThrows(WrongPassphraseException.class, () ->
-                UnlockSecretKey.unlockSecretKey(secretKey, emptyPassphrase));
+                UnlockSecretKey.unlockSecretKey(secretKey, emptyPassphrase, api.getAlgorithmPolicy()));
         assertThrows(IllegalStateException.class, () ->
-                UnlockSecretKey.unlockSecretKey(secretKey, invalidPassphrase));
+                UnlockSecretKey.unlockSecretKey(secretKey, invalidPassphrase, api.getAlgorithmPolicy()));
     }
 }

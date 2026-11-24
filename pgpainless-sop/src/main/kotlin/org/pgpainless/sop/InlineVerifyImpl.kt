@@ -19,20 +19,24 @@ import sop.exception.SOPGPException
 import sop.operation.InlineVerify
 
 /** Implementation of the `inline-verify` operation using PGPainless. */
-class InlineVerifyImpl : InlineVerify {
+class InlineVerifyImpl(private val api: PGPainless) : InlineVerify {
 
-    private val options = ConsumerOptions.get()
+    private val options = ConsumerOptions.get(api)
 
     override fun cert(cert: InputStream): InlineVerify = apply {
-        options.addVerificationCerts(KeyReader.readPublicKeys(cert, true))
+        options.addVerificationCerts(KeyReader(api).readPublicKeys(cert, true))
     }
 
     override fun data(data: InputStream): ReadyWithResult<List<Verification>> {
+        if (options.getCertificateSource().getExplicitCertificates().isEmpty()) {
+            throw SOPGPException.MissingArg("No CERTS supplied.")
+        }
+
         return object : ReadyWithResult<List<Verification>>() {
             override fun writeTo(outputStream: OutputStream): List<Verification> {
                 try {
                     val verificationStream =
-                        PGPainless.decryptAndOrVerify().onInputStream(data).withOptions(options)
+                        api.processMessage().onInputStream(data).withOptions(options)
 
                     Streams.pipeAll(verificationStream, outputStream)
                     verificationStream.close()
@@ -46,8 +50,7 @@ class InlineVerifyImpl : InlineVerify {
                             }
                             .map { VerificationHelper.mapVerification(it) }
 
-                    if (options.getCertificateSource().getExplicitCertificates().isNotEmpty() &&
-                        verifications.isEmpty()) {
+                    if (verifications.isEmpty()) {
                         throw SOPGPException.NoSignature()
                     }
 

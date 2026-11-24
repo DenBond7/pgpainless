@@ -24,7 +24,7 @@ PGPainless aims to make using OpenPGP in Java projects as simple as possible.
 It does so by introducing an intuitive Builder structure, which allows easy 
 setup of encryption/decryption operations, as well as straight forward key generation.
 
-PGPainless is based around the Bouncy Castle java library and can be used on Android down to API level 10.
+PGPainless is based around the Bouncy Castle java library and can be used on Android.
 It can be configured to either use the Java Cryptographic Engine (JCE), or Bouncy Castles lightweight reimplementation.
 
 While signature verification in Bouncy Castle is limited to signature correctness, PGPainless goes much further.
@@ -32,7 +32,7 @@ It also checks if signing subkeys are properly bound to their primary key, if ke
 if keys are allowed to create signatures in the first place.
 
 These rigorous checks make PGPainless stand out from other Java-based OpenPGP libraries and are the reason why
-PGPainless currently [*scores first place* on Sequoia-PGPs Interoperability Test-Suite](https://tests.sequoia-pgp.org).
+PGPainless currently scores above average on Sequoia-PGPs [Interoperability Test-Suite](https://tests.sequoia-pgp.org).
 
 > At FlowCrypt we are using PGPainless in our Kotlin code bases on Android and on server side.
 > The ergonomics of legacy PGP tooling on Java is not very good, and PGPainless improves it greatly.
@@ -44,6 +44,19 @@ PGPainless currently [*scores first place* on Sequoia-PGPs Interoperability Test
 > In this regard, Paul Schaub deserves the utmost praise.
 >
 > -Mario @ Cure53.de
+
+### AI-free!
+
+PGPainless was, is and will continue to be developed without the help of generative AI.
+Training large language models (LLMs) consumes huge amounts of energy, contributing to pollution of our planet
+through the large scale exploitation of fossile fuels.
+Further, AI data centers are large consumers of water, which - due to the ongoing climate crisis - is becoming a
+scarce resource in many places.
+
+The author is convinced, that the risk that generative artificial intelligence poses on society is greater than its
+benefits and therefore refrains from using it.
+
+PGPainless is made by humans for humans <3.
 
 ## Get Started
 
@@ -65,24 +78,23 @@ Reading keys from ASCII armored strings or from binary files is easy:
 
 ```java
         String key = "-----BEGIN PGP PRIVATE KEY BLOCK-----\n"...
-        PGPSecretKeyRing secretKey = PGPainless.readKeyRing()
-                .secretKeyRing(key);
+        OpenPGPKey secretKey = PGPainless.getInstance().readKey()
+                .parseKey(key);
 ```
 
 Similarly, keys can quickly be exported::
 
 ```java
-        PGPSecretKeyRing secretKey = ...;
-        String armored = PGPainless.asciiArmor(secretKey);
-        ByteArrayOutputStream binary = new ByteArrayOutputStream();
-        secretKey.encode(binary);
+        OpenPGPKey secretKey = ...;
+        String armored = secretKey.toAsciiArmoredString();
+        byte[] binary = secretKey.getEncoded();
 ```
 
 Extract a public key certificate from a secret key:
 
 ```java
-        PGPSecretKeyRing secretKey = ...;
-        PGPPublicKeyRing certificate = PGPainless.extractCertificate(secretKey);
+        OpenPGPKey secretKey = ...;
+        OpenPGPCertificate certificate = secretKey.toCertificate();
 ```
 
 ### Easily Generate Keys
@@ -90,16 +102,17 @@ PGPainless comes with a simple to use `KeyRingBuilder` class that helps you to q
 There are some predefined key archetypes, but it is possible to fully customize key generation to your needs.
 
 ```java
+        PGPainless api = PGPainless.getInstance();
         // RSA key without additional subkeys
-        PGPSecretKeyRing secretKeys = PGPainless.generateKeyRing()
+        OpenPGPKey secretKeys = api.generateKey()
                 .simpleRsaKeyRing("Juliet <juliet@montague.lit>", RsaLength._4096);
                 
         // EdDSA primary key with EdDSA signing- and XDH encryption subkeys
-        PGPSecretKeyRing secretKeys = PGPainless.generateKeyRing()
+        OpenPGPKey secretKeys = api.generateKey()
                 .modernKeyRing("Romeo <romeo@montague.lit>", "I defy you, stars!");
 
         // Customized key
-        PGPSecretKeyRing keyRing = PGPainless.buildKeyRing()
+        OpenPGPKey keyRing = api.buildKey()
                 .setPrimaryKey(KeySpec.getBuilder(
                         RSA.withLength(RsaLength._8192),
                         KeyFlag.SIGN_DATA, KeyFlag.CERTIFY_OTHER))
@@ -124,24 +137,26 @@ algorithms accordingly.
 Still it allows you to manually specify which algorithms to use of course.
 
 ```java
-        EncryptionStream encryptionStream = PGPainless.encryptAndOrSign()
+        PGPainless api = PGPainless.getInstance();
+        EncryptionStream encryptionStream = api.generateMessage()
                 .onOutputStream(outputStream)
                 .withOptions(
                         ProducerOptions.signAndEncrypt(
-                                new EncryptionOptions()
+                                EncryptionOptions.get(api)
                                         .addRecipient(aliceKey)
                                         .addRecipient(bobsKey)
                                         // optionally encrypt to a passphrase
                                         .addMessagePassphrase(Passphrase.fromPassword("password123"))
                                         // optionally override symmetric encryption algorithm
                                         .overrideEncryptionAlgorithm(SymmetricKeyAlgorithm.AES_192),
-                                new SigningOptions()
+                                SigningOptions.get(api)
                                         // Sign in-line (using one-pass-signature packet)
                                         .addInlineSignature(secretKeyDecryptor, aliceSecKey, signatureType)
                                         // Sign using a detached signature
                                         .addDetachedSignature(secretKeyDecryptor, aliceSecKey, signatureType)
                                         // optionally override hash algorithm
-                                        .overrideHashAlgorithm(HashAlgorithm.SHA256)
+                                        .overrideHashAlgorithm(HashAlgorithm.SHA256),
+                                api
                         ).setAsciiArmor(true) // Ascii armor or not
                 );
 
@@ -161,9 +176,9 @@ Furthermore, PGPainless will reject signatures made using weak algorithms like S
 This behaviour can be modified though using the `Policy` class.
 
 ```java
-        DecryptionStream decryptionStream = PGPainless.decryptAndOrVerify()
+        DecryptionStream decryptionStream = PGPainless.getInstance().processMessage()
                 .onInputStream(encryptedInputStream)
-                .withOptions(new ConsumerOptions()
+                .withOptions(ConsumerOptions.get(api)
                         .addDecryptionKey(bobSecKeys, secretKeyProtector)
                         .addVerificationCert(alicePubKeys)
                 );
@@ -191,7 +206,7 @@ repositories {
 }
 
 dependencies {
-	implementation 'org.pgpainless:pgpainless-core:1.7.4'
+	implementation 'org.pgpainless:pgpainless-core:1.7.6'
 }
 ```
 
@@ -215,14 +230,20 @@ which contains the bug you are fixing. That way we can update older revisions of
 Please follow the [code of conduct](CODE_OF_CONDUCT.md) if you want to be part of the project.
 
 ## Acknowledgements
-Development on PGPainless is generously sponsored by [FlowCrypt.com](https://flowcrypt.com). Thank you very very very much!
-[![FlowCrypt Logo](https://blog.jabberhead.tk/wp-content/uploads/2022/05/flowcrypt-logo.svg)](https://flowcrypt.com)
+In the past, development on PGPainless has been generously sponsored by [FlowCrypt.com](https://flowcrypt.com). Thank you very very very much!
+[![FlowCrypt Logo](https://warmwasserwerfer.de/wp-content/uploads/2022/05/flowcrypt-logo.svg)](https://flowcrypt.com)
 
-Parts of PGPainless development ([project page](https://nlnet.nl/project/PGPainless/)) will be funded by [NGI Assure](https://nlnet.nl/assure/) through [NLNet](https://nlnet.nl).  
+Parts of PGPainless development ([project page](https://nlnet.nl/project/PGPainless/)) has been funded by [NGI Assure](https://nlnet.nl/assure/) through [NLNet](https://nlnet.nl).  
 NGI Assure is made possible with financial support from the [European Commission](https://ec.europa.eu/)'s [Next Generation Internet](https://ngi.eu/) programme, under the aegis of [DG Communications Networks, Content and Technology](https://ec.europa.eu/info/departments/communications-networks-content-and-technology_en).
-[![NGI Assure Logo](https://blog.jabberhead.tk/wp-content/uploads/2022/05/NGIAssure_tag.svg)](https://nlnet.nl/assure/)
+[![NGI Assure Logo](https://warmwasserwerfer.de/wp-content/uploads/2022/05/NGIAssure_tag.svg)](https://nlnet.nl/assure/)
 
-Big thank you also to those who decided to support the work by donating!  
+Support for [RFC9580](https://www.rfc-editor.org/rfc/rfc9580.html) ("OpenPGP v6") [was developed](https://warmwasserwerfer.de/2025/08/28/towards-openpgp-v6-in-pgpainless/) with funding from the [SovereignTechAgency](https://www.sovereign.tech/) through their
+[SovereignTechFund](https://www.sovereign.tech/programs/fund) program. 
+[![SovereignTechFund Logo](https://warmwasserwerfer.de/wp-content/uploads/2025/08/ST-Fund-Logo-Default-Black-CMYK-2048x652.png)](https://www.sovereign.tech/programs/fund)
+
+In 2025, PGPainless was part of and received financial support from the [Github Secure Open Source Fund](https://github.blog/open-source/maintainers/securing-the-supply-chain-at-scale-starting-with-71-important-open-source-projects/) program.
+
+Big thank you also to those who decided to support the work through individual donations!  
 Notably @msfjarvis
 
 You make my day!

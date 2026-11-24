@@ -7,16 +7,19 @@ package org.pgpainless.key.util
 import java.io.ByteArrayOutputStream
 import kotlin.jvm.Throws
 import openpgp.openPgpKeyId
+import org.bouncycastle.bcpg.KeyIdentifier
 import org.bouncycastle.bcpg.S2K
 import org.bouncycastle.bcpg.SecretKeyPacket
 import org.bouncycastle.openpgp.*
+import org.bouncycastle.openpgp.api.OpenPGPImplementation
 import org.bouncycastle.util.Strings
 import org.pgpainless.bouncycastle.extensions.certificate
-import org.pgpainless.bouncycastle.extensions.requireSecretKey
+import org.pgpainless.bouncycastle.extensions.isEncrypted
 import org.pgpainless.exception.MissingPassphraseException
-import org.pgpainless.implementation.ImplementationFactory
+import org.pgpainless.key.SubkeyIdentifier
 import org.pgpainless.key.protection.SecretKeyRingProtector
 import org.pgpainless.key.protection.fixes.S2KUsageFix
+import org.pgpainless.policy.Policy
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -25,40 +28,6 @@ class KeyRingUtils {
     companion object {
 
         @JvmStatic private val LOGGER: Logger = LoggerFactory.getLogger(KeyRingUtils::class.java)
-
-        /**
-         * Return the primary [PGPSecretKey] from the provided [PGPSecretKeyRing]. If it has no
-         * primary secret key, throw a [NoSuchElementException].
-         *
-         * @param secretKeys secret keys
-         * @return primary secret key
-         */
-        @JvmStatic
-        @Deprecated(
-            "Deprecated in favor of PGPSecretKeyRing extension function.",
-            ReplaceWith("secretKeys.requireSecretKey(keyId)"))
-        fun requirePrimarySecretKeyFrom(secretKeys: PGPSecretKeyRing): PGPSecretKey {
-            return secretKeys.requireSecretKey(secretKeys.publicKey.keyID)
-        }
-
-        /**
-         * Return the primary secret key from the given secret key ring. If the key ring only
-         * contains subkeys (e.g. if the primary secret key is stripped), this method may return
-         * null.
-         *
-         * @param secretKeys secret key ring
-         * @return primary secret key
-         */
-        @JvmStatic
-        fun getPrimarySecretKeyFrom(secretKeys: PGPSecretKeyRing): PGPSecretKey? {
-            return secretKeys.secretKey.let {
-                if (it.isMasterKey) {
-                    it
-                } else {
-                    null
-                }
-            }
-        }
 
         /**
          * Return the primary [PGPPublicKey] from the provided key ring. Throws a
@@ -81,13 +50,7 @@ class KeyRingUtils {
          */
         @JvmStatic
         fun getPrimaryPublicKey(keyRing: PGPKeyRing): PGPPublicKey? {
-            return keyRing.publicKey.let {
-                if (it.isMasterKey) {
-                    it
-                } else {
-                    null
-                }
-            }
+            return if (keyRing.publicKey.isMasterKey) keyRing.publicKey else null
         }
 
         /**
@@ -127,21 +90,6 @@ class KeyRingUtils {
                 is PGPSecretKeyRing -> keys.certificate
                 else -> throw IllegalArgumentException("Unknown keys class: ${keys.javaClass.name}")
             }
-        }
-
-        /**
-         * Extract a [PGPPublicKeyRing] containing all public keys from the provided
-         * [PGPSecretKeyRing].
-         *
-         * @param secretKeys secret key ring
-         * @return public key ring
-         */
-        @JvmStatic
-        @Deprecated(
-            "Deprecated in favor of PGPSecretKeyRing extension method.",
-            ReplaceWith("secretKeys.certificate", "org.bouncycastle.extensions.certificate"))
-        fun publicKeyRingFrom(secretKeys: PGPSecretKeyRing): PGPPublicKeyRing {
-            return secretKeys.certificate
         }
 
         /**
@@ -244,7 +192,7 @@ class KeyRingUtils {
                     certificate.publicKeys
                         .asSequence()
                         .map {
-                            if (it.keyID == certifiedKey.keyID) {
+                            if (it.keyIdentifier == certifiedKey.keyIdentifier) {
                                 PGPPublicKey.addCertification(it, certification)
                             } else {
                                 it
@@ -400,7 +348,7 @@ class KeyRingUtils {
         }
 
         /**
-         * Remove the secret key of the subkey identified by the given secret key id from the key
+         * Remove the secret key of the subkey identified by the given [keyIdentifier] from the key
          * ring. The public part stays attached to the key ring, so that it can still be used for
          * encryption / verification of signatures.
          *
@@ -408,24 +356,27 @@ class KeyRingUtils {
          * those are kept in offline storage.
          *
          * @param secretKeys secret key ring
-         * @param keyId id of the secret key to remove
+         * @param keyIdentifier identifier of the secret key to remove
          * @return secret key ring with removed secret key
          * @throws IOException in case of an error during serialization / deserialization of the key
          * @throws PGPException in case of a broken key
          */
         @JvmStatic
-        fun stripSecretKey(secretKeys: PGPSecretKeyRing, keyId: Long): PGPSecretKeyRing {
-            require(keyId != secretKeys.publicKey.keyID) {
+        fun stripSecretKey(
+            secretKeys: PGPSecretKeyRing,
+            keyIdentifier: KeyIdentifier
+        ): PGPSecretKeyRing {
+            require(keyIdentifier != secretKeys.publicKey.keyIdentifier) {
                 "Bouncy Castle currently cannot deal with stripped primary secret keys."
             }
-            if (secretKeys.getSecretKey(keyId) == null) {
+            if (secretKeys.getSecretKey(keyIdentifier) == null) {
                 throw NoSuchElementException(
-                    "PGPSecretKeyRing does not contain secret key ${keyId.openPgpKeyId()}.")
+                    "PGPSecretKeyRing does not contain secret key ${keyIdentifier}.")
             }
 
             val out = ByteArrayOutputStream()
             secretKeys.forEach {
-                if (it.keyID == keyId) {
+                if (it.keyIdentifier == keyIdentifier) {
                     // only encode the public key
                     it.publicKey.encode(out)
                 } else {
@@ -435,7 +386,7 @@ class KeyRingUtils {
             }
             secretKeys.extraPublicKeys.forEach { it.encode(out) }
             return PGPSecretKeyRing(
-                out.toByteArray(), ImplementationFactory.getInstance().keyFingerprintCalculator)
+                out.toByteArray(), OpenPGPImplementation.getInstance().keyFingerPrintCalculator())
         }
 
         /**
@@ -449,7 +400,7 @@ class KeyRingUtils {
         fun getStrippedDownPublicKey(bloatedKey: PGPPublicKey): PGPPublicKey {
             return PGPPublicKey(
                 bloatedKey.publicKeyPacket,
-                ImplementationFactory.getInstance().keyFingerprintCalculator)
+                OpenPGPImplementation.getInstance().keyFingerPrintCalculator())
         }
 
         @JvmStatic
@@ -468,31 +419,35 @@ class KeyRingUtils {
         @JvmStatic
         @Throws(MissingPassphraseException::class, PGPException::class)
         fun changePassphrase(
-            keyId: Long?,
+            keyId: KeyIdentifier?,
             secretKeys: PGPSecretKeyRing,
             oldProtector: SecretKeyRingProtector,
-            newProtector: SecretKeyRingProtector
+            newProtector: SecretKeyRingProtector,
+            implementation: OpenPGPImplementation,
+            policy: Policy
         ): PGPSecretKeyRing {
-            return if (keyId == null) {
-                    PGPSecretKeyRing(
-                        secretKeys.secretKeys
-                            .asSequence()
-                            .map { reencryptPrivateKey(it, oldProtector, newProtector) }
-                            .toList())
+            val changedKeys = mutableListOf<PGPSecretKey>()
+            val missingPassphrases = mutableSetOf<SubkeyIdentifier>()
+
+            secretKeys.secretKeys.asSequence().forEach {
+                if (keyId == null || it.keyIdentifier.matchesExplicit(keyId)) {
+                    try {
+                        changedKeys.add(reencryptPrivateKey(it, oldProtector, newProtector))
+                    } catch (_: NullPointerException) {
+                        missingPassphrases.add(SubkeyIdentifier(secretKeys, it.keyIdentifier))
+                    }
                 } else {
-                    PGPSecretKeyRing(
-                        secretKeys.secretKeys
-                            .asSequence()
-                            .map {
-                                if (it.keyID == keyId) {
-                                    reencryptPrivateKey(it, oldProtector, newProtector)
-                                } else {
-                                    it
-                                }
-                            }
-                            .toList())
+                    // Do not change this subkeys passphrase
+                    changedKeys.add(it)
                 }
-                .let { s2kUsageFixIfNecessary(it, newProtector) }
+            }
+
+            if (missingPassphrases.isNotEmpty()) {
+                throw MissingPassphraseException(missingPassphrases)
+            }
+
+            return s2kUsageFixIfNecessary(
+                PGPSecretKeyRing(changedKeys), newProtector, implementation, policy)
         }
 
         @JvmStatic
@@ -506,21 +461,28 @@ class KeyRingUtils {
                 return secretKey
             }
 
+            val decryptor = oldProtector.getDecryptor(secretKey.keyIdentifier)
+            if (secretKey.isEncrypted() && decryptor == null) {
+                throw NullPointerException("Decryptor for key ${secretKey.keyIdentifier} is null.")
+            }
+
             return PGPSecretKey.copyWithNewPassword(
-                secretKey,
-                oldProtector.getDecryptor(secretKey.keyID),
-                newProtector.getEncryptor(secretKey.keyID))
+                secretKey, decryptor, newProtector.getEncryptor(secretKey.publicKey))
         }
 
         @JvmStatic
         fun s2kUsageFixIfNecessary(
             secretKeys: PGPSecretKeyRing,
-            protector: SecretKeyRingProtector
+            protector: SecretKeyRingProtector,
+            implementation: OpenPGPImplementation,
+            policy: Policy
         ): PGPSecretKeyRing {
             if (secretKeys.secretKeys.asSequence().any {
+                @Suppress("DEPRECATION")
                 it.s2KUsage == SecretKeyPacket.USAGE_CHECKSUM
             }) {
-                return S2KUsageFix.replaceUsageChecksumWithUsageSha1(secretKeys, protector, true)
+                return S2KUsageFix.replaceUsageChecksumWithUsageSha1(
+                    secretKeys, protector, true, implementation, policy)
             }
             return secretKeys
         }

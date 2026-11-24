@@ -4,11 +4,15 @@
 
 package org.pgpainless.sop
 
+import org.bouncycastle.bcpg.KeyIdentifier
 import org.bouncycastle.openpgp.PGPException
+import org.bouncycastle.openpgp.PGPPublicKey
 import org.bouncycastle.openpgp.PGPSecretKey
 import org.bouncycastle.openpgp.PGPSecretKeyRing
+import org.bouncycastle.openpgp.api.OpenPGPKey
 import org.bouncycastle.openpgp.operator.PBESecretKeyDecryptor
 import org.bouncycastle.openpgp.operator.PBESecretKeyEncryptor
+import org.pgpainless.PGPainless
 import org.pgpainless.bouncycastle.extensions.isDecrypted
 import org.pgpainless.bouncycastle.extensions.unlock
 import org.pgpainless.key.protection.CachingSecretKeyRingProtector
@@ -19,11 +23,14 @@ import org.pgpainless.util.Passphrase
  * Implementation of the [SecretKeyRingProtector] which can be handed passphrases and keys
  * separately, and which then matches up passphrases and keys when needed.
  */
-class MatchMakingSecretKeyRingProtector : SecretKeyRingProtector {
+class MatchMakingSecretKeyRingProtector(private val api: PGPainless) : SecretKeyRingProtector {
 
     private val passphrases = mutableSetOf<Passphrase>()
     private val keys = mutableSetOf<PGPSecretKeyRing>()
     private val protector = CachingSecretKeyRingProtector()
+
+    @Deprecated("Deprecated in favor of constructor taking API instance")
+    constructor() : this(PGPainless.getInstance())
 
     fun addPassphrase(passphrase: Passphrase) = apply {
         if (passphrase.isEmpty) {
@@ -36,16 +43,18 @@ class MatchMakingSecretKeyRingProtector : SecretKeyRingProtector {
 
         keys.forEach { key ->
             for (subkey in key) {
-                if (protector.hasPassphrase(subkey.keyID)) {
+                if (protector.hasPassphrase(subkey.keyIdentifier)) {
                     continue
                 }
 
                 if (testPassphrase(passphrase, subkey)) {
-                    protector.addPassphrase(subkey.keyID, passphrase)
+                    protector.addPassphrase(subkey.keyIdentifier, passphrase)
                 }
             }
         }
     }
+
+    fun addSecretKey(key: OpenPGPKey) = addSecretKey(key.pgpSecretKeyRing)
 
     fun addSecretKey(key: PGPSecretKeyRing) = apply {
         if (!keys.add(key)) {
@@ -54,11 +63,11 @@ class MatchMakingSecretKeyRingProtector : SecretKeyRingProtector {
 
         key.forEach { subkey ->
             if (subkey.isDecrypted()) {
-                protector.addPassphrase(subkey.keyID, Passphrase.emptyPassphrase())
+                protector.addPassphrase(subkey.keyIdentifier, Passphrase.emptyPassphrase())
             } else {
                 passphrases.forEach { passphrase ->
                     if (testPassphrase(passphrase, subkey)) {
-                        protector.addPassphrase(subkey.keyID, passphrase)
+                        protector.addPassphrase(subkey.keyIdentifier, passphrase)
                     }
                 }
             }
@@ -67,18 +76,24 @@ class MatchMakingSecretKeyRingProtector : SecretKeyRingProtector {
 
     private fun testPassphrase(passphrase: Passphrase, key: PGPSecretKey): Boolean =
         try {
-            key.unlock(passphrase)
+            key.unlock(passphrase, api.algorithmPolicy)
             true
         } catch (e: PGPException) {
             // Wrong passphrase
             false
         }
 
-    override fun hasPassphraseFor(keyId: Long): Boolean = protector.hasPassphrase(keyId)
+    override fun hasPassphraseFor(keyIdentifier: KeyIdentifier): Boolean =
+        protector.hasPassphrase(keyIdentifier)
 
-    override fun getDecryptor(keyId: Long): PBESecretKeyDecryptor? = protector.getDecryptor(keyId)
+    override fun getDecryptor(keyIdentifier: KeyIdentifier): PBESecretKeyDecryptor? =
+        protector.getDecryptor(keyIdentifier)
 
-    override fun getEncryptor(keyId: Long): PBESecretKeyEncryptor? = protector.getEncryptor(keyId)
+    override fun getEncryptor(key: PGPPublicKey): PBESecretKeyEncryptor? =
+        protector.getEncryptor(key)
+
+    override fun getKeyPassword(key: OpenPGPKey.OpenPGPSecretKey): CharArray? =
+        protector.getKeyPassword(key)
 
     /** Clear all known passphrases from the protector. */
     fun clear() {

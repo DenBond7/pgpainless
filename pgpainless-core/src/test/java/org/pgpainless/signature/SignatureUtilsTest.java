@@ -9,17 +9,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.io.IOException;
 import java.util.List;
 
-import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPublicKey;
-import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSignature;
+import org.bouncycastle.openpgp.api.OpenPGPCertificate;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
 
 public class SignatureUtilsTest {
 
     @Test
-    public void readSignaturesFromCompressedDataDoesNotAttemptDecompression() throws PGPException, IOException {
+    public void readSignaturesFromCompressedDataDoesNotAttemptDecompression() {
         String compressed = "-----BEGIN PGP MESSAGE-----\n" +
                 "Version: PGPainless\n" +
                 "\n" +
@@ -35,7 +34,7 @@ public class SignatureUtilsTest {
     }
 
     @Test
-    public void noIssuerResultsInKeyId0() throws PGPException, IOException {
+    public void noIssuerResultsInKeyId0() {
         String sig = "-----BEGIN PGP SIGNATURE-----\n" +
                 "\n" +
                 "wsEaBAABCABOBYJhVBVcRxQAAAAAAB4AIHNhbHRAbm90YXRpb25zLnNlcXVvaWEt\n" +
@@ -55,7 +54,7 @@ public class SignatureUtilsTest {
     }
 
     @Test
-    public void skipInvalidSignatures() throws PGPException, IOException {
+    public void skipInvalidSignatures() {
         // Sig version 23 (invalid), sig version 4
         String sigs = "-----BEGIN PGP SIGNATURE-----\n" +
                 "\n" +
@@ -126,8 +125,9 @@ public class SignatureUtilsTest {
         long bobKeyId = 5610053632031231169L;
         long charlieKeyId = -5325245004225622857L;
 
-        PGPPublicKeyRing aliceCert = PGPainless.readKeyRing().publicKeyRing(alice);
-        PGPPublicKey aliceKey = aliceCert.getPublicKey();
+        PGPainless api = PGPainless.getInstance();
+        OpenPGPCertificate aliceCert = api.readKey().parseCertificate(alice);
+        PGPPublicKey aliceKey = aliceCert.getPrimaryKey().getPGPPublicKey();
 
         // alice self-signed her user-id
         assertEquals(1, SignatureUtils.getSignaturesOverUserIdBy(aliceKey, aliceId, aliceKeyId).size());

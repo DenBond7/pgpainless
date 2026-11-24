@@ -5,6 +5,108 @@ SPDX-License-Identifier: CC0-1.0
 
 # PGPainless Changelog
 
+## 2.0.5
+- Bump `bcpg-jdk18on` to `1.87`
+- Bump `bcprov-jdk18on` to `1.87`
+- Bump `sop-java` to `15.0.2`
+- Introduce `Policy.Builder.withMaxDecompressedDataSize()` (default: 32mb)
+- Properly compare IntendedRecipientFingerprint to recipient certificate fingerprint
+- Do not silently swallow exceptions in `OpenPGPMessageInputStream.read()`
+- `sop inline-verify / sop verify`: Require `CERTS` argument
+- Generate keys with `direct-key` signature by default
+- Implement legacy Ed25519 public key parameter validation
+- Bump `logback` to `1.5.34`
+- Remove unused unsafe `OpenPGPSecretKey.unlock()` extension function
+- Document reason for deprecation of plain `setSessionKey(sk)` method
+- Add `PGPainless.readSignatures()` method
+
+## 2.0.4
+- Bump `checkstyle` tool version to `10.26.1`
+- Fix PGPainless silently dropping trailing `0xFF` octet (Thanks to @byteoverride for the report, suggested fix and regression test!)
+- Manually bump transitive dependency `plexus-utils` of `checkstyle` to `3.6.1`
+- Fix missing enforcement for maximum packet nesting depth of compressed data packets in `sop inline-detach` (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-cvx8-9ff6-54xq))
+- Document user responsibility for not exposing decrypted data before successfully closing `OpenPgpMessageInputStream`
+- Introduce `PGPainless.verifyAndOpen()` utility method (thanks to @0xEr3n for early advise on hardening)
+- Prevent accidental overwriting internal `Policy` instances when using multiple instances of `PGPainless` (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Prevent KOpenPGP-style attacks on several secret-key unlock code paths (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Fix RFC-4880-only encryption policy still emitting SEIPDv2/AEAD encrypted data (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Fix RFC-4880-only decryption policy still decrypting SEIPDv2/AEAD encrypted data (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Enforce compression algorithm policy while consuming compressed signed messages (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Use proper certification hash algorithm policy when checking subkey bindings (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Use proper revocation hash algorithm policy when checking revocation signatures (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Do not emit expired document signatures as valid (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Do not emit non-document signatures as valid (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Reject document signatures with mismatching IntendedRecipientFingerprint subpacket
+- Properly handle tampered MDC-protected data (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Properly reject detached-signing with encrypt-only subkey (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Fix missing-key-flags fallback bypassing caller encryption subkey selector (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Fix hidden-recipient message decryption bypassing missing-key-flags check (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Chose proper user-id preferences when encrypting to certificate authenticated by CA (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Properly enforce maximum encrypted data packet nesting depth (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Fix NPE in interactive passphrase code-path when decrypting hidden-recipient messages (see [advisory](https://github.com/pgpainless/pgpainless/security/advisories/GHSA-5fmp-48ff-rx9p))
+- Emit OnePassSignaturePackets using new packet format
+
+## 2.0.3
+- Bump `bcpg-jdk18on` to `1.84`
+- Bump `bcprov-jdk18on` to `1.84`
+- Bump `sop-java` to `15.0.1`
+- Bump `logback-classic` to `1.5.25`
+- `sop encrypt`: For symmetric-key encryption; default to rfc4880 packet format
+- `sop list-profiles encrypt`: Add profile descriptions
+- `sop generate-key`: Do not add expiration date
+- `sop encrypt`: 
+  - Add support for `--for={communications|storage|any}` flag
+  - Return exit code `17` for expired certs
+- `sop update-key`: Add encryption subkey if `--signing-only` is missing
+- Fix issue, where third-party certification is considered during encryption (#495)
+- Treat literal data packets with non-standard format octets as binary (#496)
+
+## 2.0.2
+- Add `PGPainless.asciiArmor(Collection<OpenPGPCertificate>, PacketFormat)`
+- `SigningOptions`: Add missing `@JvmOverloads` annotations to `addInlineSignature()` and `addDetachedSignature()`
+- `OpenPGPComponentKey`: Add extension method `getSecretKey()`
+- `OpenPGPKey`: Add extension methods `isFullyDecrypted()`, `isFullyEncrypted()`
+- `KeyRingBuilder`: Properly respect custom key creation time on subkeys and signatures
+- `WeakRSAKeyTest`: Disable test if test vector key is expired at testing time
+- `MessageMetadata`: Add missing methods
+  - `isVerifiedInlineSignedBy(OpenPGPCertificate)`
+  - `isVerifiedDetachedSignedBy(OpenPGPCertificate)`
+- Bump `sop-java` to `14.0.3`
+- Bump `logback-core` to `1.5.19`
+- Fix exception when changing subkey passphrase on key with stripped primary key (thanks @agrahn for reporting)
+
+## 2.0.1
+- Fix subkey signatures on generate keys (#486, thanks to @agrahn for reporting)
+
+## 2.0.0
+- Add support for OpenPGP v6
+- `PGPainless` is no longer intended for singleton use
+  - See the [migration guide](docs/source/pgpainless-core/migration_2.0.md) for more details
+- Internally make use of BCs new high-level API
+- Bump `sop-java` to `14.0.1`
+  - Implement new `sop update-key` command to refresh old keys to a usable state
+  - Implement new `sop merge-certs` command to merge certificate copies
+  - Implement new `sop certify-userid` command to certify third-party certificates
+  - Implement new `sop validate-userid` command to validate userids on keys
+  - `sop generate-key`: Add profile `rfc9580-curve25519` for generating v6 keys over curve25519
+  - `sop generate-key`: Add profile `rfc9580-curve448` for generating v6 keys over curve448
+  - `sop encrypt`: Add profile `rfc9580` for v6-style symmetric message encryption
+
+## 1.7.7
+- Bump bcpg-jdk8on to 1.82
+- Bump bcprov-jdk18on to 1.82
+- Fix handling of passphrases and user-ids containing leading/trailing whitespace
+
+## 1.7.6
+- Fix `RevocationSignatureBuilder` properly calculating third-party signatures of type `KeyRevocation` (delegation revocations)
+- Enable support for native images
+- Re-enable shadow plugin and build fat-jar
+
+## 1.7.5
+- Actually attempt to fix Kotlin desugaring.
+- Bump javaSourceCompatibility and javaTargetCompatibility to 11
+- Bump gradle-wrapper to 8.8
+
 ## 1.7.4
 - Fix proper Kotlin desugaring for Java 8
 

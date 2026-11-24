@@ -15,8 +15,8 @@ import java.nio.charset.StandardCharsets;
 
 import org.bouncycastle.bcpg.ArmoredOutputStream;
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSignature;
+import org.bouncycastle.openpgp.api.OpenPGPKey;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.CompressionAlgorithm;
@@ -350,19 +350,20 @@ public class RoundTripInlineSignInlineVerifyCmdTest extends CLITest {
 
     @Test
     public void createMalformedMessage() throws IOException, PGPException {
+        PGPainless api = PGPainless.getInstance();
         String msg = "Hello, World!\n";
-        PGPSecretKeyRing key = PGPainless.readKeyRing().secretKeyRing(KEY_2);
+        OpenPGPKey key = api.readKey().parseKey(KEY_2);
         ByteArrayOutputStream ciphertext = new ByteArrayOutputStream();
-        EncryptionStream encryptionStream = PGPainless.encryptAndOrSign()
+        EncryptionStream encryptionStream = api.generateMessage()
                 .onOutputStream(ciphertext)
-                .withOptions(ProducerOptions.sign(SigningOptions.get()
+                .withOptions(ProducerOptions.sign(SigningOptions.get(api)
                                 .addDetachedSignature(SecretKeyRingProtector.unprotectedKeys(), key)
                         ).overrideCompressionAlgorithm(CompressionAlgorithm.UNCOMPRESSED)
                         .setAsciiArmor(false));
         encryptionStream.write(msg.getBytes(StandardCharsets.UTF_8));
         encryptionStream.close();
-        PGPSignature sig = encryptionStream.getResult().getDetachedSignatures().entrySet()
-                .iterator().next().getValue().iterator().next();
+        PGPSignature sig = encryptionStream.getResult().getDetachedDocumentSignatures().getSignatures()
+                .get(0).getSignature();
         ArmoredOutputStream armorOut = new ArmoredOutputStream(System.out);
         armorOut.write(ciphertext.toByteArray());
         armorOut.write(sig.getEncoded());

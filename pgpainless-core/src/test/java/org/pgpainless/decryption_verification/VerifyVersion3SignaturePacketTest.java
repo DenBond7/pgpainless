@@ -9,6 +9,7 @@ import org.bouncycastle.openpgp.PGPPrivateKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSignature;
 import org.bouncycastle.openpgp.PGPV3SignatureGenerator;
+import org.bouncycastle.openpgp.api.OpenPGPImplementation;
 import org.bouncycastle.openpgp.operator.PGPContentSignerBuilder;
 import org.bouncycastle.util.io.Streams;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,6 @@ import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.PublicKeyAlgorithm;
 import org.pgpainless.algorithm.SignatureType;
-import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.TestKeys;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 
@@ -33,13 +33,14 @@ class VerifyVersion3SignaturePacketTest {
 
     @Test
     void verifyDetachedVersion3Signature() throws PGPException, IOException {
+        PGPainless api = PGPainless.getInstance();
         PGPSignature version3Signature = generateV3Signature();
 
-        ConsumerOptions options = new ConsumerOptions()
-                .addVerificationCert(TestKeys.getEmilPublicKeyRing())
+        ConsumerOptions options = ConsumerOptions.get(api)
+                .addVerificationCert(api.toCertificate(TestKeys.getEmilPublicKeyRing()))
                 .addVerificationOfDetachedSignatures(new ByteArrayInputStream(version3Signature.getEncoded()));
 
-        DecryptionStream verifier = PGPainless.decryptAndOrVerify()
+        DecryptionStream verifier = api.processMessage()
                 .onInputStream(new ByteArrayInputStream(DATA))
                 .withOptions(options);
 
@@ -48,12 +49,13 @@ class VerifyVersion3SignaturePacketTest {
     }
 
     private static PGPSignature generateV3Signature() throws IOException, PGPException {
-        PGPContentSignerBuilder builder = ImplementationFactory.getInstance().getPGPContentSignerBuilder(PublicKeyAlgorithm.ECDSA, HashAlgorithm.SHA512);
+        PGPContentSignerBuilder builder = OpenPGPImplementation.getInstance().pgpContentSignerBuilder(PublicKeyAlgorithm.ECDSA.getAlgorithmId(), HashAlgorithm.SHA512.getAlgorithmId());
         PGPV3SignatureGenerator signatureGenerator = new PGPV3SignatureGenerator(builder);
 
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
         SecretKeyRingProtector protector = SecretKeyRingProtector.unprotectedKeys();
-        PGPPrivateKey privateKey = secretKeys.getSecretKey().extractPrivateKey(protector.getDecryptor(secretKeys.getSecretKey().getKeyID()));
+        PGPPrivateKey privateKey = secretKeys.getSecretKey().extractPrivateKey(
+                protector.getDecryptor(secretKeys.getSecretKey().getKeyIdentifier()));
 
         signatureGenerator.init(SignatureType.CANONICAL_TEXT_DOCUMENT.getCode(), privateKey);
         signatureGenerator.update(DATA);

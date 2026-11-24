@@ -9,15 +9,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.NoSuchAlgorithmException;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -30,65 +25,50 @@ import org.bouncycastle.bcpg.sig.RevocationKey;
 import org.bouncycastle.bcpg.sig.TrustSignature;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPPrivateKey;
-import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSignature;
 import org.bouncycastle.openpgp.PGPSignatureGenerator;
 import org.bouncycastle.openpgp.PGPSignatureSubpacketGenerator;
+import org.bouncycastle.openpgp.api.OpenPGPImplementation;
+import org.bouncycastle.openpgp.api.OpenPGPKey;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.CompressionAlgorithm;
 import org.pgpainless.algorithm.Feature;
 import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.SignatureType;
-import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.TestKeys;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnlockSecretKey;
-import org.pgpainless.policy.Policy;
-import org.pgpainless.signature.consumer.SignaturePicker;
 import org.pgpainless.signature.subpackets.SignatureSubpacketsUtil;
 
 public class SignatureSubpacketsUtilTest {
 
     @Test
-    public void testGetKeyExpirationTimeAsDate() throws PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
-        PGPSecretKeyRing secretKeys = PGPainless.generateKeyRing()
-                .modernKeyRing("Expire");
-        Date expiration = Date.from(new Date().toInstant().plus(365, ChronoUnit.DAYS));
-        secretKeys = PGPainless.modifyKeyRing(secretKeys)
-                .setExpirationDate(expiration, SecretKeyRingProtector.unprotectedKeys())
-                .done();
-
-        PGPSignature expirationSig = SignaturePicker.pickCurrentUserIdCertificationSignature(
-                secretKeys, "Expire", Policy.getInstance(), new Date());
-        PGPPublicKey notTheRightKey = PGPainless.inspectKeyRing(secretKeys).getSigningSubkeys().get(0);
-
-        assertThrows(IllegalArgumentException.class, () ->
-                SignatureSubpacketsUtil.getKeyExpirationTimeAsDate(expirationSig, notTheRightKey));
-    }
-
-    @Test
     public void testGetRevocable() throws PGPException, IOException {
-        PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        OpenPGPKey secretKeys = TestKeys.getEmilKey();
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getPrimarySecretKey().getPGPSecretKey(),
+                SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
-        PGPSignature withoutRevocable = generator.generateCertification(secretKeys.getPublicKey());
+        PGPSignature withoutRevocable = generator.generateCertification(secretKeys.getPrimaryKey().getPGPPublicKey());
         assertNull(SignatureSubpacketsUtil.getRevocable(withoutRevocable));
 
         generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignatureSubpacketGenerator hashed = new PGPSignatureSubpacketGenerator();
         hashed.setRevocable(true, true);
         generator.setHashedSubpackets(hashed.generate());
-        PGPSignature withRevocable = generator.generateCertification(secretKeys.getPublicKey());
+        PGPSignature withRevocable = generator.generateCertification(secretKeys.getPrimaryKey().getPGPPublicKey());
         assertNotNull(SignatureSubpacketsUtil.getRevocable(withRevocable));
     }
 
     @Test
     public void testParsePreferredCompressionAlgorithms() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
 
@@ -116,7 +96,9 @@ public class SignatureSubpacketsUtilTest {
     @Test
     public void testParseKeyFlagsOfNullSubpacketIsNull() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignature withoutKeyFlags = generator.generateCertification(secretKeys.getPublicKey());
@@ -126,7 +108,9 @@ public class SignatureSubpacketsUtilTest {
     @Test
     public void testParseFeaturesIsNullForNullSubpacket() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignature withoutKeyFlags = generator.generateCertification(secretKeys.getPublicKey());
@@ -136,7 +120,9 @@ public class SignatureSubpacketsUtilTest {
     @Test
     public void testParseFeatures() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignatureSubpacketGenerator hashed = new PGPSignatureSubpacketGenerator();
@@ -155,7 +141,9 @@ public class SignatureSubpacketsUtilTest {
     @Test
     public void getSignatureTargetIsNull() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignature withoutSignatureTarget = generator.generateCertification(secretKeys.getPublicKey());
@@ -166,7 +154,9 @@ public class SignatureSubpacketsUtilTest {
     @Test
     public void testGetUnhashedNotationData() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignatureSubpacketGenerator unhashed = new PGPSignatureSubpacketGenerator();
@@ -197,7 +187,9 @@ public class SignatureSubpacketsUtilTest {
     @Test
     public void testGetRevocationKeyIsNull() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignature signature = generator.generateCertification(secretKeys.getPublicKey());
@@ -208,7 +200,9 @@ public class SignatureSubpacketsUtilTest {
     @Test
     public void testGetRevocationKey() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignatureSubpacketGenerator hashed = new PGPSignatureSubpacketGenerator();
@@ -225,7 +219,9 @@ public class SignatureSubpacketsUtilTest {
     @Test
     public void testGetIntendedRecipientFingerprintsEmpty() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignature signature = generator.generateCertification(secretKeys.getPublicKey());
@@ -236,7 +232,9 @@ public class SignatureSubpacketsUtilTest {
     @Test
     public void testGetIntendedRecipientFingerprints() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignatureSubpacketGenerator hashed = new PGPSignatureSubpacketGenerator();
@@ -254,7 +252,9 @@ public class SignatureSubpacketsUtilTest {
     @Test
     public void testGetExportableCertification() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignatureSubpacketGenerator hashed = new PGPSignatureSubpacketGenerator();
@@ -270,7 +270,9 @@ public class SignatureSubpacketsUtilTest {
     @Test
     public void testGetTrustSignature() throws PGPException, IOException {
         PGPSecretKeyRing secretKeys = TestKeys.getEmilSecretKeyRing();
-        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        PGPPrivateKey certKey = UnlockSecretKey.unlockSecretKey(
+                secretKeys.getSecretKey(), SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
 
         PGPSignatureGenerator generator = getSignatureGenerator(certKey, SignatureType.CASUAL_CERTIFICATION);
         PGPSignatureSubpacketGenerator hashed = new PGPSignatureSubpacketGenerator();
@@ -287,7 +289,7 @@ public class SignatureSubpacketsUtilTest {
     private PGPSignatureGenerator getSignatureGenerator(PGPPrivateKey signingKey,
                                         SignatureType signatureType) throws PGPException {
         PGPSignatureGenerator signatureGenerator = new PGPSignatureGenerator(
-                ImplementationFactory.getInstance().getPGPContentSignerBuilder(
+                OpenPGPImplementation.getInstance().pgpContentSignerBuilder(
                         signingKey.getPublicKeyPacket().getAlgorithm(),
                         HashAlgorithm.SHA512.getAlgorithmId()));
         signatureGenerator.init(signatureType.getCode(), signingKey);

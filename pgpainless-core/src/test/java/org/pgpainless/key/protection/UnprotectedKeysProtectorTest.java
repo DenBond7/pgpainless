@@ -6,6 +6,8 @@ package org.pgpainless.key.protection;
 
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+import org.bouncycastle.bcpg.KeyIdentifier;
+import org.bouncycastle.openpgp.PGPException;
 import org.junit.jupiter.api.Test;
 
 public class UnprotectedKeysProtectorTest {
@@ -13,12 +15,7 @@ public class UnprotectedKeysProtectorTest {
     private final UnprotectedKeysProtector protector = new UnprotectedKeysProtector();
 
     @Test
-    public void testKeyProtectorReturnsNullDecryptor() {
-        assertNull(protector.getDecryptor(0L));
-    }
-
-    @Test
-    public void testKeyProtectorReturnsNullEncryptor() {
-        assertNull(protector.getEncryptor(0L));
+    public void testKeyProtectorReturnsNullDecryptor() throws PGPException {
+        assertNull(protector.getDecryptor(new KeyIdentifier(0L)));
     }
 }

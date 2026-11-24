@@ -6,11 +6,8 @@ package org.pgpainless.key.generation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.security.InvalidAlgorithmParameterException;
-import java.security.NoSuchAlgorithmException;
-
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.api.OpenPGPKey;
 import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.pgpainless.PGPainless;
@@ -29,8 +26,8 @@ public class GenerateEllipticCurveKeyTest {
     @TestTemplate
     @ExtendWith(TestAllImplementations.class)
     public void generateEllipticCurveKeys()
-            throws InvalidAlgorithmParameterException, NoSuchAlgorithmException, PGPException {
-        PGPSecretKeyRing keyRing = PGPainless.buildKeyRing()
+            throws PGPException {
+        OpenPGPKey keyRing = PGPainless.getInstance().buildKey()
                 .setPrimaryKey(KeySpec.getBuilder(
                         KeyType.EDDSA_LEGACY(EdDSALegacyCurve._Ed25519),
                         KeyFlag.CERTIFY_OTHER, KeyFlag.SIGN_DATA))
@@ -38,7 +35,10 @@ public class GenerateEllipticCurveKeyTest {
                 .addUserId(UserId.onlyEmail("alice@wonderland.lit").toString())
                 .build();
 
-        assertEquals(PublicKeyAlgorithm.EDDSA_LEGACY.getAlgorithmId(), keyRing.getPublicKey().getAlgorithm());
-        UnlockSecretKey.unlockSecretKey(keyRing.getSecretKey(), SecretKeyRingProtector.unprotectedKeys());
+        assertEquals(PublicKeyAlgorithm.EDDSA_LEGACY.getAlgorithmId(), keyRing.getPrimaryKey().getAlgorithm());
+        UnlockSecretKey.unlockSecretKey(
+                keyRing.getPrimarySecretKey(),
+                SecretKeyRingProtector.unprotectedKeys(),
+                PGPainless.getInstance().getAlgorithmPolicy());
     }
 }

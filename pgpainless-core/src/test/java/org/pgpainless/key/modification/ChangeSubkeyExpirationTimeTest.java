@@ -4,12 +4,13 @@
 
 package org.pgpainless.key.modification;
 
-import org.bouncycastle.openpgp.PGPPublicKey;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.api.OpenPGPCertificate;
+import org.bouncycastle.openpgp.api.OpenPGPKey;
 import org.junit.JUtils;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.EncryptionPurpose;
+import org.pgpainless.algorithm.OpenPGPKeyVersion;
 import org.pgpainless.key.OpenPgpFingerprint;
 import org.pgpainless.key.OpenPgpV4Fingerprint;
 import org.pgpainless.key.protection.SecretKeyRingProtector;
@@ -25,25 +26,29 @@ public class ChangeSubkeyExpirationTimeTest {
 
     @Test
     public void changeExpirationTimeOfSubkey() {
-        PGPSecretKeyRing secretKeys = PGPainless.generateKeyRing().modernKeyRing("Alice");
-        Date now = secretKeys.getPublicKey().getCreationTime();
-        Date inAnHour = new Date(now.getTime() + 1000 * 60 * 60);
-        PGPPublicKey encryptionKey = PGPainless.inspectKeyRing(secretKeys)
+        PGPainless api = PGPainless.getInstance();
+        Date t0 = DateUtil.now(); // create at t+0
+        OpenPGPKey secretKeys = api.generateKey(OpenPGPKeyVersion.v4, t0).modernKeyRing("Alice");
+
+        Date t1 = new Date(t0.getTime() + 1000);
+        Date inAnHour = new Date(t0.getTime() + 1000 * 60 * 60);
+        OpenPGPCertificate.OpenPGPComponentKey encryptionKey = api.inspect(secretKeys)
                 .getEncryptionSubkeys(EncryptionPurpose.ANY).get(0);
-        secretKeys = PGPainless.modifyKeyRing(secretKeys)
+        secretKeys = api.modify(secretKeys, t1) // create at t+1;
                 .setExpirationDateOfSubkey(
                         inAnHour,
-                        encryptionKey.getKeyID(),
+                        encryptionKey.getKeyIdentifier(),
                         SecretKeyRingProtector.unprotectedKeys())
                 .done();
 
-        JUtils.assertDateEquals(inAnHour, PGPainless.inspectKeyRing(secretKeys)
-                .getSubkeyExpirationDate(OpenPgpFingerprint.of(encryptionKey)));
+        JUtils.assertDateEquals(inAnHour, api.inspect(secretKeys, t1)
+                .getSubkeyExpirationDate(OpenPgpFingerprint.of(encryptionKey.getPGPPublicKey())));
     }
 
     @Test
     public void changeExpirationTimeOfExpiredSubkey() throws IOException {
-        PGPSecretKeyRing secretKeys = PGPainless.readKeyRing().secretKeyRing(
+        PGPainless api = PGPainless.getInstance();
+        OpenPGPKey secretKeys = api.readKey().parseKey(
                 "-----BEGIN PGP PRIVATE KEY BLOCK-----\n" +
                         "Version: PGPainless\n" +
                         "Comment: CA52 4D5D E3D8 9CD9 105B  BA45 3761 076B C6B5 3000\n" +
@@ -78,13 +83,13 @@ public class ChangeSubkeyExpirationTimeTest {
         OpenPgpFingerprint encryptionSubkey = new OpenPgpV4Fingerprint("2E541354A23C9943375EC27A3EF133ED8720D636");
         JUtils.assertDateEquals(
                 DateUtil.parseUTCDate("2023-12-07 16:29:46 UTC"),
-                PGPainless.inspectKeyRing(secretKeys).getSubkeyExpirationDate(encryptionSubkey));
+                api.inspect(secretKeys).getSubkeyExpirationDate(encryptionSubkey));
 
         // re-validate the subkey by setting its expiry to null (no expiry)
-        secretKeys = PGPainless.modifyKeyRing(secretKeys)
-                .setExpirationDateOfSubkey(null, encryptionSubkey.getKeyId(), SecretKeyRingProtector.unprotectedKeys())
+        secretKeys = api.modify(secretKeys)
+                .setExpirationDateOfSubkey(null, encryptionSubkey.getKeyIdentifier(), SecretKeyRingProtector.unprotectedKeys())
                 .done();
 
-        assertNull(PGPainless.inspectKeyRing(secretKeys).getSubkeyExpirationDate(encryptionSubkey));
+        assertNull(api.inspect(secretKeys).getSubkeyExpirationDate(encryptionSubkey));
     }
 }

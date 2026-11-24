@@ -8,62 +8,64 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import org.bouncycastle.openpgp.PGPException
-import org.bouncycastle.openpgp.PGPSecretKeyRingCollection
-import org.pgpainless.bouncycastle.extensions.openPgpFingerprint
+import org.pgpainless.PGPainless
 import org.pgpainless.exception.MissingPassphraseException
 import org.pgpainless.key.protection.SecretKeyRingProtector
 import org.pgpainless.key.util.KeyRingUtils
-import org.pgpainless.util.ArmoredOutputStreamFactory
+import org.pgpainless.util.OpenPGPCertificateUtil
 import org.pgpainless.util.Passphrase
 import sop.Ready
 import sop.exception.SOPGPException
 import sop.operation.ChangeKeyPassword
 
 /** Implementation of the `change-key-password` operation using PGPainless. */
-class ChangeKeyPasswordImpl : ChangeKeyPassword {
+class ChangeKeyPasswordImpl(private val api: PGPainless) : ChangeKeyPassword {
 
-    private val oldProtector = MatchMakingSecretKeyRingProtector()
+    private val oldProtector = MatchMakingSecretKeyRingProtector(api)
     private var newPassphrase = Passphrase.emptyPassphrase()
     private var armor = true
 
     override fun keys(keys: InputStream): Ready {
         val newProtector = SecretKeyRingProtector.unlockAnyKeyWith(newPassphrase)
-        val secretKeysCollection =
+        val secretKeys =
             try {
-                KeyReader.readSecretKeys(keys, true)
+                KeyReader(api).readSecretKeys(keys, true)
             } catch (e: IOException) {
                 throw SOPGPException.BadData(e)
             }
 
         val updatedSecretKeys =
-            secretKeysCollection
-                .map { secretKeys ->
-                    oldProtector.addSecretKey(secretKeys)
+            secretKeys
+                .map {
+                    oldProtector.addSecretKey(it)
                     try {
                         return@map KeyRingUtils.changePassphrase(
-                            null, secretKeys, oldProtector, newProtector)
+                            null,
+                            it.pgpSecretKeyRing,
+                            oldProtector,
+                            newProtector,
+                            api.implementation,
+                            api.algorithmPolicy)
                     } catch (e: MissingPassphraseException) {
                         throw SOPGPException.KeyIsProtected(
-                            "Cannot unlock key ${secretKeys.openPgpFingerprint}", e)
+                            "Cannot unlock key ${it.keyIdentifier}", e)
                     } catch (e: PGPException) {
                         if (e.message?.contains("Exception decrypting key") == true) {
                             throw SOPGPException.KeyIsProtected(
-                                "Cannot unlock key ${secretKeys.openPgpFingerprint}", e)
+                                "Cannot unlock key ${it.keyIdentifier}", e)
                         }
                         throw RuntimeException(
-                            "Cannot change passphrase of key ${secretKeys.openPgpFingerprint}", e)
+                            "Cannot change passphrase of key ${it.keyIdentifier}", e)
                     }
                 }
-                .let { PGPSecretKeyRingCollection(it) }
+                .map { api.toKey(it) }
 
         return object : Ready() {
             override fun writeTo(outputStream: OutputStream) {
                 if (armor) {
-                    ArmoredOutputStreamFactory.get(outputStream).use {
-                        updatedSecretKeys.encode(it)
-                    }
+                    OpenPGPCertificateUtil.armor(updatedSecretKeys, outputStream)
                 } else {
-                    updatedSecretKeys.encode(outputStream)
+                    OpenPGPCertificateUtil.encode(updatedSecretKeys, outputStream)
                 }
             }
         }
@@ -76,6 +78,6 @@ class ChangeKeyPasswordImpl : ChangeKeyPassword {
     override fun noArmor(): ChangeKeyPassword = apply { armor = false }
 
     override fun oldKeyPassphrase(oldPassphrase: String): ChangeKeyPassword = apply {
-        oldProtector.addPassphrase(Passphrase.fromPassword(oldPassphrase))
+        PasswordHelper.addPassphrasePlusRemoveWhitespace(oldPassphrase, oldProtector)
     }
 }

@@ -19,11 +19,13 @@ class PGPPublicKeyExtensionsTest {
 
     @Test
     fun `test getCurveName for all ECDSA curves`() {
-        for (curve in EllipticCurve.values()) {
+        val api = PGPainless.getInstance()
+        for (curve in EllipticCurve.entries) {
             val key =
-                PGPainless.buildKeyRing()
+                api.buildKey()
                     .setPrimaryKey(KeySpec.getBuilder(KeyType.ECDSA(curve)))
                     .build()
+                    .pgpSecretKeyRing
                     .publicKey
 
             assertEquals(curve.curveName, key.getCurveName())
@@ -32,11 +34,13 @@ class PGPPublicKeyExtensionsTest {
 
     @Test
     fun `test getCurveName for legacy EdDSA curves`() {
-        for (curve in EdDSALegacyCurve.values()) {
+        val api = PGPainless.getInstance()
+        for (curve in EdDSALegacyCurve.entries) {
             val key =
-                PGPainless.buildKeyRing()
+                api.buildKey()
                     .setPrimaryKey(KeySpec.getBuilder(KeyType.EDDSA_LEGACY(curve)))
                     .build()
+                    .pgpSecretKeyRing
                     .publicKey
 
             assertEquals(curve.curveName, key.getCurveName())

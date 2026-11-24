@@ -7,16 +7,21 @@ package org.pgpainless.sop
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.Date
 import org.bouncycastle.openpgp.PGPException
-import org.bouncycastle.openpgp.PGPSecretKeyRing
+import org.bouncycastle.openpgp.api.MessageEncryptionMechanism
+import org.bouncycastle.openpgp.api.OpenPGPKey
 import org.bouncycastle.util.io.Streams
 import org.pgpainless.PGPainless
+import org.pgpainless.algorithm.AEADAlgorithm
 import org.pgpainless.algorithm.DocumentSignatureType
+import org.pgpainless.algorithm.KeyFlag
 import org.pgpainless.algorithm.StreamEncoding
-import org.pgpainless.bouncycastle.extensions.openPgpFingerprint
+import org.pgpainless.algorithm.SymmetricKeyAlgorithm
 import org.pgpainless.encryption_signing.EncryptionOptions
 import org.pgpainless.encryption_signing.ProducerOptions
 import org.pgpainless.encryption_signing.SigningOptions
+import org.pgpainless.exception.KeyException
 import org.pgpainless.exception.KeyException.UnacceptableEncryptionKeyException
 import org.pgpainless.exception.KeyException.UnacceptableSigningKeyException
 import org.pgpainless.exception.WrongPassphraseException
@@ -24,28 +29,37 @@ import org.pgpainless.util.Passphrase
 import sop.EncryptionResult
 import sop.Profile
 import sop.ReadyWithResult
+import sop.SessionKey
 import sop.enums.EncryptAs
+import sop.enums.EncryptFor
 import sop.exception.SOPGPException
 import sop.operation.Encrypt
-import sop.util.UTF8Util
 
 /** Implementation of the `encrypt` operation using PGPainless. */
-class EncryptImpl : Encrypt {
+class EncryptImpl(private val api: PGPainless) : Encrypt {
 
     companion object {
         @JvmField val RFC4880_PROFILE = Profile("rfc4880", "Follow the packet format of rfc4880")
+        @JvmField val RFC9580_PROFILE = Profile("rfc9580", "Follow the packet format of rfc9580")
 
-        @JvmField val SUPPORTED_PROFILES = listOf(RFC4880_PROFILE)
+        @JvmField
+        val SUPPORTED_PROFILES =
+            listOf(
+                RFC4880_PROFILE.withAliases("default", "compatibility"),
+                RFC9580_PROFILE.withAliases("security", "performance"))
     }
 
-    private val encryptionOptions = EncryptionOptions.get()
+    private val encryptionOptions = EncryptionOptions.get(api)
     private var signingOptions: SigningOptions? = null
-    private val signingKeys = mutableListOf<PGPSecretKeyRing>()
-    private val protector = MatchMakingSecretKeyRingProtector()
+    private val signingKeys = mutableListOf<OpenPGPKey>()
+    private val protector = MatchMakingSecretKeyRingProtector(api)
 
     private var profile = RFC4880_PROFILE.name
     private var mode = EncryptAs.binary
+    private var purpose: EncryptFor = EncryptFor.any
     private var armor = true
+
+    override fun encryptFor(purpose: EncryptFor): Encrypt = apply { this.purpose = purpose }
 
     override fun mode(mode: EncryptAs): Encrypt = apply { this.mode = mode }
 
@@ -54,6 +68,13 @@ class EncryptImpl : Encrypt {
     override fun plaintext(plaintext: InputStream): ReadyWithResult<EncryptionResult> {
         if (!encryptionOptions.hasEncryptionMethod()) {
             throw SOPGPException.MissingArg("Missing encryption method.")
+        }
+
+        if (encryptionOptions.usesOnlyPasswordBasedEncryption() &&
+            profile == RFC9580_PROFILE.name) {
+            encryptionOptions.overrideEncryptionMechanism(
+                MessageEncryptionMechanism.aead(
+                    SymmetricKeyAlgorithm.AES_128.algorithmId, AEADAlgorithm.OCB.algorithmId))
         }
 
         val options =
@@ -69,9 +90,9 @@ class EncryptImpl : Encrypt {
             try {
                 signingOptions!!.addInlineSignature(protector, it, modeToSignatureType(mode))
             } catch (e: UnacceptableSigningKeyException) {
-                throw SOPGPException.KeyCannotSign("Key ${it.openPgpFingerprint} cannot sign", e)
+                throw SOPGPException.KeyCannotSign("Key ${it.keyIdentifier} cannot sign", e)
             } catch (e: WrongPassphraseException) {
-                throw SOPGPException.KeyIsProtected("Cannot unlock key ${it.openPgpFingerprint}", e)
+                throw SOPGPException.KeyIsProtected("Cannot unlock key ${it.keyIdentifier}", e)
             } catch (e: PGPException) {
                 throw SOPGPException.BadData(e)
             }
@@ -81,13 +102,13 @@ class EncryptImpl : Encrypt {
             return object : ReadyWithResult<EncryptionResult>() {
                 override fun writeTo(outputStream: OutputStream): EncryptionResult {
                     val encryptionStream =
-                        PGPainless.encryptAndOrSign()
-                            .onOutputStream(outputStream)
-                            .withOptions(options)
+                        api.generateMessage().onOutputStream(outputStream).withOptions(options)
                     Streams.pipeAll(plaintext, encryptionStream)
                     encryptionStream.close()
-                    // TODO: Extract and emit session key once BC supports that
-                    return EncryptionResult(null)
+                    return EncryptionResult(
+                        encryptionStream.result.sessionKey?.let {
+                            SessionKey(it.algorithm.algorithmId.toByte(), it.key)
+                        })
                 }
             }
         } catch (e: PGPException) {
@@ -97,24 +118,25 @@ class EncryptImpl : Encrypt {
 
     override fun profile(profileName: String): Encrypt = apply {
         profile =
-            SUPPORTED_PROFILES.find { it.name == profileName }?.name
+            SUPPORTED_PROFILES.find { it.name == profileName || it.aliases.contains(profileName) }
+                ?.name
                 ?: throw SOPGPException.UnsupportedProfile("encrypt", profileName)
     }
 
     override fun signWith(key: InputStream): Encrypt = apply {
         if (signingOptions == null) {
-            signingOptions = SigningOptions.get()
+            signingOptions = SigningOptions.get(api)
         }
 
         val signingKey =
-            KeyReader.readSecretKeys(key, true).singleOrNull()
+            KeyReader(api).readSecretKeys(key, true).singleOrNull()
                 ?: throw SOPGPException.BadData(
                     AssertionError(
                         "Exactly one secret key at a time expected. Got zero or multiple instead."))
 
-        val info = PGPainless.inspectKeyRing(signingKey)
+        val info = api.inspect(signingKey)
         if (info.signingSubkeys.isEmpty()) {
-            throw SOPGPException.KeyCannotSign("Key ${info.fingerprint} cannot sign.")
+            throw SOPGPException.KeyCannotSign("Key ${info.keyIdentifier} cannot sign.")
         }
 
         protector.addSecretKey(signingKey)
@@ -123,20 +145,32 @@ class EncryptImpl : Encrypt {
 
     override fun withCert(cert: InputStream): Encrypt = apply {
         try {
-            encryptionOptions.addRecipients(KeyReader.readPublicKeys(cert, true))
-        } catch (e: UnacceptableEncryptionKeyException) {
-            throw SOPGPException.CertCannotEncrypt(e.message ?: "Cert cannot encrypt", e)
+            val certs = KeyReader(api).readPublicKeys(cert, true)
+            certs.forEach {
+                try {
+                    encryptionOptions.addRecipient(it, keySelectorForPurpose(purpose))
+                } catch (e: UnacceptableEncryptionKeyException) {
+                    throw SOPGPException.CertCannotEncrypt(
+                        "Cert ${it.keyIdentifier} cannot encrypt: ${e.message ?: "unknown cause"}",
+                        e)
+                } catch (e: KeyException.ExpiredKeyException) {
+                    throw SOPGPException.CertCannotEncrypt(
+                        "Cert ${it.keyIdentifier} cannot encrypt because it is expired: ${e.message ?: ""}",
+                        e)
+                }
+            }
         } catch (e: IOException) {
             throw SOPGPException.BadData(e)
         }
     }
 
     override fun withKeyPassword(password: ByteArray): Encrypt = apply {
-        protector.addPassphrase(Passphrase.fromPassword(String(password, UTF8Util.UTF8)))
+        PasswordHelper.addPassphrasePlusRemoveWhitespace(password, protector)
     }
 
     override fun withPassword(password: String): Encrypt = apply {
-        encryptionOptions.addMessagePassphrase(Passphrase.fromPassword(password))
+        encryptionOptions.addMessagePassphrase(
+            Passphrase.fromPassword(password).withTrimmedWhitespace())
     }
 
     private fun modeToStreamEncoding(mode: EncryptAs): StreamEncoding {
@@ -152,4 +186,17 @@ class EncryptImpl : Encrypt {
             EncryptAs.text -> DocumentSignatureType.CANONICAL_TEXT_DOCUMENT
         }
     }
+
+    private fun keySelectorForPurpose(
+        purpose: EncryptFor
+    ): EncryptionOptions.EncryptionKeySelector =
+        EncryptionOptions.EncryptionKeySelector { encryptionCapableKeys ->
+            encryptionCapableKeys.filter {
+                when (purpose) {
+                    EncryptFor.storage -> it.hasKeyFlags(Date(), KeyFlag.ENCRYPT_STORAGE.flag)
+                    EncryptFor.communications -> it.hasKeyFlags(Date(), KeyFlag.ENCRYPT_COMMS.flag)
+                    else -> true
+                }
+            }
+        }
 }

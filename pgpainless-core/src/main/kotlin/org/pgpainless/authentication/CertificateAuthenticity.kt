@@ -4,15 +4,22 @@
 
 package org.pgpainless.authentication
 
-import org.bouncycastle.openpgp.PGPPublicKeyRing
+import org.bouncycastle.openpgp.api.OpenPGPCertificate
 
+/**
+ * A certificate authenticity record, indicating, to what degree the certificate is authenticated.
+ *
+ * @param userId identity
+ * @param certificate certificate
+ * @param certificationChains map of chains and their trust degrees
+ * @param targetAmount targeted trust amount
+ */
 class CertificateAuthenticity(
-    val userId: String,
-    val certificate: PGPPublicKeyRing,
+    val userId: CharSequence,
+    val certificate: OpenPGPCertificate,
     val certificationChains: Map<CertificationChain, Int>,
     val targetAmount: Int
 ) {
-
     val totalTrustAmount: Int
         get() = certificationChains.values.sum()
 
@@ -42,7 +49,11 @@ class CertificateAuthenticity(
  * @param trustAmount actual trust amount of the chain
  * @param chainLinks links of the chain, starting at the trust-root, ending at the target.
  */
-class CertificationChain(val trustAmount: Int, val chainLinks: List<ChainLink>) {}
+class CertificationChain(val trustAmount: Int, val chainLinks: List<ChainLink>)
 
-/** A chain link contains a node in the trust chain. */
-class ChainLink(val certificate: PGPPublicKeyRing) {}
+/**
+ * A chain link contains a node in the trust chain.
+ *
+ * @param certificate chain link certificate
+ */
+class ChainLink(val certificate: OpenPGPCertificate)

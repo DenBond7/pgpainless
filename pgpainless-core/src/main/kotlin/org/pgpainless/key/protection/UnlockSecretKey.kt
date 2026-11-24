@@ -10,42 +10,104 @@ import openpgp.openPgpKeyId
 import org.bouncycastle.openpgp.PGPException
 import org.bouncycastle.openpgp.PGPPrivateKey
 import org.bouncycastle.openpgp.PGPSecretKey
+import org.bouncycastle.openpgp.api.OpenPGPKey.OpenPGPPrivateKey
+import org.bouncycastle.openpgp.api.OpenPGPKey.OpenPGPSecretKey
 import org.bouncycastle.openpgp.operator.PBESecretKeyDecryptor
-import org.pgpainless.PGPainless
 import org.pgpainless.bouncycastle.extensions.isEncrypted
 import org.pgpainless.exception.KeyIntegrityException
 import org.pgpainless.exception.WrongPassphraseException
 import org.pgpainless.key.util.PublicKeyParameterValidationUtil
+import org.pgpainless.policy.Policy
 import org.pgpainless.util.Passphrase
 
+/**
+ * Methods for unlocking OpenPGP secret keys. Depending on the [Policy] configuration, these helper
+ * functions will check the unlocked OpenPGP key for tampering.
+ *
+ * @see [KOpenPGP attack](https://kopenpgp.com)
+ */
 class UnlockSecretKey {
 
     companion object {
 
+        /**
+         * Unlock the given [PGPSecretKey] with the given [SecretKeyRingProtector].
+         *
+         * @param secretKey secret key
+         * @param protector protector to unlock the secret key with
+         * @return unlocked private key
+         */
         @JvmStatic
         @Throws(PGPException::class, KeyIntegrityException::class)
         fun unlockSecretKey(
             secretKey: PGPSecretKey,
-            protector: SecretKeyRingProtector
+            protector: SecretKeyRingProtector,
+            policy: Policy
         ): PGPPrivateKey {
             return if (secretKey.isEncrypted()) {
-                unlockSecretKey(secretKey, protector.getDecryptor(secretKey.keyID))
+                unlockSecretKey(secretKey, protector.getDecryptor(secretKey.keyIdentifier), policy)
             } else {
-                unlockSecretKey(secretKey, null as PBESecretKeyDecryptor?)
+                unlockSecretKey(secretKey, null as PBESecretKeyDecryptor?, policy)
             }
         }
 
+        /**
+         * Unlock the given [OpenPGPSecretKey] with the given [SecretKeyRingProtector].
+         *
+         * @param secretKey secret key
+         * @param protector protector to unlock the secret key with
+         * @return unlocked private key
+         */
         @JvmStatic
-        @Throws(PGPException::class)
+        @Throws(PGPException::class, KeyIntegrityException::class)
+        fun unlockSecretKey(
+            secretKey: OpenPGPSecretKey,
+            protector: SecretKeyRingProtector,
+            policy: Policy
+        ): OpenPGPPrivateKey {
+            val privateKey =
+                try {
+                    secretKey.unlock(protector)
+                } catch (e: PGPException) {
+                    throw WrongPassphraseException(secretKey.keyIdentifier, e)
+                }
+
+            if (privateKey == null) {
+                if (secretKey.pgpSecretKey.s2K.type in 100..110) {
+                    throw PGPException(
+                        "Cannot decrypt secret key ${secretKey.keyIdentifier}: \n" +
+                            "Unsupported private S2K type ${secretKey.pgpSecretKey.s2K.type}")
+                }
+                throw PGPException("Cannot decrypt secret key.")
+            }
+
+            if (policy.isEnableKeyParameterValidation()) {
+                PublicKeyParameterValidationUtil.verifyPublicKeyParameterIntegrity(
+                    privateKey.keyPair.privateKey, privateKey.keyPair.publicKey)
+            }
+
+            return privateKey
+        }
+
+        /**
+         * Unlock the given [PGPSecretKey] with the given [PBESecretKeyDecryptor].
+         *
+         * @param secretKey secret key
+         * @param decryptor decryptor to unlock the secret key with
+         * @return unlocked private key
+         */
+        @JvmStatic
+        @Throws(PGPException::class, KeyIntegrityException::class)
         fun unlockSecretKey(
             secretKey: PGPSecretKey,
-            decryptor: PBESecretKeyDecryptor?
+            decryptor: PBESecretKeyDecryptor?,
+            policy: Policy
         ): PGPPrivateKey {
             val privateKey =
                 try {
                     secretKey.extractPrivateKey(decryptor)
                 } catch (e: PGPException) {
-                    throw WrongPassphraseException(secretKey.keyID, e)
+                    throw WrongPassphraseException(secretKey.keyIdentifier, e)
                 }
 
             if (privateKey == null) {
@@ -57,7 +119,7 @@ class UnlockSecretKey {
                 throw PGPException("Cannot decrypt secret key.")
             }
 
-            if (PGPainless.getPolicy().isEnableKeyParameterValidation()) {
+            if (policy.isEnableKeyParameterValidation()) {
                 PublicKeyParameterValidationUtil.verifyPublicKeyParameterIntegrity(
                     privateKey, secretKey.publicKey)
             }
@@ -65,14 +127,44 @@ class UnlockSecretKey {
             return privateKey
         }
 
+        /**
+         * Unlock the given [PGPSecretKey] with the given [Passphrase].
+         *
+         * @param secretKey secret key
+         * @param passphrase passphrase to unlock the secret key with
+         * @return unlocked private key
+         */
         @JvmStatic
-        fun unlockSecretKey(secretKey: PGPSecretKey, passphrase: Passphrase?): PGPPrivateKey {
+        @Throws(PGPException::class, KeyIntegrityException::class)
+        fun unlockSecretKey(
+            secretKey: PGPSecretKey,
+            passphrase: Passphrase?,
+            policy: Policy
+        ): PGPPrivateKey {
             return if (passphrase == null) {
-                unlockSecretKey(secretKey, SecretKeyRingProtector.unprotectedKeys())
+                unlockSecretKey(secretKey, SecretKeyRingProtector.unprotectedKeys(), policy)
             } else {
                 unlockSecretKey(
-                    secretKey, SecretKeyRingProtector.unlockSingleKeyWith(passphrase, secretKey))
+                    secretKey,
+                    SecretKeyRingProtector.unlockSingleKeyWith(passphrase, secretKey),
+                    policy)
             }
         }
+
+        /**
+         * Unlock the given [OpenPGPSecretKey] with the given [Passphrase].
+         *
+         * @param secretKey secret key
+         * @param passphrase passphrase to unlock the secret key with
+         * @return unlocked private key
+         */
+        @JvmStatic
+        @Throws(PGPException::class, KeyIntegrityException::class)
+        fun unlockSecretKey(
+            secretKey: OpenPGPSecretKey,
+            passphrase: Passphrase,
+            policy: Policy
+        ): OpenPGPPrivateKey =
+            unlockSecretKey(secretKey, SecretKeyRingProtector.unlockAnyKeyWith(passphrase), policy)
     }
 }

@@ -14,13 +14,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 import org.bouncycastle.bcpg.ArmoredOutputStream;
+import org.bouncycastle.bcpg.SymmetricKeyAlgorithmTags;
 import org.bouncycastle.openpgp.PGPEncryptedDataGenerator;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPLiteralDataGenerator;
-import org.bouncycastle.openpgp.PGPPublicKey;
-import org.bouncycastle.openpgp.PGPSecretKey;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSignatureGenerator;
+import org.bouncycastle.openpgp.api.OpenPGPCertificate;
+import org.bouncycastle.openpgp.api.OpenPGPImplementation;
+import org.bouncycastle.openpgp.api.OpenPGPKey;
 import org.bouncycastle.openpgp.operator.PGPDataEncryptorBuilder;
 import org.bouncycastle.util.io.Streams;
 import org.junit.jupiter.api.Test;
@@ -28,14 +29,12 @@ import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.EncryptionPurpose;
 import org.pgpainless.algorithm.HashAlgorithm;
 import org.pgpainless.algorithm.SignatureType;
-import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
 import org.pgpainless.decryption_verification.ConsumerOptions;
 import org.pgpainless.decryption_verification.DecryptionStream;
 import org.pgpainless.exception.MalformedOpenPgpMessageException;
-import org.pgpainless.implementation.ImplementationFactory;
 import org.pgpainless.key.info.KeyRingInfo;
+import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.key.protection.UnlockSecretKey;
-import org.pgpainless.util.Passphrase;
 
 /**
  * This test is used to investigate, how messages of the form
@@ -118,18 +117,20 @@ public class InvestigateMultiSEIPMessageHandlingTest {
 
     @Test
     public void generateTestMessage() throws PGPException, IOException {
-        PGPSecretKeyRing ring1 = PGPainless.readKeyRing().secretKeyRing(KEY1);
-        KeyRingInfo info1 = PGPainless.inspectKeyRing(ring1);
-        PGPPublicKey cryptKey1 = info1.getEncryptionSubkeys(EncryptionPurpose.ANY).get(0);
-        PGPSecretKey signKey1 = ring1.getSecretKey(info1.getSigningSubkeys().get(0).getKeyID());
-        PGPSecretKeyRing ring2 = PGPainless.readKeyRing().secretKeyRing(KEY2);
-        KeyRingInfo info2 = PGPainless.inspectKeyRing(ring2);
-        PGPSecretKey signKey2 = ring2.getSecretKey(info2.getSigningSubkeys().get(0).getKeyID());
+        PGPainless api = PGPainless.getInstance();
+        OpenPGPKey ring1 = api.readKey().parseKey(KEY1);
+        KeyRingInfo info1 = api.inspect(ring1);
+        OpenPGPCertificate.OpenPGPComponentKey cryptKey1 = info1.getEncryptionSubkeys(EncryptionPurpose.ANY).get(0);
+        OpenPGPKey.OpenPGPSecretKey signKey1 = ring1.getSecretKey(info1.getSigningSubkeys().get(0));
+        OpenPGPKey ring2 = api.readKey().parseKey(KEY2);
+        KeyRingInfo info2 = api.inspect(ring2);
+        OpenPGPKey.OpenPGPSecretKey signKey2 = ring2.getSecretKey(info2.getSigningSubkeys().get(0));
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ArmoredOutputStream armorOut = new ArmoredOutputStream(out);
 
-        PGPDataEncryptorBuilder cryptBuilder = ImplementationFactory.getInstance().getPGPDataEncryptorBuilder(SymmetricKeyAlgorithm.AES_256);
+        PGPDataEncryptorBuilder cryptBuilder = OpenPGPImplementation.getInstance()
+                .pgpDataEncryptorBuilder(SymmetricKeyAlgorithmTags.AES_256);
         cryptBuilder.setWithIntegrityPacket(true);
 
         encryptAndSign(cryptKey1, signKey1, armorOut, data1.getBytes(StandardCharsets.UTF_8));
@@ -142,19 +143,26 @@ public class InvestigateMultiSEIPMessageHandlingTest {
         // CHECKSTYLE:ON
     }
 
-    private void encryptAndSign(PGPPublicKey cryptKey, PGPSecretKey signKey, ArmoredOutputStream armorOut, byte[] data) throws IOException, PGPException {
-
-        PGPDataEncryptorBuilder cryptBuilder = ImplementationFactory.getInstance().getPGPDataEncryptorBuilder(SymmetricKeyAlgorithm.AES_256);
+    private void encryptAndSign(
+            OpenPGPCertificate.OpenPGPComponentKey cryptKey,
+            OpenPGPKey.OpenPGPSecretKey signKey,
+            ArmoredOutputStream armorOut,
+            byte[] data) throws IOException, PGPException {
+        PGPainless api = PGPainless.getInstance();
+        PGPDataEncryptorBuilder cryptBuilder = api.getImplementation().pgpDataEncryptorBuilder(SymmetricKeyAlgorithmTags.AES_256);
         cryptBuilder.setWithIntegrityPacket(true);
 
         PGPEncryptedDataGenerator cryptGen = new PGPEncryptedDataGenerator(cryptBuilder);
-        cryptGen.addMethod(ImplementationFactory.getInstance().getPublicKeyKeyEncryptionMethodGenerator(cryptKey));
+        cryptGen.addMethod(api.getImplementation().publicKeyKeyEncryptionMethodGenerator(cryptKey.getPGPPublicKey()));
         OutputStream cryptStream = cryptGen.open(armorOut, new byte[512]);
 
-        PGPSignatureGenerator sigGen = new PGPSignatureGenerator(ImplementationFactory.getInstance()
-                .getPGPContentSignerBuilder(signKey.getPublicKey().getAlgorithm(), HashAlgorithm.SHA512.getAlgorithmId()));
-        sigGen.init(SignatureType.BINARY_DOCUMENT.getCode(), UnlockSecretKey
-                .unlockSecretKey(signKey, (Passphrase) null));
+        PGPSignatureGenerator sigGen = new PGPSignatureGenerator(api.getImplementation()
+                .pgpContentSignerBuilder(signKey.getPublicKey().getAlgorithm(), HashAlgorithm.SHA512.getAlgorithmId()),
+                signKey.getPGPPublicKey());
+        sigGen.init(
+                SignatureType.BINARY_DOCUMENT.getCode(),
+                UnlockSecretKey.unlockSecretKey(signKey, SecretKeyRingProtector.unprotectedKeys(), api.getAlgorithmPolicy())
+                        .getKeyPair().getPrivateKey());
 
         sigGen.generateOnePassVersion(false).encode(cryptStream);
 
@@ -176,15 +184,16 @@ public class InvestigateMultiSEIPMessageHandlingTest {
 
     @Test
     public void testDecryptAndVerifyDetectsAppendedSEIPData() throws IOException, PGPException {
-        PGPSecretKeyRing ring1 = PGPainless.readKeyRing().secretKeyRing(KEY1);
-        PGPSecretKeyRing ring2 = PGPainless.readKeyRing().secretKeyRing(KEY2);
+        PGPainless api = PGPainless.getInstance();
+        OpenPGPKey ring1 = api.readKey().parseKey(KEY1);
+        OpenPGPKey ring2 = api.readKey().parseKey(KEY2);
 
-        ConsumerOptions options = new ConsumerOptions()
-                .addVerificationCert(PGPainless.extractCertificate(ring1))
-                .addVerificationCert(PGPainless.extractCertificate(ring2))
+        ConsumerOptions options = ConsumerOptions.get(api)
+                .addVerificationCert(ring2)
+                .addVerificationCert(ring2)
                         .addDecryptionKey(ring1);
 
-        DecryptionStream decryptionStream = PGPainless.decryptAndOrVerify()
+        DecryptionStream decryptionStream = api.processMessage()
                 .onInputStream(new ByteArrayInputStream(MESSAGE.getBytes(StandardCharsets.UTF_8)))
                 .withOptions(options);
 

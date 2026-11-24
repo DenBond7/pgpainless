@@ -11,14 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.util.Date;
 
-import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPPublicKeyRing;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.api.OpenPGPCertificate;
+import org.bouncycastle.openpgp.api.OpenPGPKey;
 import org.junit.jupiter.api.Test;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.KeyFlag;
@@ -33,6 +30,8 @@ import sop.exception.SOPGPException;
 import sop.util.UTCUtil;
 
 public class RoundTripSignVerifyCmdTest extends CLITest {
+
+    private final PGPainless api = PGPainless.getInstance();
 
     public RoundTripSignVerifyCmdTest() {
         super(LoggerFactory.getLogger(RoundTripSignVerifyCmdTest.class));
@@ -199,12 +198,13 @@ public class RoundTripSignVerifyCmdTest extends CLITest {
 
     @Test
     public void testSignWithIncapableKey()
-            throws IOException, PGPException, InvalidAlgorithmParameterException, NoSuchAlgorithmException {
-        PGPSecretKeyRing secretKeys = PGPainless.buildKeyRing()
+            throws IOException {
+        OpenPGPKey secretKeys = api.buildKey()
                 .addUserId("Cannot Sign <cannot@sign.key>")
                 .setPrimaryKey(KeySpec.getBuilder(KeyType.EDDSA_LEGACY(EdDSALegacyCurve._Ed25519), KeyFlag.CERTIFY_OTHER))
                 .addSubkey(KeySpec.getBuilder(KeyType.XDH_LEGACY(XDHLegacySpec._X25519), KeyFlag.ENCRYPT_COMMS, KeyFlag.ENCRYPT_STORAGE))
                 .build();
+
         File keyFile = writeFile("key.pgp", secretKeys.getEncoded());
 
         pipeStringToStdin("Hello, World!\n");
@@ -245,14 +245,14 @@ public class RoundTripSignVerifyCmdTest extends CLITest {
 
         // Test verification output
 
-        PGPPublicKeyRing cert = PGPainless.readKeyRing().publicKeyRing(readBytesFromFile(aliceCertFile));
-        KeyRingInfo info = PGPainless.inspectKeyRing(cert);
+        OpenPGPCertificate cert = api.readKey().parseCertificate(readBytesFromFile(aliceCertFile));
+        KeyRingInfo info = api.inspect(cert);
 
         // [date] [signing-key-fp] [primary-key-fp] signed by [key.pub]
         String verification = verificationsOut.toString();
         String[] split = verification.split(" ");
         OpenPgpV4Fingerprint primaryKeyFingerprint = new OpenPgpV4Fingerprint(cert);
-        OpenPgpV4Fingerprint signingKeyFingerprint = new OpenPgpV4Fingerprint(info.getSigningSubkeys().get(0));
+        OpenPgpV4Fingerprint signingKeyFingerprint = new OpenPgpV4Fingerprint(info.getSigningSubkeys().get(0).getPGPPublicKey());
         assertEquals(signingKeyFingerprint.toString(), split[1].trim(), verification);
         assertEquals(primaryKeyFingerprint.toString(), split[2].trim());
 

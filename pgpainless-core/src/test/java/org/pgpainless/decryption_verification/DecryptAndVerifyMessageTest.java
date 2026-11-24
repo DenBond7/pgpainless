@@ -14,9 +14,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.api.OpenPGPKey;
 import org.bouncycastle.util.io.Streams;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,10 +26,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.pgpainless.PGPainless;
 import org.pgpainless.algorithm.CompressionAlgorithm;
 import org.pgpainless.algorithm.SymmetricKeyAlgorithm;
-import org.pgpainless.exception.MissingDecryptionMethodException;
+import org.pgpainless.encryption_signing.EncryptionOptions;
+import org.pgpainless.encryption_signing.EncryptionStream;
+import org.pgpainless.encryption_signing.ProducerOptions;
+import org.pgpainless.encryption_signing.SigningOptions;
+import org.pgpainless.exception.UnacceptableAlgorithmException;
 import org.pgpainless.key.SubkeyIdentifier;
 import org.pgpainless.key.TestKeys;
-import org.pgpainless.key.util.KeyRingUtils;
+import org.pgpainless.key.protection.SecretKeyRingProtector;
 import org.pgpainless.util.Passphrase;
 import org.pgpainless.util.TestAllImplementations;
 
@@ -38,13 +43,12 @@ public class DecryptAndVerifyMessageTest {
     @SuppressWarnings("CharsetObjectCanBeUsed")
     private static final Charset UTF8 = Charset.forName("UTF-8");
 
-    private PGPSecretKeyRing juliet;
-    private PGPSecretKeyRing romeo;
+    private final PGPainless api = PGPainless.getInstance();
+    private OpenPGPKey juliet;
 
     @BeforeEach
     public void loadKeys() throws IOException, PGPException {
-        juliet = TestKeys.getJulietSecretKeyRing();
-        romeo = TestKeys.getRomeoSecretKeyRing();
+        juliet = api.toKey(TestKeys.getJulietSecretKeyRing());
     }
 
     @TestTemplate
@@ -52,11 +56,11 @@ public class DecryptAndVerifyMessageTest {
     public void decryptMessageAndVerifySignatureTest() throws Exception {
         String encryptedMessage = TestKeys.MSG_SIGN_CRYPT_JULIET_JULIET;
 
-        ConsumerOptions options = new ConsumerOptions()
+        ConsumerOptions options = ConsumerOptions.get(api)
                 .addDecryptionKey(juliet)
-                .addVerificationCert(KeyRingUtils.publicKeyRingFrom(juliet));
+                .addVerificationCert(juliet.toCertificate());
 
-        DecryptionStream decryptor = PGPainless.decryptAndOrVerify()
+        DecryptionStream decryptor = api.processMessage()
                 .onInputStream(new ByteArrayInputStream(encryptedMessage.getBytes()))
                 .withOptions(options);
 
@@ -75,7 +79,7 @@ public class DecryptAndVerifyMessageTest {
         assertFalse(metadata.isUsingCleartextSignatureFramework());
         assertTrue(metadata.isVerifiedSigned());
         assertEquals(CompressionAlgorithm.ZLIB, metadata.getCompressionAlgorithm());
-        assertEquals(SymmetricKeyAlgorithm.AES_256, metadata.getEncryptionAlgorithm());
+        assertEquals(SymmetricKeyAlgorithm.AES_256.getAlgorithmId(), metadata.getEncryptionMechanism().getSymmetricKeyAlgorithm());
         assertEquals(1, metadata.getVerifiedSignatures().size());
         assertEquals(1, metadata.getVerifiedSignatures().size());
         assertTrue(metadata.isVerifiedSignedBy(TestKeys.JULIET_FINGERPRINT));
@@ -87,11 +91,11 @@ public class DecryptAndVerifyMessageTest {
     public void decryptMessageAndReadBeyondEndTest() throws Exception {
         final String encryptedMessage = TestKeys.MSG_SIGN_CRYPT_JULIET_JULIET;
 
-        final ConsumerOptions options = new ConsumerOptions()
+        final ConsumerOptions options = ConsumerOptions.get(api)
                 .addDecryptionKey(juliet)
-                .addVerificationCert(KeyRingUtils.publicKeyRingFrom(juliet));
+                .addVerificationCert(juliet.toCertificate());
 
-        try (DecryptionStream decryptor = PGPainless.decryptAndOrVerify()
+        try (DecryptionStream decryptor = api.processMessage()
                 .onInputStream(new ByteArrayInputStream(encryptedMessage.getBytes()))
                 .withOptions(options);
              ByteArrayOutputStream toPlain = new ByteArrayOutputStream()) {
@@ -105,11 +109,11 @@ public class DecryptAndVerifyMessageTest {
     public void decryptMessageAndVerifySignatureByteByByteTest() throws Exception {
         String encryptedMessage = TestKeys.MSG_SIGN_CRYPT_JULIET_JULIET;
 
-        ConsumerOptions options = new ConsumerOptions()
+        ConsumerOptions options = ConsumerOptions.get(api)
                 .addDecryptionKey(juliet)
-                .addVerificationCert(KeyRingUtils.publicKeyRingFrom(juliet));
+                .addVerificationCert(juliet.toCertificate());
 
-        DecryptionStream decryptor = PGPainless.decryptAndOrVerify()
+        DecryptionStream decryptor = api.processMessage()
                 .onInputStream(new ByteArrayInputStream(encryptedMessage.getBytes()))
                 .withOptions(options);
 
@@ -132,7 +136,7 @@ public class DecryptAndVerifyMessageTest {
         assertFalse(metadata.isUsingCleartextSignatureFramework());
         assertTrue(metadata.isVerifiedSigned());
         assertEquals(CompressionAlgorithm.ZLIB, metadata.getCompressionAlgorithm());
-        assertEquals(SymmetricKeyAlgorithm.AES_256, metadata.getEncryptionAlgorithm());
+        assertEquals(SymmetricKeyAlgorithm.AES_256.getAlgorithmId(), metadata.getEncryptionMechanism().getSymmetricKeyAlgorithm());
         assertEquals(1, metadata.getVerifiedSignatures().size());
         assertEquals(1, metadata.getVerifiedSignatures().size());
         assertTrue(metadata.isVerifiedSignedBy(TestKeys.JULIET_FINGERPRINT));
@@ -149,10 +153,59 @@ public class DecryptAndVerifyMessageTest {
                 "=9aCQ\n" +
                 "-----END PGP MESSAGE-----";
         ByteArrayInputStream ciphertextIn = new ByteArrayInputStream(ciphertext.getBytes());
-        assertThrows(MissingDecryptionMethodException.class,
-                () -> PGPainless.decryptAndOrVerify()
+        assertThrows(UnacceptableAlgorithmException.class,
+                () -> api.processMessage()
                         .onInputStream(ciphertextIn)
-                        .withOptions(ConsumerOptions.get()
+                        .withOptions(ConsumerOptions.get(api)
                                 .addMessagePassphrase(Passphrase.fromPassword("sw0rdf1sh"))));
+    }
+
+    @Test
+    public void testVerifyAndOpenHelperMethod() throws PGPException, IOException {
+        OpenPGPKey key = api.generateKey().modernKeyRing("Alice <alice@pgpainless.org>");
+
+        ByteArrayOutputStream bOut = new ByteArrayOutputStream();
+        EncryptionStream eOut = api.generateMessage()
+                .onOutputStream(bOut)
+                .withOptions(ProducerOptions.signAndEncrypt(
+                        EncryptionOptions.get(api).addRecipient(key),
+                        SigningOptions.get(api).addSignature(SecretKeyRingProtector.unprotectedKeys(), key)));
+        eOut.write("Hello, World!\n".getBytes(StandardCharsets.UTF_8));
+        eOut.close();
+
+        ByteArrayInputStream bIn = new ByteArrayInputStream(bOut.toByteArray());
+        DecryptionStream dIn = api.processMessage()
+                .onInputStream(bIn)
+                .withOptions(ConsumerOptions.get(api)
+                        .addVerificationCert(key)
+                        .addDecryptionKey(key));
+
+        DecryptionStream verified = PGPainless.verifyAndOpen(dIn);
+        assertTrue(verified.getMetadata().isVerifiedSignedBy(key));
+        assertArrayEquals("Hello, World!\n".getBytes(StandardCharsets.UTF_8), verified.readAllBytes());
+    }
+
+    @Test
+    public void testVerifyAndOpenExceedingPlaintextSizeLimit()
+            throws PGPException, IOException {
+        OpenPGPKey key = api.generateKey().modernKeyRing("Alice <alice@pgpainless.org>");
+
+        ByteArrayOutputStream bOut = new ByteArrayOutputStream();
+        EncryptionStream eOut = api.generateMessage()
+                .onOutputStream(bOut)
+                .withOptions(ProducerOptions.signAndEncrypt(
+                        EncryptionOptions.get(api).addRecipient(key),
+                        SigningOptions.get(api).addSignature(SecretKeyRingProtector.unprotectedKeys(), key)));
+        eOut.write("Hello, World!\n".getBytes(StandardCharsets.UTF_8));
+        eOut.close();
+
+        ByteArrayInputStream bIn = new ByteArrayInputStream(bOut.toByteArray());
+        DecryptionStream dIn = api.processMessage()
+                .onInputStream(bIn)
+                .withOptions(ConsumerOptions.get(api)
+                        .addVerificationCert(key)
+                        .addDecryptionKey(key));
+
+        assertThrows(OutOfMemoryError.class, () -> PGPainless.verifyAndOpen(dIn, 4));
     }
 }

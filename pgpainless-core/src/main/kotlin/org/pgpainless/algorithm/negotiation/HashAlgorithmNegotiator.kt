@@ -21,13 +21,13 @@ interface HashAlgorithmNegotiator {
      * @param orderedPrefs hash algorithm preferences
      * @return picked algorithms
      */
-    fun negotiateHashAlgorithm(orderedPrefs: Set<HashAlgorithm>): HashAlgorithm
+    fun negotiateHashAlgorithm(orderedPrefs: Set<HashAlgorithm>?): HashAlgorithm
 
     companion object {
 
         /**
          * Return an instance that negotiates [HashAlgorithms][HashAlgorithm] used for
-         * non-revocation signatures based on the given [Policy].
+         * non-revocation data signatures based on the given [Policy].
          *
          * @param policy algorithm policy
          * @return negotiator
@@ -35,6 +35,18 @@ interface HashAlgorithmNegotiator {
         @JvmStatic
         fun negotiateSignatureHashAlgorithm(policy: Policy): HashAlgorithmNegotiator {
             return negotiateByPolicy(policy.dataSignatureHashAlgorithmPolicy)
+        }
+
+        /**
+         * Return an instance that negotiates [HashAlgorithms][HashAlgorithm] used for certification
+         * signatures based on the given [Policy].
+         *
+         * @param policy algorithm policy
+         * @return negotiator
+         */
+        @JvmStatic
+        fun negotiateCertificationSignatureHashAlgorithm(policy: Policy): HashAlgorithmNegotiator {
+            return negotiateByPolicy(policy.certificationSignatureHashAlgorithmPolicy)
         }
 
         /**
@@ -62,9 +74,9 @@ interface HashAlgorithmNegotiator {
         ): HashAlgorithmNegotiator {
             return object : HashAlgorithmNegotiator {
                 override fun negotiateHashAlgorithm(
-                    orderedPrefs: Set<HashAlgorithm>
+                    orderedPrefs: Set<HashAlgorithm>?
                 ): HashAlgorithm {
-                    return orderedPrefs.firstOrNull { hashAlgorithmPolicy.isAcceptable(it) }
+                    return orderedPrefs?.firstOrNull { hashAlgorithmPolicy.isAcceptable(it) }
                         ?: hashAlgorithmPolicy.defaultHashAlgorithm()
                 }
             }

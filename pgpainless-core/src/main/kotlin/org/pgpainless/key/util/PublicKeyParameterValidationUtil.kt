@@ -9,16 +9,15 @@ import java.io.IOException
 import java.math.BigInteger
 import java.security.SecureRandom
 import org.bouncycastle.bcpg.*
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import org.bouncycastle.openpgp.*
+import org.bouncycastle.openpgp.api.OpenPGPImplementation
 import org.bouncycastle.util.Arrays
+import org.bouncycastle.util.BigIntegers
 import org.bouncycastle.util.io.Streams
-import org.pgpainless.algorithm.HashAlgorithm
-import org.pgpainless.algorithm.PublicKeyAlgorithm.Companion.requireFromId
 import org.pgpainless.algorithm.SignatureType
-import org.pgpainless.algorithm.SymmetricKeyAlgorithm
 import org.pgpainless.bouncycastle.extensions.publicKeyAlgorithm
 import org.pgpainless.exception.KeyIntegrityException
-import org.pgpainless.implementation.ImplementationFactory.Companion.getInstance
 
 /**
  * Utility class to verify keys against Key Overwriting (KO) attacks. This class of attacks is only
@@ -27,7 +26,7 @@ import org.pgpainless.implementation.ImplementationFactory.Companion.getInstance
  * modified public key in combination with the unmodified secret key material can then lead to the
  * extraction of secret key parameters via weakly crafted messages.
  *
- * @see <a href="https://www.kopenpgp.com/">Key Overwriting (KO) Attacks against OpenPGP</a>
+ * @see [Key Overwriting (KO) Attacks against OpenPGP](https://www.kopenpgp.com/)
  */
 class PublicKeyParameterValidationUtil {
 
@@ -95,8 +94,14 @@ class PublicKeyParameterValidationUtil {
             secretKey: EdSecretBCPGKey,
             publicKey: EdDSAPublicBCPGKey
         ): Boolean {
-            // TODO: Implement
-            return true
+            val pointBytes = BigIntegers.asUnsignedByteArray(publicKey.encodedPoint)
+            return try {
+                // legacy EdDSA is only defined for Ed25519
+                Ed25519PublicKeyParameters(pointBytes, 1)
+                true
+            } catch (e: Exception) {
+                throw KeyIntegrityException(e)
+            }
         }
 
         @JvmStatic
@@ -156,13 +161,13 @@ class PublicKeyParameterValidationUtil {
         /**
          * Validate ElGamal public key parameters.
          *
-         * Original implementation by the openpgpjs authors: <a
-         * href="https://github.com/openpgpjs/openpgpjs/blob/main/src/crypto/public_key/elgamal.js#L76-L143>OpenPGP.js
-         * source</a>
+         * Original implementation by the openpgpjs authors:
          *
          * @param secretKey secret key
          * @param publicKey public key
          * @return true if supposedly valid, false if invalid
+         * @see
+         *   [OpenPGP.js source](https://github.com/openpgpjs/openpgpjs/blob/main/src/crypto/public_key/elgamal.js#L76-L143)
          */
         @JvmStatic
         @Throws(KeyIntegrityException::class)
@@ -224,9 +229,9 @@ class PublicKeyParameterValidationUtil {
             val data = ByteArray(512).also { SecureRandom().nextBytes(it) }
             val signatureGenerator =
                 PGPSignatureGenerator(
-                    getInstance()
-                        .getPGPContentSignerBuilder(
-                            requireFromId(publicKey.algorithm), HashAlgorithm.SHA256))
+                    OpenPGPImplementation.getInstance()
+                        .pgpContentSignerBuilder(publicKey.algorithm, HashAlgorithmTags.SHA256),
+                    publicKey)
             return try {
                 signatureGenerator
                     .apply {
@@ -235,7 +240,9 @@ class PublicKeyParameterValidationUtil {
                     }
                     .generate()
                     .apply {
-                        init(getInstance().pgpContentVerifierBuilderProvider, publicKey)
+                        init(
+                            OpenPGPImplementation.getInstance().pgpContentVerifierBuilderProvider(),
+                            publicKey)
                         update(data)
                     }
                     .verify()
@@ -257,9 +264,12 @@ class PublicKeyParameterValidationUtil {
             val data = ByteArray(1024).also { SecureRandom().nextBytes(it) }
             val encryptedDataGenerator =
                 PGPEncryptedDataGenerator(
-                        getInstance().getPGPDataEncryptorBuilder(SymmetricKeyAlgorithm.AES_256))
+                        OpenPGPImplementation.getInstance()
+                            .pgpDataEncryptorBuilder(SymmetricKeyAlgorithmTags.AES_256))
                     .apply {
-                        addMethod(getInstance().getPublicKeyKeyEncryptionMethodGenerator(publicKey))
+                        addMethod(
+                            OpenPGPImplementation.getInstance()
+                                .publicKeyKeyEncryptionMethodGenerator(publicKey))
                     }
 
             var out = ByteArrayOutputStream()
@@ -268,7 +278,8 @@ class PublicKeyParameterValidationUtil {
                 outputStream.write(data)
                 encryptedDataGenerator.close()
                 val encryptedDataList = PGPEncryptedDataList(out.toByteArray())
-                val decryptorFactory = getInstance().getPublicKeyDataDecryptorFactory(privateKey)
+                val decryptorFactory =
+                    OpenPGPImplementation.getInstance().publicKeyDataDecryptorFactory(privateKey)
                 val encryptedData =
                     encryptedDataList.encryptedDataObjects.next() as PGPPublicKeyEncryptedData
                 val decrypted = encryptedData.getDataStream(decryptorFactory)

@@ -18,7 +18,7 @@ buildscript {
 }
 
 plugins {
-    id 'org.jetbrains.kotlin.jvm' version "1.8.10"
+    id 'org.jetbrains.kotlin.jvm' version "1.9.21"
     id 'com.diffplug.spotless' version '6.22.0' apply false
 }
 
@@ -33,29 +33,31 @@ allprojects {
     apply plugin: 'kotlin'
     apply plugin: 'com.diffplug.spotless'
 
-    java {
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-
-    compileJava {
-        options.release = 8
-    }
-
-    tasks.withType(JavaCompile).configureEach {
-        options.release = 8
-    }
-
     // Only generate jar for submodules
     // without this we would generate an empty pgpainless.jar for the project root
     // https://stackoverflow.com/a/25445035
     jar {
-        reproducibleFileOrder = true
         onlyIf { !sourceSets.main.allSource.files.isEmpty() }
     }
 
     // checkstyle
     checkstyle {
-        toolVersion = '10.12.1'
+        toolVersion = '10.26.1'
+    }
+
+    // Bump plexus-utils from 3.3.0 to 3.6.1 to fix CVE-2025-67030
+    // checkstyle unfortunately depends on the broken version and bumping checkstyle breaks the build, so we need this
+    //  workaround.
+    // Fixes https://github.com/pgpainless/pgpainless/security/dependabot/37
+    // Fixes https://github.com/pgpainless/pgpainless/security/dependabot/38
+    // Fixes https://github.com/pgpainless/pgpainless/security/dependabot/39
+    configurations.configureEach {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'org.codehaus.plexus' &&
+                    details.requested.name == 'plexus-utils') {
+                details.useVersion '3.6.1'
+            }
+        }
     }
 
     spotless {
@@ -67,8 +69,6 @@ allprojects {
     group 'org.pgpainless'
     description = "Simple to use OpenPGP API for Java based on Bouncycastle"
     version = shortVersion
-
-    sourceCompatibility = javaSourceCompatibility
 
     repositories {
         mavenCentral()
@@ -82,6 +82,10 @@ allprojects {
 
         dirMode = 0755
         fileMode = 0644
+    }
+
+    kotlin {
+        jvmToolchain(javaSourceCompatibility)
     }
 
     // Compatibility of default implementations in kotlin interfaces with Java implementations.
@@ -98,8 +102,7 @@ allprojects {
         isReleaseVersion = !isSnapshot
         signingRequired = !(isSnapshot || isContinuousIntegrationEnvironment)
         sonatypeCredentialsAvailable = project.hasProperty('sonatypeUsername') && project.hasProperty('sonatypePassword')
-        sonatypeSnapshotUrl = 'https://oss.sonatype.org/content/repositories/snapshots'
-        sonatypeStagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2'
+        sonatypeStagingUrl = 'https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/'
     }
 
     if (isSnapshot) {
@@ -124,7 +127,7 @@ allprojects {
         sourceDirectories.setFrom(project.files(sourceSets.main.allSource.srcDirs))
         classDirectories.setFrom(project.files(sourceSets.main.output))
         reports {
-            xml.enabled true
+            xml.required = true
         }
     }
 
@@ -142,15 +145,15 @@ subprojects {
     apply plugin: 'signing'
 
     task sourcesJar(type: Jar, dependsOn: classes) {
-        classifier = 'sources'
+        archiveClassifier = 'sources'
         from sourceSets.main.allSource
     }
     task javadocJar(type: Jar, dependsOn: javadoc) {
-        classifier = 'javadoc'
+        archiveClassifier = 'javadoc'
         from javadoc.destinationDir
     }
     task testsJar(type: Jar, dependsOn: testClasses) {
-        classifier = 'tests'
+        archiveClassifier = 'tests'
         from sourceSets.test.output
     }
 
@@ -194,7 +197,7 @@ subprojects {
         repositories {
             if (sonatypeCredentialsAvailable) {
                 maven {
-                    url isSnapshot ? sonatypeSnapshotUrl : sonatypeStagingUrl
+                    url sonatypeStagingUrl
                     credentials {
                         username = sonatypeUsername
                         password = sonatypePassword
@@ -208,6 +211,56 @@ subprojects {
         useGpgCmd()
         required { signingRequired }
         sign publishing.publications.mavenJava
+    }
+
+    // see https://github.com/conductor-oss/conductor/blob/main/deploy.gradle#L76-L129
+    task promoteToMavenCentral {
+        group = 'publishing'
+        description = 'Promotes staged artifacts to Maven Central'
+
+        onlyIf {
+            sonatypeCredentialsAvailable && !isSnapshot
+        }
+
+        doLast {
+            // Create base64 encoded token for authentication
+            def token = "${sonatypeUsername}:${sonatypePassword}".bytes.encodeBase64().toString()
+
+            // Get open staging repositories
+            def response = new URL("https://ossrh-staging-api.central.sonatype.com/manual/search/repositories")
+                    .openConnection()
+            response.setRequestProperty("Authorization", "Basic ${token}")
+            response.setRequestProperty("Content-Type", "application/json")
+
+            def repositories = new groovy.json.JsonSlurper().parse(response.inputStream)
+
+            // Promote each open repository
+            repositories.repositories.each { repo ->
+                if (repo.state == "open") {
+                    project.logger.lifecycle("Promoting repository ${repo.key}")
+
+                    def promoteUrl = new URL("https://ossrh-staging-api.central.sonatype.com/manual/upload/repository/${repo.key}?publishing_type=automatic")
+                    def connection = promoteUrl.openConnection()
+                    connection.setRequestMethod("POST")
+                    connection.setRequestProperty("Authorization", "Basic ${token}")
+                    connection.setRequestProperty("Content-Type", "application/json")
+
+                    def responseCode = connection.responseCode
+                    if (responseCode == 200) {
+                        project.logger.lifecycle("Successfully promoted repository ${repo.key}")
+                    } else {
+                        def errorStream = connection.errorStream
+                        def errorBody = errorStream ? errorStream.text : "No error body available"
+                        def errorMessage = "Failed to promote repository ${repo.key}. Response code: ${responseCode}. Response message: ${connection.responseMessage}. Error body: ${errorBody}"
+                        project.logger.error(errorMessage)
+                        //throw new GradleException(errorMessage)
+                    }
+                }
+            }
+        }
+    }
+    tasks.matching { it.name == 'publish' }.configureEach { publishTask ->
+        publishTask.finalizedBy tasks.promoteToMavenCentral
     }
 }
 
@@ -247,7 +300,7 @@ task jacocoRootReport(type: JacocoReport) {
     classDirectories.setFrom(files(subprojects.sourceSets.main.output))
     executionData.setFrom(files(subprojects.jacocoTestReport.executionData))
     reports {
-        xml.enabled true
+        xml.required = true
         xml.destination file("${buildDir}/reports/jacoco/test/jacocoTestReport.xml")
     }
     // We could remove the following setOnlyIf line, but then
@@ -258,10 +311,6 @@ task jacocoRootReport(type: JacocoReport) {
 }
 
 task javadocAll(type: Javadoc) {
-    def currentJavaVersion = JavaVersion.current()
-    if (currentJavaVersion.compareTo(JavaVersion.VERSION_1_9) >= 0) {
-        options.addStringOption("-release", "8");
-    }
     source subprojects.collect {project ->
         project.sourceSets.main.allJava }
     destinationDir = new File(buildDir, 'javadoc')
@@ -275,18 +324,6 @@ task javadocAll(type: Javadoc) {
     ] as String[]
 }
 
-if (JavaVersion.current().isJava8Compatible()) {
-    tasks.withType(Javadoc) {
-        // The '-quiet' as second argument is actually a hack,
-        // since the one paramater addStringOption doesn't seem to
-        // work, we extra add '-quiet', which is added anyway by
-        // gradle. See https://github.com/gradle/gradle/issues/2354
-        // See JDK-8200363 (https://bugs.openjdk.java.net/browse/JDK-8200363)
-        // for information about the -Xwerror option.
-        // options.addStringOption('Xwerror', '-quiet')
-    }
-}
-
 /**
  * Fetch sha256 checksums of artifacts published to maven central.
  *
@@ -296,34 +333,13 @@ task mavenCentralChecksums() {
     description 'Fetch and display checksums for artifacts published to Maven Central'
     String ver = project.hasProperty('release') ? release : shortVersion
     doLast {
-        Process p = "curl -f https://repo1.maven.org/maven2/org/pgpainless/pgpainless-core/${ver}/pgpainless-core-${ver}.jar.sha256".execute()
-        if (p.waitFor() == 0) {
-            print p.text.trim()
-            println "  pgpainless-core/build/libs/pgpainless-core-${ver}.jar"
-        }
-
-        p = "curl -f https://repo1.maven.org/maven2/org/pgpainless/pgpainless-sop/${ver}/pgpainless-sop-${ver}.jar.sha256".execute()
-        if (p.waitFor() == 0) {
-            print p.text.trim()
-            println "  pgpainless-sop/build/libs/pgpainless-sop-${ver}.jar"
-        }
-
-        p = "curl -f https://repo1.maven.org/maven2/org/pgpainless/pgpainless-cli/${ver}/pgpainless-cli-${ver}-all.jar.sha256".execute()
-        if (p.waitFor() == 0) {
-            print p.text.trim()
-            println "  pgpainless-cli/build/libs/pgpainless-cli-${ver}-all.jar"
-        }
-
-        p = "curl -f https://repo1.maven.org/maven2/org/pgpainless/pgpainless-cli/${ver}/pgpainless-cli-${ver}.jar.sha256".execute()
-        if (p.waitFor() == 0) {
-            print p.text.trim()
-            println "  pgpainless-cli/build/libs/pgpainless-cli-${ver}.jar"
-        }
-
-        p = "curl -f https://repo1.maven.org/maven2/org/pgpainless/hsregex/${ver}/hsregex-${ver}.jar.sha256".execute()
-        if (p.waitFor() == 0) {
-            print p.text.trim()
-            println "  hsregex/build/libs/hsregex-${ver}.jar"
+        for (Project p : rootProject.subprojects) {
+            String url = "https://repo1.maven.org/maven2/org/pgpainless/${p.name}/${ver}/${p.name}-${ver}.jar.sha256"
+            Process fetch = "curl -f $url".execute()
+            if (fetch.waitFor() == 0) {
+                print fetch.text.trim()
+                println "  ${p.name}/build/libs/${p.name}-${ver}.jar"
+            }
         }
     }
 }

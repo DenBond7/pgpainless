@@ -4,16 +4,15 @@
 
 allprojects {
     ext {
-        shortVersion = '1.7.5'
+        shortVersion = '2.0.6'
         isSnapshot = true
-        pgpainlessMinAndroidSdk = 10
-        javaSourceCompatibility = 1.8
-        bouncyCastleVersion = '1.80'
+        javaSourceCompatibility = 11
+        bouncyCastleVersion = '1.87'
         bouncyPgVersion = bouncyCastleVersion
         junitVersion = '5.8.2'
-        logbackVersion = '1.5.13'
+        logbackVersion = '1.5.34'
         mockitoVersion = '4.5.1'
         slf4jVersion = '1.7.36'
-        sopJavaVersion = '10.1.0'
+        sopJavaVersion = '15.0.2'
     }
 }
